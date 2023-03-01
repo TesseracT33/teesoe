@@ -1,0 +1,7 @@
+---
+Checks: "*,
+        -llvm*,
+"
+WarningsAsErrors: ''
+HeaderFilterRegex: ''
+FormatStyle:     none
