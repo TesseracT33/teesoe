@@ -6,7 +6,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 add_executable(teesoe)
 
-#add_subdirectory(ext)
+add_subdirectory(ext)
 add_subdirectory(src)
 
 set_property(TARGET teesoe PROPERTY CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON)
