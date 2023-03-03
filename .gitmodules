@@ -7,3 +7,6 @@
 [submodule "ext/parallel-rdp-standalone"]
 	path = ext/parallel-rdp-standalone
 	url = https://github.com/Themaister/parallel-rdp-standalone
+[submodule "ext/nativefiledialog-extended"]
+	path = ext/nativefiledialog-extended
+	url = https://github.com/btzy/nativefiledialog-extended
