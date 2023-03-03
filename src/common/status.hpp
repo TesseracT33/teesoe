@@ -11,8 +11,8 @@ public:
         FileNotFound
     };
 
-    constexpr Status(Code code) : code_(code){};
-    constexpr Status(Code code, std::string_view message) : code_(code), message_(message){};
+    constexpr Status(Code code) : code_(code) {}
+    constexpr Status(Code code, std::string_view message) : code_(code), message_(message) {}
 
     constexpr Code code() const { return code_; }
     constexpr bool failure() const { return code_ == Code::Failure; }
@@ -23,8 +23,14 @@ private:
     std::string message_;
 };
 
-constexpr Status status_ok(std::string_view message = {});
-constexpr Status status_failure(std::string_view message);
+constexpr Status status_ok(std::string_view message = {})
+{
+    return Status(Status::Code::Ok, message);
+}
+constexpr Status status_failure(std::string_view message)
+{
+    return Status(Status::Code::Failure, message);
+}
 
 constexpr std::string_view code_to_string(Status::Code code)
 {
