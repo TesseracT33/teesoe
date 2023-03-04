@@ -52,7 +52,7 @@ Status init(SDL_Window* sdl_window_arg)
     }
 }
 
-void warning(std::string_view message)
+void warn(std::string_view message)
 {
     log_warn(message);
     if (sdl_window) {

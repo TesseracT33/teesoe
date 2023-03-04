@@ -160,9 +160,9 @@ public:
     }
 
 private:
-    bool has_error_ = false;
-    bool is_open_ = false;
-    std::fstream fstream_{};
+    bool has_error_;
+    bool is_open_;
+    std::fstream fstream_;
     Mode mode_;
 
     void stream(void* obj, size_t size)

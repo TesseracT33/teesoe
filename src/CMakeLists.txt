@@ -5,9 +5,13 @@ target_sources(teesoe PRIVATE
 
 	common/log.cpp
 	
+	frontend/audio.cpp 
 	frontend/gui.cpp
+	frontend/input.cpp
+	frontend/loader.cpp
 	frontend/message.cpp
-  )
+	frontend/vulkan.cpp
+)
 
 target_include_directories(teesoe PRIVATE
 	.

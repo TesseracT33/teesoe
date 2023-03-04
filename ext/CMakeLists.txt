@@ -22,8 +22,14 @@ add_library(imgui STATIC
 	imgui/imgui_tables.cpp
 	imgui/imgui_widgets.cpp
 	imgui/backends/imgui_impl_sdl3.cpp
+	imgui/backends/imgui_impl_vulkan.cpp
 )
-target_include_directories(imgui PRIVATE imgui SDL/include)
+target_include_directories(imgui PUBLIC 
+	imgui
+	imgui/backends
+	parallel-rdp-standalone/vulkan-headers/include
+	SDL/include
+)
 target_link_libraries(imgui SDL3-static)
 target_link_libraries(teesoe imgui)
 
@@ -72,6 +78,7 @@ target_include_directories(parallel-rdp-standalone PRIVATE
 	parallel-rdp-standalone/vulkan
 	parallel-rdp-standalone/vulkan-headers/include
 )
+target_compile_definitions(parallel-rdp-standalone PUBLIC VK_NO_PROTOTYPES)
 target_link_libraries(teesoe parallel-rdp-standalone)
 
 ##### nativefiledialog-extended #########################
