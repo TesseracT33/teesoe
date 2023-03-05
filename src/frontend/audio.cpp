@@ -1,5 +1,5 @@
 #include "audio.hpp"
-#include "message.hpp"
+#include "frontend/message.hpp"
 #include "status.hpp"
 
 #include "SDL.h"

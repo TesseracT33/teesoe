@@ -17,6 +17,7 @@ public:
     virtual Status enable_audio(bool enable) = 0;
     virtual size_t get_number_of_inputs() const = 0;
     virtual Status init() = 0;
+    virtual Status init_graphics_system() = 0;
     virtual Status load_bios(std::filesystem::path const& path) = 0;
     virtual Status load_rom(std::filesystem::path const& path) = 0;
     virtual void notify_axis_state(size_t player, size_t action_index, s32 axis_value) = 0;
@@ -28,4 +29,5 @@ public:
     virtual void stop() = 0;
     virtual void stream_state(Serializer& serializer) = 0;
     virtual void tear_down(){};
+    virtual void update_screen() = 0;
 };

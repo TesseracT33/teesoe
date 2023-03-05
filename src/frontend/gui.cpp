@@ -1,10 +1,10 @@
 #include "gui.hpp"
 #include "audio.hpp"
 #include "core.hpp"
+#include "frontend/message.hpp"
 #include "input.hpp"
 #include "loader.hpp"
 #include "log.hpp"
-#include "message.hpp"
 #include "serializer.hpp"
 #include "vulkan.hpp"
 
@@ -462,11 +462,7 @@ Status Init()
 
 Status InitGraphics()
 {
-    /*if (!RDP::MakeParallelRdp()) {
-        message::error(std::format("Failed to initialize the RDP!"));
-        return false;
-    }*/
-    return status_ok();
+    return get_core()->init_graphics_system();
 }
 
 Status InitImgui()
@@ -805,7 +801,11 @@ void Run(bool boot_game_immediately)
             StartGame();
         } else {
             PollEvents();
-            // N64::UpdateScreen(); // Let the core rendering code do its thing (calls back to Draw())
+            if (core_loaded()) {
+                get_core()->update_screen();
+            } else {
+                // TODO
+            }
         }
     }
     OnExit();

@@ -14,6 +14,7 @@ set(SDL_STATIC_ENABLED_BY_DEFAULT ON)
 set(SDL_TEST_ENABLED_BY_DEFAULT OFF)
 add_subdirectory(SDL)
 target_link_libraries(teesoe SDL3-static)
+target_include_directories(teesoe PRIVATE SDL/include/SDL3)
 
 ##### imgui #########################
 add_library(imgui STATIC
@@ -71,7 +72,7 @@ add_library(parallel-rdp-standalone STATIC
 	parallel-rdp-standalone/vulkan/texture_format.cpp
 	parallel-rdp-standalone/vulkan/wsi.cpp
 )
-target_include_directories(parallel-rdp-standalone PRIVATE 
+target_include_directories(parallel-rdp-standalone PUBLIC 
 	parallel-rdp-standalone
 	parallel-rdp-standalone/util
 	parallel-rdp-standalone/volk
@@ -79,6 +80,9 @@ target_include_directories(parallel-rdp-standalone PRIVATE
 	parallel-rdp-standalone/vulkan-headers/include
 )
 target_compile_definitions(parallel-rdp-standalone PUBLIC VK_NO_PROTOTYPES)
+if(WIN32)
+target_compile_definitions(parallel-rdp-standalone PRIVATE VK_USE_PLATFORM_WIN32_KHR)
+endif()
 target_link_libraries(teesoe parallel-rdp-standalone)
 
 ##### nativefiledialog-extended #########################

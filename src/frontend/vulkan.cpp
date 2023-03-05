@@ -1,6 +1,6 @@
 #include "vulkan.hpp"
 #include "log.hpp"
-#include "message.hpp"
+#include "frontend/message.hpp"
 
 #include "imgui_impl_vulkan.h"
 #include "parallel-rdp-standalone/volk/volk.h"
@@ -191,13 +191,13 @@ bool Init([[maybe_unused]] SDL_Window* sdl_window)
 bool InitForParallelRDP()
 { // TODO: possibly put this in ParallelRDPWrapper class instead
 #if 0
-    if (!RDP::implementation) {
-        if (!RDP::MakeParallelRdp() || !RDP::implementation) {
+    if (!rdp::implementation) {
+        if (!rdp::MakeParallelRdp() || !rdp::implementation) {
             UserMessage::Error("Failed to initialize vulkan for ParallelRDP");
             return false;
         }
     }
-    ParallelRDPWrapper* const parallel_rdp = dynamic_cast<ParallelRDPWrapper*>(RDP::implementation.get());
+    ParallelRDPWrapper* const parallel_rdp = dynamic_cast<ParallelRDPWrapper*>(rdp::implementation.get());
     assert(parallel_rdp);
 
     vk_instance = parallel_rdp->GetVkInstance();
@@ -430,7 +430,7 @@ bool InitGeneric(SDL_Window* sdl_window)
 void SubmitRequestedCommandBuffer()
 {
     // TODO: do not hardcode for parallel-rdp
-    // ParallelRDPWrapper* const parallel_rdp = dynamic_cast<ParallelRDPWrapper*>(RDP::implementation.get());
+    // ParallelRDPWrapper* const parallel_rdp = dynamic_cast<ParallelRDPWrapper*>(rdp::implementation.get());
     // assert(parallel_rdp);
     // parallel_rdp->SubmitRequestedVkCommandBuffer();
 }

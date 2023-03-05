@@ -1,6 +1,7 @@
 #include "loader.hpp"
+#include "frontend/message.hpp"
 #include "gui.hpp"
-#include "message.hpp"
+#include "n64.hpp"
 
 #include <algorithm>
 #include <map>
@@ -37,7 +38,7 @@ Status load_core(System system_arg)
     case System::CHIP8: core = nullptr; break;
     case System::GB: core = nullptr; break;
     case System::GBA: core = nullptr; break;
-    case System::N64: core = nullptr; break;
+    case System::N64: core = std::make_unique<N64>(); break;
     case System::NES: core = nullptr; break;
     case System::PS2: core = nullptr; break;
     }

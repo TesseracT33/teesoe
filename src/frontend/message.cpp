@@ -1,9 +1,10 @@
-#include "message.hpp"
+#include "frontend/message.hpp"
 #include "log.hpp"
 #include "status.hpp"
 
 #include "SDL.h"
 
+#include <cstdlib>
 #include <format>
 #include <iostream>
 #include <string>
@@ -32,6 +33,7 @@ void fatal(std::string_view message /*, std::source_location loc*/)
           message);*/
         SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Fatal", message.data(), sdl_window);
     }
+    exit(EXIT_FAILURE);
 }
 
 void info(std::string_view message)

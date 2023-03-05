@@ -1,5 +1,5 @@
 #include "input.hpp"
-#include "message.hpp"
+#include "frontend/message.hpp"
 
 #include <format>
 #include <iostream>

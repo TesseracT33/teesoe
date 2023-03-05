@@ -9,7 +9,7 @@
 #include <type_traits>
 #include <vector>
 
-template<typename... T> constexpr bool always_false{};
+template<auto... Args> constexpr bool always_false{};
 
 template<std::integral Int> constexpr void clear_bit(Int& num, uint pos)
 {
