@@ -4,7 +4,7 @@
 
 namespace n64::rsp {
 
-struct {
+struct Sp {
     u32 dma_spaddr, dma_ramaddr, dma_rdlen, dma_wrlen;
     struct {
         u32 halted   : 1;
