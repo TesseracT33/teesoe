@@ -175,14 +175,16 @@ template<CpuInstruction instr> void Load(u32 rs, u32 rt, s16 imm16)
     /* For load right instructions, this represents the 'X's above, that is to be ANDed with GPR when combining it with
      * the read value. */
     if constexpr (one_of(instr, LWL, LDL, LWR, LDR)) {
-        static constexpr std::array<u64, 8> right_load_mask = { 0xFFFF'FFFF'FFFF'FF00,
+        static constexpr std::array<u64, 8> right_load_mask = {
+            0xFFFF'FFFF'FFFF'FF00,
             0xFFFF'FFFF'FFFF'0000,
             0xFFFF'FFFF'FF00'0000,
             0xFFFF'FFFF'0000'0000,
             0xFFFF'FF00'0000'0000,
             0xFFFF'0000'0000'0000,
             0xFF00'0000'0000'0000,
-            0 };
+            0,
+        };
         if constexpr (instr == LWL) {
             u32 bits_from_last_boundary = (addr & 3) << 3;
             result <<= bits_from_last_boundary;

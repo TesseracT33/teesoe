@@ -127,16 +127,20 @@ template<Exception exception> u64 GetExceptionVector()
         return 0xFFFF'FFFF'BFC0'0000;
     } else {
         if constexpr (exception == Exception::TlbMiss) {
-            static constexpr u64 base_addr[2][2] = { 0xFFFF'FFFF'8000'0000,
+            static constexpr u64 base_addr[2][2] = {
+                0xFFFF'FFFF'8000'0000,
                 0xFFFF'FFFF'8000'0180,
                 0xFFFF'FFFF'BFC0'0200,
-                0xFFFF'FFFF'BFC0'0380 };
+                0xFFFF'FFFF'BFC0'0380,
+            };
             return base_addr[cop0.status.bev][cop0.status.exl];
         } else if constexpr (exception == Exception::XtlbMiss) {
-            static constexpr u64 base_addr[2][2] = { 0xFFFF'FFFF'8000'0080,
+            static constexpr u64 base_addr[2][2] = {
+                0xFFFF'FFFF'8000'0080,
                 0xFFFF'FFFF'8000'0180,
                 0xFFFF'FFFF'BFC0'0280,
-                0xFFFF'FFFF'BFC0'0380 };
+                0xFFFF'FFFF'BFC0'0380,
+            };
             return base_addr[cop0.status.bev][cop0.status.exl];
         } else {
             return cop0.status.bev ? 0xFFFF'FFFF'BFC0'0380 : 0xFFFF'FFFF'8000'0180;

@@ -235,9 +235,11 @@ void ParallelRDPWrapper::SDLWSIPlatform::event_frame_tick([[maybe_unused]] doubl
 
 VkApplicationInfo const* ParallelRDPWrapper::SDLWSIPlatform::get_application_info()
 {
-    static constexpr VkApplicationInfo app_info = { .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
+    static constexpr VkApplicationInfo app_info = {
+        .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
         .pApplicationName = "N63.5",
-        .apiVersion = VK_API_VERSION_1_1 };
+        .apiVersion = VK_API_VERSION_1_1,
+    };
     return &app_info;
 }
 

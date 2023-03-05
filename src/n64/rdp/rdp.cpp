@@ -99,7 +99,8 @@ template<CommandLocation cmd_loc> void LoadExecuteCommands()
     while (queue_word_offset < num_queued_words) {
         u32 cmd_first_word = cmd_buffer[queue_word_offset];
         u32 opcode = cmd_first_word & 0x3F;
-        static constexpr std::array cmd_word_lengths = { 2,
+        static constexpr std::array cmd_word_lengths = {
+            2,
             2,
             2,
             2,
@@ -162,7 +163,8 @@ template<CommandLocation cmd_loc> void LoadExecuteCommands()
             2,
             2,
             2,
-            2 };
+            2,
+        };
         u32 cmd_word_len = cmd_word_lengths[opcode];
         if (queue_word_offset + cmd_word_len > num_queued_words) {
             /* partial command; keep data around for next processing call */

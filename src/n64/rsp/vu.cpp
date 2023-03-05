@@ -60,7 +60,8 @@ static s16 div_out, div_in, div_dp;
 static std::array<__m128i, 32> vpr; /* SIMD registers; eight 16-bit lanes */
 static std::array<ControlRegister, 3> ctrl_reg; /* vco, vcc, vce. vce is actually only 8-bits */
 
-constexpr std::array<u16, 512> rcp_rom = { 0xFFFF,
+constexpr std::array<u16, 512> rcp_rom = {
+    0xFFFF,
     0xFF00,
     0xFE01,
     0xFD04,
@@ -571,9 +572,11 @@ constexpr std::array<u16, 512> rcp_rom = { 0xFFFF,
     0x0101,
     0x00C0,
     0x0080,
-    0x0040 };
+    0x0040,
+};
 
-constexpr std::array<u16, 512> rsq_rom = { 0xFFFF,
+constexpr std::array<u16, 512> rsq_rom = {
+    0xFFFF,
     0xFF00,
     0xFE02,
     0xFD06,
@@ -1084,7 +1087,8 @@ constexpr std::array<u16, 512> rsq_rom = { 0xFFFF,
     0x0101,
     0x00C0,
     0x0080,
-    0x0040 };
+    0x0040,
+};
 
 void AddToAcc(__m128i low)
 {
@@ -1460,7 +1464,8 @@ template<VectorInstruction instr> void Move(u32 instr_code)
     } else if constexpr (instr == CTC2) {
         /* Pseudo-code: CTRL(15..0) = GPR(15..0) */
         /* Control registers (16-bit) are encoded in two __m128i. Each lane represents one bit. */
-        static constexpr std::array lanes = { s64(0x0000'0000'0000'0000),
+        static constexpr std::array lanes = {
+            s64(0x0000'0000'0000'0000),
             s64(0x0000'0000'0000'FFFF),
             s64(0x0000'0000'FFFF'0000),
             s64(0x0000'0000'FFFF'FFFF),
@@ -1475,7 +1480,8 @@ template<VectorInstruction instr> void Move(u32 instr_code)
             s64(0xFFFF'FFFF'0000'0000),
             s64(0xFFFF'FFFF'0000'FFFF),
             s64(0xFFFF'FFFF'FFFF'0000),
-            s64(0xFFFF'FFFF'FFFF'FFFF) };
+            s64(0xFFFF'FFFF'FFFF'FFFF),
+        };
         vs = std::min(vs & 3, 2u);
         s32 r = gpr[rt];
         ctrl_reg[vs].low = _mm_set_epi64x(lanes[r >> 4 & 0xF], lanes[r >> 0 & 0xF]);
@@ -1623,7 +1629,6 @@ template<VectorInstruction instr> void SingleLaneInstr(u32 instr_code)
         }
         vpr[vd] = ClampSigned(acc.mid, acc.high);
     } else if constexpr (instr == VNOP) {
-
     } else {
         static_assert(always_false<instr>);
     }

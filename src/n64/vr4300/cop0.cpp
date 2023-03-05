@@ -16,7 +16,8 @@
 
 namespace n64::vr4300 {
 
-constexpr std::array cop0_reg_str_repr = { "INDEX",
+constexpr std::array cop0_reg_str_repr = {
+    "INDEX",
     "RANDOM",
     "ENTRY_LO_0",
     "ENTRY_LO_1",
@@ -46,7 +47,8 @@ constexpr std::array cop0_reg_str_repr = { "INDEX",
     "COP0_27",
     "TAG_LO",
     "TAG_HI",
-    "ERROR_EPC" };
+    "ERROR_EPC",
+};
 static_assert(cop0_reg_str_repr.size() == 31);
 
 void Cop0Registers::OnWriteToCause()

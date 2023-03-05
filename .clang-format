@@ -60,7 +60,7 @@ FixNamespaceComments: true
 IndentCaseLabels: false
 IndentWidth: 4
 IndentWrappedFunctionNames: true
-KeepEmptyLinesAtTheStartOfBlocks: true
+KeepEmptyLinesAtTheStartOfBlocks: false
 Language: Cpp
 MacroBlockBegin: ''
 MacroBlockEnd: ''

@@ -102,7 +102,8 @@ private:
 
 constexpr u32 fcr0 = 0xA00;
 
-constexpr std::array compare_cond_strings = { "F",
+constexpr std::array compare_cond_strings = {
+    "F",
     "UN",
     "EQ",
     "UEQ",
@@ -117,7 +118,8 @@ constexpr std::array compare_cond_strings = { "F",
     "LT",
     "NGE",
     "LE",
-    "NGT" };
+    "NGT",
+};
 
 u32 FPUControl::Get(size_t index) const
 {

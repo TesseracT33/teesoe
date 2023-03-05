@@ -488,7 +488,8 @@ Status InitImgui()
         return status_failure("ImGui_ImplSDL3_InitForVulkan failed");
     }
 
-    ImGui_ImplVulkan_InitInfo init_info = { .Instance = vulkan::GetInstance(),
+    ImGui_ImplVulkan_InitInfo init_info = {
+        .Instance = vulkan::GetInstance(),
         .PhysicalDevice = vulkan::GetPhysicalDevice(),
         .Device = vulkan::GetDevice(),
         .QueueFamily = vulkan::GetGraphicsQueueFamily(),
@@ -499,7 +500,8 @@ Status InitImgui()
         .ImageCount = 2,
         .MSAASamples = VK_SAMPLE_COUNT_1_BIT,
         .Allocator = vulkan::GetAllocator(),
-        .CheckVkResultFn = vulkan::CheckVkResult };
+        .CheckVkResultFn = vulkan::CheckVkResult,
+    };
 
     if (!ImGui_ImplVulkan_Init(&init_info, vulkan::GetRenderPass())) {
         return status_failure("ImGui_ImplVulkan_Init failed");

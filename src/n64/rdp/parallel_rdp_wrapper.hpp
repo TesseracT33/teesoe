@@ -50,7 +50,8 @@ private:
 
     void ReloadViRegisters();
 
-    static constexpr u32 vertex_spirv[] = { 0x07230203,
+    static constexpr u32 vertex_spirv[] = {
+        0x07230203,
         0x00010000,
         0x000d000a,
         0x00000034,
@@ -336,9 +337,11 @@ private:
         0x0000002b,
         0x00000032,
         0x000100fd,
-        0x00010038 };
+        0x00010038,
+    };
 
-    static constexpr u32 fragment_spirv[] = { 0x07230203,
+    static constexpr u32 fragment_spirv[] = {
+        0x07230203,
         0x00010000,
         0x000d000a,
         0x00000015,
@@ -462,7 +465,8 @@ private:
         0x00000009,
         0x00000014,
         0x000100fd,
-        0x00010038 };
+        0x00010038,
+    };
 
     Vulkan::WSI wsi{};
     Vulkan::CommandBufferHandle requested_command_buffer{};
