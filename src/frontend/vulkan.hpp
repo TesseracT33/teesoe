@@ -23,10 +23,9 @@ VkPhysicalDevice GetPhysicalDevice();
 VkPipelineCache GetPipelineCache();
 VkQueue GetQueue();
 VkRenderPass GetRenderPass();
-Status Init(SDL_Window* sdl_window);
-Status InitForParallelRDP();
-bool InitGeneric(SDL_Window* sdl_window);
+Status Init();
 void SubmitRequestedCommandBuffer();
 void TearDown();
+void UpdateScreenNoCore();
 
 } // namespace vulkan

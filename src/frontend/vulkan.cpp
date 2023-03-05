@@ -188,12 +188,7 @@ VkRenderPass GetRenderPass()
     return vk_render_pass;
 }
 
-Status Init([[maybe_unused]] SDL_Window* sdl_window)
-{
-    return InitForParallelRDP();
-}
-
-Status InitForParallelRDP()
+Status Init()
 { // TODO: put this in ParallelRDPWrapper class instead
     if (!n64::rdp::implementation) {
         Status status = n64::rdp::MakeParallelRdp();
@@ -459,6 +454,12 @@ void TearDown()
     vk_queue_family = {};
     vk_render_pass = {};
     vk_swap_chain_rebuild = {};
+}
+
+void UpdateScreenNoCore()
+{
+    // TODO: this is a hack; using parallel-rdp renderer for all cores
+    n64::rdp::implementation->UpdateScreen();
 }
 
 } // namespace vulkan

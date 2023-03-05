@@ -462,6 +462,15 @@ Status Init()
 
 Status InitGraphics()
 {
+    if (core_loaded()) {
+        return get_core()->init_graphics_system();
+    } else {
+        // TODO: temporary solution to get vulkan rendering while n64 core is not supposed to be running
+        Status status = load_core(System::N64);
+        if (!status.ok()) {
+            return status;
+        }
+    }
     return get_core()->init_graphics_system();
 }
 
@@ -744,7 +753,7 @@ void OnWindowResizeEvent(SDL_Event const& event)
 
 void PollEvents()
 {
-    static SDL_Event event{};
+    static SDL_Event event;
     while (SDL_PollEvent(&event)) {
         ImGui_ImplSDL3_ProcessEvent(&event);
         switch (event.type) {
@@ -804,7 +813,7 @@ void Run(bool boot_game_immediately)
             if (core_loaded()) {
                 get_core()->update_screen();
             } else {
-                // TODO
+                vulkan::UpdateScreenNoCore();
             }
         }
     }

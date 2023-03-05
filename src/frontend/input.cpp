@@ -1,5 +1,6 @@
 #include "input.hpp"
 #include "frontend/message.hpp"
+#include "log.hpp"
 
 #include <format>
 #include <iostream>
@@ -53,7 +54,7 @@ Status Init()
         return status_failure(std::format("Failed to init gamecontroller system: {}\n", SDL_GetError()));
     }
     if (!LoadBindingsFromDisk().ok()) {
-        message::error("Failed to load user bindings! Using defaults.");
+        log_warn("Failed to load user bindings! Using defaults.");
         SetDefaultBindings();
         SaveBindingsToDisk();
     }
