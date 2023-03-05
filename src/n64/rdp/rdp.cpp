@@ -10,6 +10,7 @@
 #include <array>
 #include <cassert>
 #include <cstring>
+#include <format>
 #include <string_view>
 
 namespace n64::rdp {
@@ -192,7 +193,7 @@ Status MakeParallelRdp()
     return implementation->Initialize();
 }
 
-s32 ReadReg(u32 addr)
+u32 ReadReg(u32 addr)
 {
     /* TODO: RCP will ignore the requested access size and will just put the requested 32-bit word on the bus.
     Luckily, this is the correct behavior for 8-bit and 16-bit accesses (as explained above), so the VR4300 will
@@ -201,10 +202,10 @@ s32 ReadReg(u32 addr)
     will never put. */
     static_assert(sizeof(dp) >> 2 == 8);
     u32 offset = addr >> 2 & 7;
-    s32 ret;
-    std::memcpy(&ret, (s32*)(&dp) + offset, 4);
+    u32 ret;
+    std::memcpy(&ret, (u32*)(&dp) + offset, 4);
     if constexpr (log_io_rdp) {
-        // Log::IoRead("RDP", RegOffsetToStr(offset), ret);
+        log(std::format("RDP IO: {} => ${:08X}", RegOffsetToStr(offset), ret));
     }
     return ret;
 }
@@ -224,7 +225,7 @@ constexpr std::string_view RegOffsetToStr(u32 reg_offset)
     }
 }
 
-void WriteReg(u32 addr, s32 data)
+void WriteReg(u32 addr, u32 data)
 {
     auto ProcessCommands = [&] {
         dp.status.cmd_source ? LoadExecuteCommands<CommandLocation::DMEM>()
@@ -234,7 +235,7 @@ void WriteReg(u32 addr, s32 data)
     static_assert(sizeof(dp) >> 2 == 8);
     u32 offset = addr >> 2 & 7;
     if constexpr (log_io_rdp) {
-        // Log::IoWrite("RDP", RegOffsetToStr(offset), data);
+        log(std::format("RDP IO: {} <= ${:08X}", RegOffsetToStr(offset), data));
     }
 
     switch (offset) {

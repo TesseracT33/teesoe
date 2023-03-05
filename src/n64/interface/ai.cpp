@@ -44,7 +44,7 @@ void Initialize()
     dma_address_buffer = dma_count = dma_length_buffer = 0;
 }
 
-s32 ReadReg(u32 addr)
+u32 ReadReg(u32 addr)
 {
     ai.status = 1 << 20 | 1 << 24;
     ai.status |= (dma_count > 1);
@@ -53,10 +53,10 @@ s32 ReadReg(u32 addr)
 
     static_assert(sizeof(ai) >> 2 == 8);
     u32 offset = addr >> 2 & 7;
-    s32 ret;
-    std::memcpy(&ret, (s32*)(&ai) + offset, 4);
+    u32 ret;
+    std::memcpy(&ret, (u32*)(&ai) + offset, 4);
     if constexpr (log_io_ai) {
-        // Log::IoRead("AI", RegOffsetToStr(offset), ret);
+        log(std::format("AI: {} => ${:08X}", RegOffsetToStr(offset), ret));
     }
     return ret;
 }
@@ -92,12 +92,12 @@ void Sample()
     scheduler::AddEvent(scheduler::EventType::AudioSample, dac.period, Sample);
 }
 
-void WriteReg(u32 addr, s32 data)
+void WriteReg(u32 addr, u32 data)
 {
     static_assert(sizeof(ai) >> 2 == 8);
     u32 offset = addr >> 2 & 7;
     if constexpr (log_io_ai) {
-        // Log::IoWrite("AI", RegOffsetToStr(offset), data);
+        log(std::format("AI: {} <= ${:08X}", RegOffsetToStr(offset), data));
     }
 
     switch (offset) {

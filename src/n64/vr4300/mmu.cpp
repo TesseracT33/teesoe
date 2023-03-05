@@ -158,7 +158,7 @@ void SetActiveVirtualToPhysicalFunctions()
             addressing_mode = _64bit;
         }
     } else { /* Unknown?! */
-        // Log::Error("Warning: cop0.status.ksu was set to 3.");
+        log_error("cop0.status.ksu was set to 3.");
         assert(false);
     }
 }

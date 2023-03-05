@@ -52,12 +52,12 @@ template<std::signed_integral Int> Int Read(u32 addr)
 }
 
 /* $03F0'0000 - $03FF'FFFF */
-s32 ReadReg(u32 addr)
+u32 ReadReg(u32 addr)
 {
     static_assert(sizeof(reg) >> 2 == 0x10);
     u32 offset = addr >> 2 & 0xF;
-    s32 ret;
-    std::memcpy(&ret, (s32*)(&reg) + offset, 4);
+    u32 ret;
+    std::memcpy(&ret, (u32*)(&reg) + offset, 4);
     return ret;
 }
 
@@ -106,7 +106,7 @@ template<size_t access_size, typename... MaskT> void Write(u32 addr, s64 data, M
 }
 
 /* $03F0'0000 - $03FF'FFFF */
-void WriteReg(u32 addr, s32 data)
+void WriteReg(u32 addr, u32 data)
 {
     /* TODO */
 }

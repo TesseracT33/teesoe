@@ -8,6 +8,7 @@
 
 #include <bit>
 #include <cstring>
+#include <format>
 #include <string_view>
 #include <utility>
 
@@ -72,14 +73,14 @@ Registers const& ReadAllRegisters()
     return vi;
 }
 
-s32 ReadReg(u32 addr)
+u32 ReadReg(u32 addr)
 {
     static_assert(sizeof(vi) >> 2 == 0x10);
     u32 offset = addr >> 2 & 0xF;
-    s32 ret;
+    u32 ret;
     std::memcpy(&ret, (s32*)(&vi) + offset, 4);
-    if constexpr (log_io_ai) {
-        // Log::IoRead("VI", RegOffsetToStr(offset), ret);
+    if constexpr (log_io_vi) {
+        log(std::format("VI: {} => ${:08X}", RegOffsetToStr(offset), ret));
     }
     return ret;
 }
@@ -107,12 +108,12 @@ constexpr std::string_view RegOffsetToStr(u32 reg_offset)
     }
 }
 
-void WriteReg(u32 addr, s32 data)
+void WriteReg(u32 addr, u32 data)
 {
     static_assert(sizeof(vi) >> 2 == 0x10);
     u32 offset = addr >> 2 & 0xF;
-    if constexpr (log_io_ai) {
-        // Log::IoWrite("VI", RegOffsetToStr(offset), data);
+    if constexpr (log_io_vi) {
+        log(std::format("VI: {} <= ${:08X}", RegOffsetToStr(offset), data));
     }
 
     switch (offset) {

@@ -16,8 +16,8 @@ enum class InterruptType : s32 {
 
 void ClearInterruptFlag(InterruptType);
 void Initialize();
-s32 ReadReg(u32 addr);
+u32 ReadReg(u32 addr);
 void SetInterruptFlag(InterruptType);
-void WriteReg(u32 addr, s32 data);
+void WriteReg(u32 addr, u32 data);
 
 } // namespace n64::mi

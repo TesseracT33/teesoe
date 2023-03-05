@@ -15,8 +15,8 @@ enum class StatusFlag : s32 {
 
 void ClearStatusFlag(StatusFlag);
 void Initialize();
-s32 ReadReg(u32 addr);
+u32 ReadReg(u32 addr);
 void SetStatusFlag(StatusFlag);
-void WriteReg(u32 addr, s32 data);
+void WriteReg(u32 addr, u32 data);
 
 } // namespace n64::si

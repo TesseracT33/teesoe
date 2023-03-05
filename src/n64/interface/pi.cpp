@@ -78,8 +78,7 @@ template<DmaType type> void InitDma()
               dma_len - num_bytes_first_block);
         }
         if constexpr (log_dma) {
-            // Log::Dma(std::format("From cart ROM ${:X} to RDRAM ${:X}: ${:X} bytes",
-            //       pi.cart_addr, pi.dram_addr, dma_len));
+            log(std::format("From cart ROM ${:X} to RDRAM ${:X}: ${:X} bytes", pi.cart_addr, pi.dram_addr, dma_len));
         }
     } else { /* RDRAM to cart */
         /* TODO: when I wrote this code, I forgot we can't write to ROM. But it seems we can write to SRAM/FLASH.
@@ -90,7 +89,7 @@ template<DmaType type> void InitDma()
         //	LogDMA(std::format("From RDRAM ${:X} to cart ROM ${:X}: ${:X} bytes",
         //		pi.dram_addr, pi.cart_addr, dma_len));
         // }
-        //  Log::Warning("Attempted DMA from RDRAM to Cart, but this is unimplemented.");
+        log_warn("Attempted DMA from RDRAM to Cart, but this is unimplemented.");
         OnDmaFinish();
         return;
     }
@@ -114,14 +113,14 @@ void OnDmaFinish()
     pi.cart_addr = (pi.cart_addr + dma_len) & 0xFF'FFFF;
 }
 
-s32 ReadReg(u32 addr)
+u32 ReadReg(u32 addr)
 {
     static_assert(sizeof(pi) >> 2 == 0x10);
     u32 offset = addr >> 2 & 0xF;
-    s32 ret;
-    std::memcpy(&ret, (s32*)(&pi) + offset, 4);
-    if constexpr (log_io_ai) {
-        // Log::IoRead("PI", RegOffsetToStr(offset), ret);
+    u32 ret;
+    std::memcpy(&ret, (u32*)(&pi) + offset, 4);
+    if constexpr (log_io_pi) {
+        log(std::format("PI: {} => ${:08X}", RegOffsetToStr(offset), ret));
     }
     return ret;
 }
@@ -151,12 +150,12 @@ void SetStatusFlag(StatusFlag status_flag)
     pi.status |= std::to_underlying(status_flag);
 }
 
-void WriteReg(u32 addr, s32 data)
+void WriteReg(u32 addr, u32 data)
 {
     static_assert(sizeof(pi) >> 2 == 0x10);
     u32 offset = addr >> 2 & 0xF;
-    if constexpr (log_io_ai) {
-        // Log::IoWrite("PI", RegOffsetToStr(offset), data);
+    if constexpr (log_io_pi) {
+        log(std::format("PI: {} <= ${:08X}", RegOffsetToStr(offset), data));
     }
 
     switch (offset) {

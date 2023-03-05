@@ -64,8 +64,7 @@ template<DmaType type> void InitDma()
         u8* pif_ptr = pif::GetPointerToMemory(pif_addr);
         std::memcpy(rdram_ptr, pif_ptr, dma_len);
         if constexpr (log_dma) {
-            // Log::Dma(std::format("From PIF ${:X} to RDRAM ${:X}: ${:X} bytes",
-            //        pif_addr, si.dram_addr, dma_len));
+            log(std::format("From PIF ${:X} to RDRAM ${:X}: ${:X} bytes", pif_addr, si.dram_addr, dma_len));
         }
     } else { /* RDRAM to PIF */
         size_t num_bytes_in_rom_area = pif::GetNumberOfBytesUntilRamStart(pif_addr);
@@ -81,15 +80,18 @@ template<DmaType type> void InitDma()
                 rdram_ptr += 4;
             }
             if constexpr (log_dma) {
-                // Log::Dma(std::format("From RDRAM ${:X} to PIF ${:X}: ${:X} bytes",
-                //      si.dram_addr, pif_addr, dma_len - num_bytes_in_rom_area));
+                log(std::format("From RDRAM ${:X} to PIF ${:X}: ${:X} bytes",
+                  si.dram_addr,
+                  pif_addr,
+                  dma_len - num_bytes_in_rom_area));
             }
         } else {
-            // Log::Dma(std::format("Attempted from RDRAM ${:X} to PIF ${:X}, but the target PIF memory area was
-            // entirely in the ROM region",
-            //        si.dram_addr, pif_addr));
-            //      OnDmaFinish();
-            //    return;
+            log(std::format(
+              "Attempted from RDRAM ${:X} to PIF ${:X}, but the target PIF memory area was entirely in the ROM region",
+              si.dram_addr,
+              pif_addr));
+            OnDmaFinish();
+            return;
         }
     }
 
@@ -112,14 +114,14 @@ void OnDmaFinish()
     *pif_addr_reg_last_dma = (*pif_addr_reg_last_dma + dma_len) & 0x7FC;
 }
 
-s32 ReadReg(u32 addr)
+u32 ReadReg(u32 addr)
 {
     static_assert(sizeof(si) >> 2 == 8);
     u32 offset = addr >> 2 & 7;
-    s32 ret;
-    std::memcpy(&ret, (s32*)(&si) + offset, 4);
+    u32 ret;
+    std::memcpy(&ret, (u32*)(&si) + offset, 4);
     if constexpr (log_io_si) {
-        // Log::IoRead("SI", RegOffsetToStr(offset), ret);
+        log(std::format("SI: {} => ${:08X}", RegOffsetToStr(offset), ret));
     }
     return ret;
 }
@@ -142,12 +144,12 @@ void SetStatusFlag(StatusFlag status_flag)
     si.status |= std::to_underlying(status_flag);
 }
 
-void WriteReg(u32 addr, s32 data)
+void WriteReg(u32 addr, u32 data)
 {
     static_assert(sizeof(si) >> 2 == 8);
     u32 offset = addr >> 2 & 7;
-    if constexpr (log_io_ai) {
-        // Log::IoWrite("SI", RegOffsetToStr(offset), data);
+    if constexpr (log_io_si) {
+        log(std::format("SI: {} <= ${:08X}", RegOffsetToStr(offset), data));
     }
 
     switch (offset) {

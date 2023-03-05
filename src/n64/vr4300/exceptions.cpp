@@ -147,7 +147,7 @@ template<Exception exception> u64 GetExceptionVector()
 void HandleException()
 {
     if constexpr (log_cpu_exceptions) {
-        // Log::CpuException(ExceptionToString(occurred_exception));
+        log(std::format("EXCEPTION: {}", ExceptionToString(occurred_exception)));
     }
 
     exception_has_occurred = false;

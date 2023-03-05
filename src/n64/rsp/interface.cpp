@@ -5,6 +5,7 @@
 #include "n64_build_options.hpp"
 #include "rsp.hpp"
 #include "scheduler.hpp"
+#include "util.hpp"
 
 #include <algorithm>
 #include <bit>
@@ -111,20 +112,20 @@ template<DmaType dma_type> void InitDMA()
         std::string_view rsp_mem_bank = sp.dma_spaddr & 0x1000 ? "IMEM" : "DMEM";
         std::string output = [&] {
             if constexpr (dma_type == DmaType::RdToSp) {
-                return std::format("From RDRAM ${:X} to RSP {} ${:X}; ${:X} bytes",
+                return std::format("DMA; From RDRAM ${:X} to RSP {} ${:X}; ${:X} bytes",
                   sp.dma_ramaddr & 0xFF'FFFF,
                   rsp_mem_bank,
                   sp.dma_spaddr & 0xFFF,
                   requested_total_bytes);
             } else {
-                return std::format("From RSP {} ${:X} to RDRAM ${:X}; ${:X} bytes",
+                return std::format("DMA; From RSP {} ${:X} to RDRAM ${:X}; ${:X} bytes",
                   rsp_mem_bank,
                   sp.dma_spaddr & 0xFFF,
                   sp.dma_ramaddr & 0xFF'FFFF,
                   requested_total_bytes);
             }
         }();
-        // LogDma(output);
+        log(output);
     }
 }
 
@@ -163,19 +164,19 @@ void OnDmaFinish()
     mi::SetInterruptFlag(mi::InterruptType::SP);
 }
 
-s32 ReadReg(u32 addr)
+u32 ReadReg(u32 addr)
 {
     if (addr == sp_pc_addr) {
         // TODO: return random number if !halted, else pc
         // return halted ? pc : Int(Random<s32>(0, 0xFFF));
         if constexpr (log_io_rsp) {
-            // Log::IoRead("RSP", "SP_PC", pc);
+            log(std::format("RSP IO: SP_PC => ${:08X}", pc));
         }
         return pc;
     } else {
         static_assert(sizeof(sp) >> 2 == 8);
         u32 offset = addr >> 2 & 7;
-        s32 ret = [&] {
+        u32 ret = [&] {
             switch (offset & 7) {
             case DmaSpaddr: return sp.dma_spaddr;
 
@@ -217,7 +218,7 @@ s32 ReadReg(u32 addr)
             }
         }();
         if constexpr (log_io_rsp) {
-            // Log::IoRead("RSP", RegOffsetToStr(offset), ret);
+            log(std::format("RSP IO: {} => ${:08X}", RegOffsetToStr(offset), ret));
         }
         return ret;
     }
@@ -238,19 +239,19 @@ constexpr std::string_view RegOffsetToStr(u32 reg_offset)
     }
 }
 
-void WriteReg(u32 addr, s32 data)
+void WriteReg(u32 addr, u32 data)
 {
     if (addr == sp_pc_addr) {
         pc = data & 0xFFC;
         jump_is_pending = in_branch_delay_slot = false;
         if constexpr (log_io_rsp) {
-            // Log::IoWrite("RSP", "SP_PC", data);
+            log(std::format("RSP IO: SP_PC <= ${:08X}", data));
         }
     } else {
         static_assert(sizeof(sp) >> 2 == 8);
         u32 offset = addr >> 2 & 7;
         if constexpr (log_io_rsp) {
-            // Log::IoWrite("RSP", RegOffsetToStr(offset), data);
+            log(std::format("RSP IO: {} <= ${:08X}", RegOffsetToStr(offset), data));
         }
 
         switch (offset) {

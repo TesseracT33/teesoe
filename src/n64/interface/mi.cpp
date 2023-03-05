@@ -4,6 +4,7 @@
 #include "vr4300/vr4300.hpp"
 
 #include <cstring>
+#include <format>
 #include <string_view>
 #include <utility>
 
@@ -44,14 +45,14 @@ void Initialize()
     mi.version = 0x0202'0102;
 }
 
-s32 ReadReg(u32 addr)
+u32 ReadReg(u32 addr)
 {
     static_assert(sizeof(mi) >> 2 == 4);
     u32 offset = addr >> 2 & 3;
-    s32 ret;
-    std::memcpy(&ret, (s32*)(&mi) + offset, 4);
+    u32 ret;
+    std::memcpy(&ret, (u32*)(&mi) + offset, 4);
     if constexpr (log_io_mi) {
-        // Log::IoRead("MI", RegOffsetToStr(offset), ret);
+        log(std::format("MI: {} => ${:08X}", RegOffsetToStr(offset), ret));
     }
     return ret;
 }
@@ -73,12 +74,12 @@ void SetInterruptFlag(InterruptType interrupt_type)
     CheckInterrupts();
 }
 
-void WriteReg(u32 addr, s32 data)
+void WriteReg(u32 addr, u32 data)
 {
     static_assert(sizeof(mi) >> 2 == 4);
     u32 offset = addr >> 2 & 3;
-    if constexpr (log_io_ai) {
-        // Log::IoWrite("MI", RegOffsetToStr(offset), data);
+    if constexpr (log_io_mi) {
+        log(std::format("MI: {} <= ${:08X}", RegOffsetToStr(offset), data));
     }
 
     if (offset == Register::Mode) {
