@@ -1,10 +1,15 @@
-#include "vulkan.hpp"
-#include "log.hpp"
+#include "vulkan_headers.hpp"
+
 #include "frontend/message.hpp"
+#include "log.hpp"
+#include "n64/rdp/parallel_rdp_wrapper.hpp"
+#include "n64/rdp/rdp.hpp"
+#include "vulkan.hpp"
 
 #include "imgui_impl_vulkan.h"
 #include "parallel-rdp-standalone/volk/volk.h"
 
+#include <cassert>
 #include <cstdlib>
 #include <format>
 #include <utility>
@@ -183,21 +188,21 @@ VkRenderPass GetRenderPass()
     return vk_render_pass;
 }
 
-bool Init([[maybe_unused]] SDL_Window* sdl_window)
+Status Init([[maybe_unused]] SDL_Window* sdl_window)
 {
     return InitForParallelRDP();
 }
 
-bool InitForParallelRDP()
-{ // TODO: possibly put this in ParallelRDPWrapper class instead
-#if 0
-    if (!rdp::implementation) {
-        if (!rdp::MakeParallelRdp() || !rdp::implementation) {
-            UserMessage::Error("Failed to initialize vulkan for ParallelRDP");
-            return false;
+Status InitForParallelRDP()
+{ // TODO: put this in ParallelRDPWrapper class instead
+    if (!n64::rdp::implementation) {
+        Status status = n64::rdp::MakeParallelRdp();
+        if (!status.ok()) {
+            return status;
         }
     }
-    ParallelRDPWrapper* const parallel_rdp = dynamic_cast<ParallelRDPWrapper*>(rdp::implementation.get());
+    n64::rdp::ParallelRDPWrapper* const parallel_rdp =
+      dynamic_cast<n64::rdp::ParallelRDPWrapper*>(n64::rdp::implementation.get());
     assert(parallel_rdp);
 
     vk_instance = parallel_rdp->GetVkInstance();
@@ -271,8 +276,7 @@ bool InitForParallelRDP()
         vk_result = vkCreateRenderPass(vk_device, &info, vk_allocator, &vk_render_pass);
         CheckVkResult(vk_result);
     }
-#endif
-    return true;
+    return status_ok();
 }
 
 // Currently unused. To be used in the future if I ever write my own RDP implementation using vulkan
@@ -430,9 +434,10 @@ bool InitGeneric(SDL_Window* sdl_window)
 void SubmitRequestedCommandBuffer()
 {
     // TODO: do not hardcode for parallel-rdp
-    // ParallelRDPWrapper* const parallel_rdp = dynamic_cast<ParallelRDPWrapper*>(rdp::implementation.get());
-    // assert(parallel_rdp);
-    // parallel_rdp->SubmitRequestedVkCommandBuffer();
+    n64::rdp::ParallelRDPWrapper* const parallel_rdp =
+      dynamic_cast<n64::rdp::ParallelRDPWrapper*>(n64::rdp::implementation.get());
+    assert(parallel_rdp);
+    parallel_rdp->SubmitRequestedVkCommandBuffer();
 }
 
 void TearDown()

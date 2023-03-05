@@ -54,7 +54,7 @@ Status load_core(System system_arg)
 
 Status load_core_and_game(fs::path const& rom_path)
 {
-    std::optional<System> new_system = rom_extension_to_system(rom_path);
+    std::optional<System> new_system = rom_extension_to_system(rom_path.extension());
     if (new_system) {
         if (!core_loaded() || new_system.value() != system) {
             Status status = load_core(new_system.value());

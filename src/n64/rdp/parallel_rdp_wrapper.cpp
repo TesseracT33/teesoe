@@ -97,8 +97,8 @@ Status ParallelRDPWrapper::Initialize()
         return status_failure("Vulkan device not supported.");
     }
 
-    if (!vulkan::InitForParallelRDP()) {
-        return status_failure("Failed to init Vulkan!");
+    if (Status status = vulkan::InitForParallelRDP(); !status.ok()) {
+        return status;
     }
 
     ReloadViRegisters();

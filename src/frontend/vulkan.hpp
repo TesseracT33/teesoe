@@ -1,5 +1,6 @@
 #pragma once
 
+#include "status.hpp"
 #include "types.hpp"
 
 #include "imgui_impl_vulkan.h"
@@ -22,8 +23,8 @@ VkPhysicalDevice GetPhysicalDevice();
 VkPipelineCache GetPipelineCache();
 VkQueue GetQueue();
 VkRenderPass GetRenderPass();
-bool Init(SDL_Window* sdl_window);
-bool InitForParallelRDP();
+Status Init(SDL_Window* sdl_window);
+Status InitForParallelRDP();
 bool InitGeneric(SDL_Window* sdl_window);
 void SubmitRequestedCommandBuffer();
 void TearDown();
