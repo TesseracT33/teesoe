@@ -7,7 +7,6 @@
 #include <map>
 
 namespace fs = std::filesystem;
-namespace rng = std::ranges;
 
 namespace frontend {
 
@@ -54,22 +53,23 @@ Status load_core(System system_arg)
 
 Status load_core_and_game(fs::path const& rom_path)
 {
-    std::optional<System> new_system = rom_extension_to_system(rom_path.extension());
-    if (new_system) {
-        if (!core_loaded() || new_system.value() != system) {
-            Status status = load_core(new_system.value());
-            if (!status.ok()) {
-                return status;
-            }
-        }
-        return gui::LoadGame(rom_path);
-    } else {
+    auto it = rom_ext_to_system.find(rom_path.extension());
+    if (it == rom_ext_to_system.end()) {
         if (core_loaded()) {
             return gui::LoadGame(rom_path);
         } else {
             return status_failure(
               "Failed to identify which system the selected rom is associated with. Please load a core first.");
         }
+    } else {
+        System new_system = it->second;
+        if (!core_loaded() || new_system != system) {
+            Status status = load_core(new_system);
+            if (!status.ok()) {
+                return status;
+            }
+        }
+        return gui::LoadGame(rom_path);
     }
 }
 
@@ -84,35 +84,6 @@ std::string_view system_to_string(System system_arg)
     case System::NES: return "NES";
     case System::PS2: return "PS2";
     default: return "UNKNOWN";
-    }
-}
-
-std::optional<System> rom_extension_to_system(fs::path const& ext)
-{
-    static const std::map<fs::path, System> ext_to_system{ { ".ch8", System::CHIP8 },
-        { ".CH8", System::CHIP8 },
-        { ".gb", System::GB },
-        { ".GB", System::GB },
-        { ".gbc", System::GB },
-        { ".GBC", System::GB },
-        { ".gba", System::GBA },
-        { ".GBA", System::GBA },
-        { ".n64", System::N64 },
-        { ".N64", System::N64 },
-        { ".z64", System::N64 },
-        { ".Z64", System::N64 },
-        { ".nes", System::NES },
-        { ".NES", System::NES },
-        { ".bin", System::PS2 },
-        { ".BIN", System::PS2 },
-        { ".iso", System::PS2 },
-        { ".ISO", System::PS2 } };
-
-    auto lookup_it = ext_to_system.find(ext);
-    if (lookup_it == ext_to_system.end()) {
-        return {};
-    } else {
-        return lookup_it->second;
     }
 }
 

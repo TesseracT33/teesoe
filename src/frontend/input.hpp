@@ -1,5 +1,6 @@
 #pragma once
 
+#include "loader.hpp"
 #include "status.hpp"
 #include "types.hpp"
 
@@ -8,28 +9,26 @@
 #include <optional>
 
 namespace frontend::input {
-void ClearAllBindings();
-void ClearControllerBindings();
-void ClearKeyBindings();
-// std::optional<u8> GetControllerBinding(N64::Control control);
-// std::optional<SDL_Scancode> GetKeyBinding(N64::Control control);
+
+void ClearAllBindings(System system);
+void ClearGamepadBindings(System system);
+void ClearKeyBindings(System system);
+std::optional<u8> GetGamepadBinding(System system, size_t input_index);
+std::optional<SDL_Scancode> GetKeyBinding(System system, size_t input_index);
 Status Init();
 Status LoadBindingsFromDisk();
-void OnControllerAxisMotion(SDL_Event const& event);
-void OnControllerButtonDown(SDL_Event const& event);
-void OnControllerButtonUp(SDL_Event const& event);
-void OnControllerDeviceAdded(SDL_Event const& event);
-void OnControllerDeviceRemoved(SDL_Event const& event);
-void OnKeyDown(SDL_Event const& event);
-void OnKeyUp(SDL_Event const& event);
-void OnMouseButtonDown(SDL_Event const& event);
-void OnMouseButtonUp(SDL_Event const& event);
-// void RemoveControllerBinding(N64::Control control);
-// void RemoveKeyBinding(N64::Control control);
+void OnCoreLoaded(System system);
+void OnGamepadAxisMotion(SDL_Event const& event);
+void OnGamepadButtonChange(SDL_Event const& event, bool pressed);
+void OnGamepadAdded(SDL_Event const& event);
+void OnGamepadRemoved(SDL_Event const& event);
+void OnKeyChange(SDL_Event const& event, bool pressed);
+void RemoveGamepadBinding(System system, size_t input_index);
+void RemoveKeyBinding(System system, size_t input_index);
 Status SaveBindingsToDisk();
-// void SetBinding(SDL_GamepadAxis axis, N64::Control control);
-// void SetBinding(SDL_GamepadButton button, N64::Control control);
-// void SetBinding(SDL_Scancode key, N64::Control control);
+void SetBinding(System system, size_t input_index, SDL_GamepadAxis axis);
+void SetBinding(System system, size_t input_index, SDL_GamepadButton button);
+void SetBinding(System system, size_t input_index, SDL_Scancode key);
 void SetDefaultBindings();
 
 } // namespace frontend::input

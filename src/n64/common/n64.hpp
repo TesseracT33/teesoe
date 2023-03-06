@@ -5,7 +5,7 @@
 class N64 : public Core {
 public:
     Status enable_audio(bool enable) override;
-    size_t get_number_of_inputs() const override;
+    std::span<const std::string_view> get_input_names() const override;
     Status init() override;
     Status init_graphics_system() override;
     Status load_bios(std::filesystem::path const& path) override;

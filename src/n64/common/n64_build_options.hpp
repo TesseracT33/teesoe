@@ -2,6 +2,8 @@
 
 #include <string_view>
 
+namespace n64 {
+
 inline constexpr bool enable_logging = false;
 
 inline constexpr bool log_cpu_instructions = enable_logging && false;
@@ -25,3 +27,5 @@ inline constexpr bool skip_boot_rom = true;
 
 inline constexpr bool interpret_cpu = true;
 inline constexpr bool recompile_cpu = !interpret_cpu;
+
+} // namespace n64

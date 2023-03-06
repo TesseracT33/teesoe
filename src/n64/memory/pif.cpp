@@ -45,7 +45,6 @@ static std::array<u8, memory_size> memory; /* $0-$7BF: rom; $7C0-$7FF: ram */
 static void ChallengeProtection();
 static void ChecksumVerification();
 static void ClearRam();
-template<bool press> static void OnButtonAction(Control control);
 static void RomLockout();
 static void RunJoybusProtocol();
 static void TerminateBootProcess();
@@ -113,11 +112,11 @@ void OnButtonAction(Control control, bool pressed)
     case Control::DDown: joypad_status.dD = pressed; break;
     case Control::DLeft: joypad_status.dL = pressed; break;
     case Control::DRight: joypad_status.dR = pressed; break;
-    case Control::ShoulderL:
+    case Control::L:
         joypad_status.l = pressed;
         OnShoulderOrStartChanged();
         break;
-    case Control::ShoulderR:
+    case Control::R:
         joypad_status.r = pressed;
         OnShoulderOrStartChanged();
         break;

@@ -2,6 +2,7 @@
 #include "frontend/message.hpp"
 #include "log.hpp"
 
+#include <cassert>
 #include <format>
 #include <iostream>
 #include <limits>
@@ -9,44 +10,62 @@
 
 namespace frontend::input {
 
-static std::unordered_map<u8, u8> controller_bindings; /* key: SDL_GameControllerAxis/SDL_GameControllerButton */
-static std::unordered_map<SDL_Scancode, u8> key_bindings;
+using GamepadBindings = std::unordered_map<u8, u8>; // key: SDL_GameControllerAxis/SDL_GameControllerButton
+using KeyBindings = std::unordered_map<SDL_Scancode, u8>;
 
-void ClearAllBindings()
+struct Bindings {
+    GamepadBindings gamepad_bindings;
+    KeyBindings key_bindings;
+};
+
+static std::unordered_map<System, Bindings> bindings;
+static Bindings const* current_bindings;
+
+void ClearAllBindings(System system)
 {
-    ClearControllerBindings();
-    ClearKeyBindings();
+    ClearGamepadBindings(system);
+    ClearKeyBindings(system);
 }
 
-void ClearControllerBindings()
+void ClearGamepadBindings(System system)
 {
-    controller_bindings.clear();
+    auto system_it = bindings.find(system);
+    assert(system_it != bindings.end());
+    system_it->second.gamepad_bindings.clear();
 }
 
-void ClearKeyBindings()
+void ClearKeyBindings(System system)
 {
-    key_bindings.clear();
+    auto system_it = bindings.find(system);
+    assert(system_it != bindings.end());
+    system_it->second.key_bindings.clear();
 }
 
-// std::optional<u8> GetControllerBinding(N64::Control control)
-//{
-//     for (auto const& [sdl_button, n64_control] : controller_bindings) {
-//         if (n64_control == control) {
-//             return sdl_button;
-//         }
-//     }
-//     return {};
-// }
-//
-// std::optional<SDL_Scancode> GetKeyBinding(N64::Control control)
-//{
-//     for (auto const& [sdl_key, n64_control] : key_bindings) {
-//         if (n64_control == control) {
-//             return sdl_key;
-//         }
-//     }
-//     return {};
-// }
+std::optional<u8> GetGamepadBinding(System system, size_t input_index)
+{
+    auto system_it = bindings.find(system);
+    assert(system_it != bindings.end());
+    GamepadBindings const& gamepad_bindings = system_it->second.gamepad_bindings;
+    for (auto const& [sdl_button, core_control] : gamepad_bindings) {
+        if (input_index == core_control) {
+            return sdl_button;
+        }
+    }
+    return {};
+}
+
+std::optional<SDL_Scancode> GetKeyBinding(System system, size_t input_index)
+{
+    auto system_it = bindings.find(system);
+    assert(system_it != bindings.end());
+    KeyBindings const& key_bindings = system_it->second.key_bindings;
+    for (auto const& [sdl_button, core_control] : key_bindings) {
+        if (input_index == core_control) {
+            return sdl_button;
+        }
+    }
+    return {};
+}
 
 Status Init()
 {
@@ -66,7 +85,14 @@ Status LoadBindingsFromDisk()
     return status_unimplemented(); // TODO
 }
 
-void OnControllerAxisMotion(SDL_Event const& event)
+void OnCoreLoaded(System system)
+{
+    auto system_it = bindings.find(system);
+    assert(system_it != bindings.end());
+    current_bindings = &system_it->second;
+}
+
+void OnGamepadAxisMotion(SDL_Event const& event)
 {
     // TODO: possibly store and compare against previous axis value to stop from going further for every single axis
     // change.
@@ -94,108 +120,96 @@ void OnControllerAxisMotion(SDL_Event const& event)
     //}
 }
 
-void OnControllerButtonDown(SDL_Event const& event)
+void OnGamepadButtonChange(SDL_Event const& event, bool pressed)
 {
-    // if (auto binding_it = controller_bindings.find(event.cbutton.button); binding_it != controller_bindings.end()) {
-    //     N64::Control n64_control = binding_it->second;
-    //     N64::OnButtonDown(n64_control);
-    // }
+    if (current_bindings != nullptr) {
+        assert(core_loaded());
+        auto it = current_bindings->gamepad_bindings.find(event.gbutton.button);
+        if (it != current_bindings->gamepad_bindings.end()) {
+            get_core()->notify_button_state(0, it->second, pressed);
+        }
+    }
 }
 
-void OnControllerButtonUp(SDL_Event const& event)
-{
-    // if (auto binding_it = controller_bindings.find(event.cbutton.button); binding_it != controller_bindings.end()) {
-    //     N64::Control n64_control = binding_it->second;
-    //     N64::OnButtonUp(n64_control);
-    // }
-}
-
-void OnControllerDeviceAdded(SDL_Event const& event)
+void OnGamepadAdded(SDL_Event const& event)
 {
     // TODO
 }
 
-void OnControllerDeviceRemoved(SDL_Event const& event)
+void OnGamepadRemoved(SDL_Event const& event)
 {
     // TODO
 }
 
-void OnKeyDown(SDL_Event const& event)
+void OnKeyChange(SDL_Event const& event, bool pressed)
 {
+    if (current_bindings != nullptr) {
+        assert(core_loaded());
+        auto it = current_bindings->key_bindings.find(event.key.keysym.scancode);
+        if (it != current_bindings->key_bindings.end()) {
+            get_core()->notify_button_state(0, it->second, pressed);
+        }
+    }
     // SDL_Keycode keycode = event.key.keysym.sym;
     // if ((SDL_GetModState() & SDL_KMOD_CTRL) != 0 && keycode != SDLK_LCTRL
     //     && keycode != SDLK_RCTRL) { /* LCTRL/RCTRL is held */
     //     Gui::OnCtrlKeyPress(keycode);
-    // } else if (auto binding_it = key_bindings.find(event.key.keysym.scancode); binding_it != key_bindings.end()) {
-    //     N64::Control n64_control = binding_it->second;
-    //     N64::OnButtonDown(n64_control);
     // }
 }
 
-void OnKeyUp(SDL_Event const& event)
+void RemoveGamepadBinding(System system, size_t input_index)
 {
-    // if (auto binding_it = key_bindings.find(event.key.keysym.scancode); binding_it != key_bindings.end()) {
-    //     N64::Control n64_control = binding_it->second;
-    //     N64::OnButtonUp(n64_control);
-    // }
+    auto system_it = bindings.find(system);
+    assert(system_it != bindings.end());
+    GamepadBindings& gamepad_bindings = system_it->second.gamepad_bindings;
+    for (auto const& [sdl_button, core_control] : gamepad_bindings) {
+        if (input_index == core_control) {
+            gamepad_bindings.erase(sdl_button);
+        }
+    }
 }
 
-void OnMouseButtonDown(SDL_Event const& event)
+void RemoveKeyBinding(System system, size_t input_index)
 {
-    // TODO
+    auto system_it = bindings.find(system);
+    assert(system_it != bindings.end());
+    KeyBindings& key_bindings = system_it->second.key_bindings;
+    for (auto const& [sdl_button, core_control] : key_bindings) {
+        if (input_index == core_control) {
+            key_bindings.erase(sdl_button);
+        }
+    }
 }
-
-void OnMouseButtonUp(SDL_Event const& event)
-{
-    // TODO
-}
-
-// void RemoveControllerBinding(N64::Control control)
-//{
-//     for (auto it = controller_bindings.begin(); it != controller_bindings.end(); ++it) {
-//         if (it->second == control) {
-//             controller_bindings.erase(it);
-//             break;
-//         }
-//     }
-// }
-
-// void RemoveKeyBinding(N64::Control control)
-//{
-//     for (auto it = key_bindings.begin(); it != key_bindings.end(); ++it) {
-//         if (it->second == control) {
-//             key_bindings.erase(it);
-//             break;
-//         }
-//     }
-// }
 
 Status SaveBindingsToDisk()
 {
     return status_unimplemented(); // TODO
 }
 
-// void SetBinding(SDL_GamepadAxis axis, N64::Control control)
-//{
-//     RemoveControllerBinding(control);
-//     controller_bindings[axis] = control;
-// }
-//
-// void SetBinding(SDL_GamepadButton button, N64::Control control)
-//{
-//     RemoveControllerBinding(control);
-//     controller_bindings[button] = control;
-// }
-//
-// void SetBinding(SDL_Scancode key, N64::Control control)
-//{
-//     RemoveKeyBinding(control);
-//     key_bindings[key] = control;
-// }
+void SetBinding(System system, size_t input_index, SDL_GamepadAxis axis)
+{
+    auto system_it = bindings.find(system);
+    assert(system_it != bindings.end());
+    system_it->second.gamepad_bindings[axis] = input_index;
+}
+
+void SetBinding(System system, size_t input_index, SDL_GamepadButton button)
+{
+    auto system_it = bindings.find(system);
+    assert(system_it != bindings.end());
+    system_it->second.gamepad_bindings[button] = input_index;
+}
+
+void SetBinding(System system, size_t input_index, SDL_Scancode key)
+{
+    auto system_it = bindings.find(system);
+    assert(system_it != bindings.end());
+    system_it->second.key_bindings[key] = input_index;
+}
 
 void SetDefaultBindings()
 {
-    controller_bindings.clear();
+    // controller_bindings.clear();
     // controller_bindings[SDL_GAMEPAD_BUTTON_A] = N64::Control::A;
     // controller_bindings[SDL_GAMEPAD_BUTTON_B] = N64::Control::B;
     // controller_bindings[SDL_GAMEPAD_BUTTON_START] = N64::Control::Start;
@@ -211,8 +225,7 @@ void SetDefaultBindings()
     // controller_bindings[SDL_GAMEPAD_AXIS_LEFTX] = N64::Control::JX;
     // controller_bindings[SDL_GAMEPAD_AXIS_LEFTY] = N64::Control::JY;
 
-    // Basically only meant for testing
-    key_bindings.clear();
+    // key_bindings.clear();
     // key_bindings[SDL_SCANCODE_A] = N64::Control::A;
     // key_bindings[SDL_SCANCODE_B] = N64::Control::B;
     // key_bindings[SDL_SCANCODE_RETURN] = N64::Control::Start;

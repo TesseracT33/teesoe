@@ -1,6 +1,5 @@
 #include "gui.hpp"
 #include "audio.hpp"
-#include "core.hpp"
 #include "frontend/message.hpp"
 #include "input.hpp"
 #include "loader.hpp"
@@ -20,7 +19,6 @@
 #include <chrono>
 #include <filesystem>
 #include <format>
-#include <iostream>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -37,9 +35,7 @@ static void Draw();
 static void DrawGameSelectionWindow();
 static void DrawInputBindingsWindow();
 static void DrawMenu();
-static void DrawRdpConfWindow();
-static bool EnterFullscreen();
-static bool ExitFullscreen();
+static Status EnableFullscreen(bool enable);
 static std::optional<fs::path> FileDialog();
 static std::optional<fs::path> FolderDialog();
 static Status InitGraphics();
@@ -66,7 +62,6 @@ static void OnMenuSaveState();
 static void OnMenuShowGameList();
 static void OnMenuStop();
 static void OnMenuWindowScale();
-static void OnRdpWindowParallelRdpSelected();
 static void OnSdlQuit();
 static void OnSetGameDirectory();
 static void OnWindowResizeEvent(SDL_Event const& event);
@@ -86,7 +81,6 @@ static bool quit;
 static bool show_game_selection_window;
 static bool show_input_bindings_window;
 static bool show_menu;
-static bool show_rdp_conf_window;
 static bool start_game;
 
 static int frame_counter;
@@ -116,9 +110,6 @@ void Draw()
     }
     if (show_input_bindings_window) {
         DrawInputBindingsWindow();
-    }
-    if (show_rdp_conf_window) {
-        DrawRdpConfWindow();
     }
 }
 
@@ -173,7 +164,8 @@ void DrawInputBindingsWindow()
         bool waiting_for_input = false;
     };
 
-    static constinit std::array control_buttons = { Button{ "A" },
+    static constinit std::array control_buttons = {
+        Button{ "A" },
         Button{ "B" },
         Button{ "START" },
         Button{ "Z" },
@@ -188,7 +180,8 @@ void DrawInputBindingsWindow()
         Button{ "C left" },
         Button{ "C right" },
         Button{ "Joy X" },
-        Button{ "Joy Y" } };
+        Button{ "Joy Y" },
+    };
 
     static constinit std::array hotkey_buttons = { Button{ "Load state" },
         Button{ "Save state" },
@@ -299,7 +292,6 @@ void DrawMenu()
             if (ImGui::MenuItem("Fullscreen", "Ctrl+Enter", &menu_fullscreen, true)) {
                 OnMenuFullscreen();
             }
-            ImGui::MenuItem("RDP settings", nullptr, &show_rdp_conf_window, true);
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Input")) {
@@ -316,35 +308,13 @@ void DrawMenu()
     }
 }
 
-void DrawRdpConfWindow()
+Status EnableFullscreen(bool enable)
 {
-    if (ImGui::Begin("RDP configuration", &show_rdp_conf_window)) {
-        ImGui::Text("Implementation");
-        {
-            static int e = 0;
-            if (ImGui::RadioButton("Parallel RDP (Vulkan)", &e, 0)) {
-                OnRdpWindowParallelRdpSelected();
-            }
-        }
-        ImGui::Separator();
-        // TODO: parallel-rdp-specific settings
+    if (SDL_SetWindowFullscreen(sdl_window, static_cast<SDL_bool>(enable))) {
+        return status_failure(std::format("Failed to toggle fullscreen: {}", SDL_GetError()));
+    } else {
+        return status_ok();
     }
-    ImGui::End();
-}
-
-bool EnterFullscreen()
-{
-    /*if (SDL_SetWindowFullscreen(sdl_window, true)) {
-        message::error(std::format("Failed to enter fullscreen: {}", SDL_GetError()));
-        return false;
-    }*/
-    return true;
-}
-
-bool ExitFullscreen()
-{
-    // SDL_SetWindowFullscreen(sdl_window, 0);
-    return true;
 }
 
 std::optional<fs::path> FileDialog()
@@ -425,7 +395,6 @@ Status Init()
     quit = false;
     show_input_bindings_window = false;
     show_menu = true;
-    show_rdp_conf_window = false;
     start_game = false;
 
     show_game_selection_window = !game_is_running;
@@ -551,7 +520,7 @@ Status LoadGame(std::filesystem::path const& path)
 
 bool NeedsDraw()
 {
-    return show_menu || show_input_bindings_window || show_game_selection_window || show_rdp_conf_window;
+    return show_menu || show_input_bindings_window || show_game_selection_window;
 }
 
 void OnCtrlKeyPress(SDL_Keycode keycode)
@@ -608,13 +577,21 @@ void OnExit()
 
 void OnGameSelected(size_t list_index)
 {
-    StopGame();
-    /*if (get_core()->load_rom(game_list[list_index].path).ok()) {
-        current_game_title = game_list[list_index].name;
+    GameListEntry const& entry = game_list[list_index];
+    Status status = [&entry] {
+        if (core_loaded()) {
+            StopGame();
+            return get_core()->load_rom(entry.path);
+        } else {
+            return load_core_and_game(entry.path);
+        }
+    }();
+    if (status.ok()) {
+        current_game_title = entry.name;
         start_game = true;
     } else {
-        message::error("Failed to load game!");
-    }*/
+        message::error(status.message());
+    }
 }
 
 void OnInputBindingsWindowResetAll()
@@ -652,9 +629,10 @@ void OnMenuEnableAudio()
 
 void OnMenuFullscreen()
 {
-    bool success = menu_fullscreen ? EnterFullscreen() : ExitFullscreen();
-    if (!success) {
+    Status status = EnableFullscreen(menu_fullscreen);
+    if (!status.ok()) {
         menu_fullscreen = !menu_fullscreen; // revert change
+        message::error(status.message());
     }
 }
 
@@ -727,11 +705,6 @@ void OnMenuWindowScale()
     // TODO
 }
 
-void OnRdpWindowParallelRdpSelected()
-{
-    // TODO
-}
-
 void OnSdlQuit()
 {
     quit = true;
@@ -761,15 +734,13 @@ void PollEvents()
         switch (event.type) {
         case SDL_EVENT_AUDIO_DEVICE_ADDED: audio::on_device_added(event); break;
         case SDL_EVENT_AUDIO_DEVICE_REMOVED: audio::on_device_removed(event); break;
-        case SDL_EVENT_GAMEPAD_AXIS_MOTION: input::OnControllerAxisMotion(event); break;
-        case SDL_EVENT_GAMEPAD_BUTTON_DOWN: input::OnControllerButtonDown(event); break;
-        case SDL_EVENT_GAMEPAD_BUTTON_UP: input::OnControllerButtonUp(event); break;
-        case SDL_EVENT_GAMEPAD_ADDED: input::OnControllerDeviceAdded(event); break;
-        case SDL_EVENT_GAMEPAD_REMOVED: input::OnControllerDeviceRemoved(event); break;
-        case SDL_EVENT_KEY_DOWN: input::OnKeyDown(event); break;
-        case SDL_EVENT_KEY_UP: input::OnKeyUp(event); break;
-        case SDL_EVENT_MOUSE_BUTTON_DOWN: input::OnMouseButtonDown(event); break;
-        case SDL_EVENT_MOUSE_BUTTON_UP: input::OnMouseButtonUp(event); break;
+        case SDL_EVENT_GAMEPAD_AXIS_MOTION: input::OnGamepadAxisMotion(event); break;
+        case SDL_EVENT_GAMEPAD_BUTTON_DOWN: input::OnGamepadButtonChange(event, true); break;
+        case SDL_EVENT_GAMEPAD_BUTTON_UP: input::OnGamepadButtonChange(event, false); break;
+        case SDL_EVENT_GAMEPAD_ADDED: input::OnGamepadAdded(event); break;
+        case SDL_EVENT_GAMEPAD_REMOVED: input::OnGamepadRemoved(event); break;
+        case SDL_EVENT_KEY_DOWN: input::OnKeyChange(event, true); break;
+        case SDL_EVENT_KEY_UP: input::OnKeyChange(event, false); break;
         case SDL_EVENT_QUIT: OnSdlQuit(); break;
         case SDL_EVENT_WINDOW_RESIZED: OnWindowResizeEvent(event); break;
         }
