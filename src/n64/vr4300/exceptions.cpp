@@ -164,6 +164,7 @@ void HandleException()
            to the address of the branch instruction immediately preceding the branch delay slot. */
         cop0.epc = pc - (in_branch_delay_slot ? 8 : 4);
         cop0.status.exl = 1;
+        SignalInterruptFalse();
         SetActiveVirtualToPhysicalFunctions();
     }
     pc = exception_vector;

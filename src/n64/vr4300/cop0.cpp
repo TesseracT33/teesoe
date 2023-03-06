@@ -347,6 +347,7 @@ void ERET()
         pc = cop0.error_epc;
         cop0.status.erl = 0;
     }
+    CheckInterrupts();
     ll_bit = 0;
 
     /* Check if the pc is misaligned, and if so, signal an exception right away.

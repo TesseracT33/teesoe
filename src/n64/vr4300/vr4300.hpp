@@ -36,6 +36,7 @@ void Reset();
 u64 Run(u64 cpu_cycles_to_run);
 void PowerOn();
 void SetInterruptPending(ExternalInterruptSource);
+void SignalInterruptFalse();
 
 void AdvancePipeline(u64 cycles);
 void DecodeExecuteCop0Instruction();

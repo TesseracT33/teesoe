@@ -16,6 +16,8 @@
 
 namespace n64::vr4300 {
 
+static bool interrupt;
+
 void AddInitialEvents()
 {
     ReloadCountCompareEvent<true>();
@@ -32,11 +34,9 @@ void AdvancePipeline(u64 cycles)
 
 void CheckInterrupts()
 {
-    /* on real HW, these conditions are checked every cycle */
-    if (!cop0.status.ie || cop0.status.exl || cop0.status.erl) {
-        return; /* interrupts disabled, or already handling exception or error */
-    }
-    if (cop0.cause.ip & cop0.status.im) {
+    bool prev_interrupt = interrupt;
+    interrupt = cop0.status.ie & !cop0.status.exl & !cop0.status.erl & bool(cop0.cause.ip & cop0.status.im);
+    if (interrupt && !prev_interrupt) {
         SignalException<Exception::Interrupt>();
     }
 }
@@ -159,6 +159,11 @@ void SetInterruptPending(ExternalInterruptSource interrupt)
 {
     cop0.cause.ip |= std::to_underlying(interrupt);
     CheckInterrupts();
+}
+
+void SignalInterruptFalse()
+{
+    interrupt = false;
 }
 
 } // namespace n64::vr4300
