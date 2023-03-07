@@ -2,6 +2,7 @@
 
 #include "types.hpp"
 
+#include <array>
 #include <concepts>
 #include <random>
 
@@ -47,6 +48,41 @@ inline constexpr uint cop0_index_cache_error = 27;
 inline constexpr uint cop0_index_tag_lo = 28;
 inline constexpr uint cop0_index_tag_hi = 29;
 inline constexpr uint cop0_index_error_epc = 30;
+
+inline constexpr std::array cop0_reg_str_repr = {
+    "INDEX",
+    "RANDOM",
+    "ENTRY_LO_0",
+    "ENTRY_LO_1",
+    "CONTEXT",
+    "PAGE_MASK",
+    "WIRED",
+    "COP0_7",
+    "BAD_V_ADDR",
+    "COUNT",
+    "ENTRY_HI",
+    "COMPARE",
+    "STATUS",
+    "CAUSE",
+    "EPC",
+    "PR_ID",
+    "CONFIG",
+    "LL_ADDR",
+    "WATCH_LO",
+    "WATCH_HI",
+    "X_CONTEXT",
+    "COP0_21",
+    "COP0_22",
+    "COP0_23",
+    "COP0_24",
+    "COP0_25",
+    "PARITY_ERROR",
+    "COP0_27",
+    "TAG_LO",
+    "TAG_HI",
+    "ERROR_EPC",
+};
+static_assert(cop0_reg_str_repr.size() == 31);
 
 void OnCountCompareMatchEvent();
 template<bool initial_add = false> void ReloadCountCompareEvent();

@@ -21,12 +21,21 @@ constexpr size_t rom_region_size = 0x0FC0'0000;
 constexpr size_t sram_size = 0x10000;
 
 static void AllocateSram();
+static void ByteswapRom();
 static void ResizeRomToPowerOfTwo();
 
 void AllocateSram()
 {
     sram.resize(sram_size);
     std::ranges::fill(sram, 0xFF);
+}
+
+void ByteswapRom()
+{
+    for (size_t i = 0; i < rom.size(); i += 4) {
+        std::swap(rom[i], rom[i + 3]);
+        std::swap(rom[i + 1], rom[i + 2]);
+    }
 }
 
 size_t GetNumberOfBytesUntilRomEnd(u32 addr)
@@ -56,7 +65,6 @@ Status LoadRom(std::filesystem::path const& rom_path)
         return status_failure("Rom file has size 0.");
     }
     if (rom.size() > rom_region_size) {
-
         message::warn(std::format("Rom file has size larger than the maximum allowed ({} bytes). "
                                   "Truncating to the maximum allowed.",
           rom_region_size));
@@ -64,6 +72,7 @@ Status LoadRom(std::filesystem::path const& rom_path)
     }
     original_rom_size = rom.size();
     ResizeRomToPowerOfTwo();
+    ByteswapRom();
     rom_access_mask = u32(rom.size() - 1);
     AllocateSram();
     return status_ok();
@@ -88,12 +97,22 @@ Status LoadSram(std::filesystem::path const& sram_path)
 
 template<std::signed_integral Int> Int ReadRom(u32 addr)
 {
-    if constexpr (sizeof(Int) < 4) {
-        addr += addr & 2; /* PI external bus glitch */
-    }
+    // TODO: before we started storing rom in LE, we had code:
+    // if constexpr (sizeof(Int) < 4) {
+    //    addr += addr & 2; /* PI external bus glitch */
+    //}
+    // Make it work again for LE.
+    if constexpr (sizeof(Int) == 1) addr ^= 3;
+    if constexpr (sizeof(Int) == 2) addr ^= 2;
+    u8 const* rom_src = GetPointerToRom(addr);
     Int ret;
-    std::memcpy(&ret, GetPointerToRom(addr), sizeof(Int));
-    return std::byteswap(ret);
+    if constexpr (sizeof(Int) <= 4) {
+        std::memcpy(&ret, rom_src, sizeof(Int));
+    } else {
+        std::memcpy(&ret, rom_src + 4, 4);
+        std::memcpy(reinterpret_cast<u8*>(&ret) + 4, rom_src, 4);
+    }
+    return ret;
 }
 
 template<std::signed_integral Int> Int ReadSram(u32 addr)

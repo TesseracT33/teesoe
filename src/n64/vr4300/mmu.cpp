@@ -5,12 +5,14 @@
 #include "log.hpp"
 #include "memory/memory.hpp"
 #include "n64_build_options.hpp"
+#include "util.hpp"
 #include "vr4300.hpp"
 
 #include <array>
 #include <bit>
 #include <cassert>
 #include <concepts>
+#include <limits>
 #include <type_traits>
 
 namespace n64::vr4300 {
@@ -41,20 +43,20 @@ template<MemOp> static u32 VirtualToPhysicalAddressTlb(u64 vaddr);
 
 void TlbEntry::Read() const
 {
-    cop0.entry_lo[0] = this->entry_lo[0];
-    cop0.entry_lo[1] = this->entry_lo[1];
-    cop0.entry_lo[0].g = cop0.entry_lo[1].g = this->entry_hi.g;
-    cop0.entry_hi = std::bit_cast<Cop0Registers::EntryHi>(std::bit_cast<u64>(this->entry_hi) & ~u64(this->page_mask));
-    cop0.page_mask = this->page_mask;
+    cop0.entry_lo[0] = entry_lo[0];
+    cop0.entry_lo[1] = entry_lo[1];
+    cop0.entry_lo[0].g = cop0.entry_lo[1].g = entry_hi.g;
+    cop0.entry_hi = std::bit_cast<Cop0Registers::EntryHi>(std::bit_cast<u64>(entry_hi) & ~u64(page_mask));
+    cop0.page_mask = page_mask;
 }
 
 void TlbEntry::Write()
 {
-    this->entry_lo[0] = cop0.entry_lo[0];
-    this->entry_lo[1] = cop0.entry_lo[1];
-    this->entry_hi = std::bit_cast<Cop0Registers::EntryHi>(std::bit_cast<u64>(cop0.entry_hi) & ~u64(cop0.page_mask));
-    this->page_mask = cop0.page_mask;
-    this->entry_hi.g = cop0.entry_lo[0].g & cop0.entry_lo[1].g;
+    entry_lo[0] = cop0.entry_lo[0];
+    entry_lo[1] = cop0.entry_lo[1];
+    entry_hi = std::bit_cast<Cop0Registers::EntryHi>(std::bit_cast<u64>(cop0.entry_hi) & ~u64(cop0.page_mask));
+    page_mask = cop0.page_mask;
+    entry_hi.g = cop0.entry_lo[0].g & cop0.entry_lo[1].g;
     /* Compute things that speed up virtual-to-physical-address translation. */
     vpn2_addr_mask = 0xFF'FFFF'E000 & ~u64(page_mask);
     vpn2_compare = std::bit_cast<u64>(entry_hi) & vpn2_addr_mask;
@@ -363,13 +365,17 @@ template<size_t access_size, Alignment alignment> void WriteVirtual(u64 virtual_
         return;
     }
     static constexpr bool use_mask = alignment != Alignment::Aligned;
-    auto Mask = [&] {
+    auto Mask = [offset] {
+        // TODO: the below probably only works when reading from rdram (it's in LE)
         if constexpr (alignment == Alignment::UnalignedLeft) { /* Store (Double)Word Left */
-            /* offset => mask; 0 => 0; 1 => 0000'00FF; 2 => 0000'FFFF; 3 => 00FF'FFFF; ... */
-            return (1ll << (8 * offset)) - 1;
+            // (SWL) offset => mask; 0 => FFFF'FFFF; 1 => 00FF'FFFF; 2 => 0000'FFFF; 3 => 0000'00FF
+            // (SDL) offset => mask; 0 => FFFF'FFFF'FFFF'FFFF; 1 => 00FF'FFFF'FFFF'FFFF; ...
+            return std::numeric_limits<typename SizeToUInt<access_size>::type>::max() >> (8 * offset);
         } else { /* UnalignedRight; Store (Double)Word Right */
-            /* offset => mask; 0 => FFFF'FF00; 1 => FFFF'0000; 2 => FF00'0000; 3 => 0000'0000; ... */
-            return std::byteswap(((1ll << (8 * (7 - offset))) - 1));
+            // (SWR) offset => mask; 0 => FF00'0000; 1 => FFFF'0000; 2 => FFFF'FF00; 3 => FFFF'FFFF
+            // (SDR) offset => mask; 0 => FF00'0000'0000'0000; 1 => FFFF'0000'0000'0000; ...
+            return std::numeric_limits<typename SizeToUInt<access_size>::type>::max()
+                << (8 * (access_size - offset - 1));
         }
     };
     if (cacheable_area) {

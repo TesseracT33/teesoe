@@ -65,8 +65,7 @@ template<DmaType type> void InitDma()
     dma_len = std::min(bytes_until_rdram_end, bytes_until_cart_end);
     if constexpr (type == DmaType::CartToRdram) {
         dma_len = std::min(dma_len, size_t(pi.wr_len + 1));
-        /* See https://n64brew.dev/wiki/Peripheral_Interface#Unaligned_DMA_transfer for behavior when addr is unaligned
-         */
+        // See https://n64brew.dev/wiki/Peripheral_Interface#Unaligned_DMA_transfer for behaviour when addr is unaligned
         static constexpr size_t block_size = 128;
         size_t num_bytes_first_block = block_size - (pi.dram_addr & (block_size - 1));
         if (num_bytes_first_block > (pi.dram_addr & 7)) {

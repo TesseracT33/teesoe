@@ -6,6 +6,7 @@
 #include "n64_build_options.hpp"
 #include "scheduler.hpp"
 
+#include <bit>
 #include <cstring>
 #include <format>
 #include <string_view>
@@ -62,7 +63,12 @@ template<DmaType type> void InitDma()
     dma_len = std::min(max_dma_len, std::min(bytes_until_rdram_end, bytes_until_pif_end));
     if constexpr (type == DmaType::PifToRdram) {
         u8* pif_ptr = pif::GetPointerToMemory(pif_addr);
-        std::memcpy(rdram_ptr, pif_ptr, dma_len);
+        for (size_t i = 0; i < dma_len; i += 4) {
+            s32 val;
+            std::memcpy(&val, pif_ptr + i, 4);
+            val = std::byteswap(val); // PIF BE, RDRAM LE
+            std::memcpy(rdram_ptr + i, &val, 4);
+        }
         if constexpr (log_dma) {
             log(std::format("From PIF ${:X} to RDRAM ${:X}: ${:X} bytes", pif_addr, si.dram_addr, dma_len));
         }
@@ -74,10 +80,8 @@ template<DmaType type> void InitDma()
             dma_len -= num_bytes_in_rom_area;
             for (size_t i = 0; i < dma_len; i += 4) {
                 s32 val;
-                std::memcpy(&val, rdram_ptr, 4);
-                pif::WriteMemory<4>(pif_addr, val);
-                pif_addr += 4;
-                rdram_ptr += 4;
+                std::memcpy(&val, rdram_ptr + i, 4);
+                pif::WriteMemory<4>(pif_addr + i, val); // PIF BE, RDRAM LE, but val byteswapped in pif::WriteMemory
             }
             if constexpr (log_dma) {
                 log(std::format("From RDRAM ${:X} to PIF ${:X}: ${:X} bytes",

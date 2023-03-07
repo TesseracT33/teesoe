@@ -33,7 +33,7 @@ u8* GetPointerToMemory(u32 addr)
 
 void NotifyIllegalInstrCode(u32 instr_code)
 {
-    log_fatal(std::format("Illegal RSP instruction code {:08X} encountered.\n", instr_code));
+    log_error(std::format("Illegal RSP instruction code {:08X} encountered.\n", instr_code));
 }
 
 void PowerOn()

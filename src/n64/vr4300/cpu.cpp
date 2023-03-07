@@ -54,10 +54,6 @@ template<CpuInstruction instr> void Load(u32 rs, u32 rt, s16 imm16)
 
     auto addr = gpr[rs] + imm16;
 
-    /* For all instructions:
-       Generates an address by adding a sign-extended offset to the contents of register base.
-       In the 32-bit Kernel mode, the high-order 32 bits are ignored during
-       virtual address creation. */
     if constexpr (one_of(instr, LD, LDL, LDR, LLD)) {
         if (operating_mode == OperatingMode::Kernel && addressing_mode == AddressingMode::_32bit) {
             addr = s32(addr);
@@ -65,29 +61,17 @@ template<CpuInstruction instr> void Load(u32 rs, u32 rt, s16 imm16)
     }
 
     auto result = [&] {
-        if constexpr (instr == LB) {
-            /* Load Byte;
-               Sign-extends the contents of a byte specified by the address and loads the result to register rt. */
+        if constexpr (instr == LB) { // Load Byte
             return ReadVirtual<s8>(addr);
-        } else if constexpr (instr == LBU) {
-            /* Load Byte Unsigned;
-               Zero-extends the contents of a byte specified by the address and loads the result to register rt. */
+        } else if constexpr (instr == LBU) { // Load Byte Unsigned
             return u8(ReadVirtual<s8>(addr));
-        } else if constexpr (instr == LH) {
-            /* Load halfword;
-               Sign-extends the contents of a halfword specified by the address and loads the result to register rt. */
+        } else if constexpr (instr == LH) { // Load Halfword
             return ReadVirtual<s16>(addr);
-        } else if constexpr (instr == LHU) {
-            /* Load Halfword Unsigned;
-               Zero-extends the contents of a halfword specified by the address and loads the result to register rt. */
+        } else if constexpr (instr == LHU) { // Load Halfword Unsigned
             return u16(ReadVirtual<s16>(addr));
-        } else if constexpr (instr == LW) {
-            /* Load Word;
-               Sign-extends the contents of a word specified by the address and loads the result to register rt. */
+        } else if constexpr (instr == LW) { // Load Word
             return ReadVirtual<s32>(addr);
-        } else if constexpr (instr == LWU) {
-            /* Load Word Unsigned;
-               Zero-extends the contents of a word specified by the address and loads the result to register rt. */
+        } else if constexpr (instr == LWU) { // Load Word Unsigned
             return u32(ReadVirtual<s32>(addr));
         } else if constexpr (instr == LWL) {
             /* Load Word Left;

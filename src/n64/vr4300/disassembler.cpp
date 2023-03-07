@@ -35,10 +35,9 @@
         ExecuteCop2Instruction<Cop2Instruction::INSTR>();                \
     }
 
-#define LOG_INSTR(OUTPUT)                                              \
-    {                                                                  \
-        /* if constexpr (log_cpu_instructions)                         \
-            Log::CpuInstruction(last_instr_fetch_phys_addr, OUTPUT);*/ \
+#define LOG_INSTR(OUTPUT)                                                                                             \
+    {                                                                                                                 \
+        if constexpr (log_cpu_instructions) log(std::format("CPU; ${:08X}  {}", last_instr_fetch_phys_addr, OUTPUT)); \
     }
 
 #define IMM16 (instr_code & 0xFFFF)
@@ -421,10 +420,10 @@ template<CpuInstruction instr> void ExecuteCpuInstruction()
     } else {
         using enum CpuInstruction;
         if constexpr (one_of(instr, LB, LBU, LH, LHU, LW, LWU, LWL, LWR, LD, LDL, LDR, LL, LLD)) {
-            LOG_INSTR(std::format("{} {}, ${:X}", current_instr_name, RT, MakeUnsigned(gpr[RS] + IMM16)));
+            LOG_INSTR(std::format("{} {}, ${:X}", current_instr_name, RT, to_unsigned(gpr[RS] + IMM16)));
             Load<instr>(RS, RT, IMM16);
         } else if constexpr (one_of(instr, SB, SH, SW, SWL, SWR, SC, SCD, SD, SDL, SDR)) {
-            LOG_INSTR(std::format("{} {}, ${:X}", current_instr_name, RT, MakeUnsigned(gpr[RS] + IMM16)));
+            LOG_INSTR(std::format("{} {}, ${:X}", current_instr_name, RT, to_unsigned(gpr[RS] + IMM16)));
             Store<instr>(RS, RT, IMM16);
         } else if constexpr (one_of(instr, ADDI, ADDIU, SLTI, SLTIU, ANDI, ORI, XORI, LUI, DADDI, DADDIU)) {
             if constexpr (instr == LUI) {
@@ -500,7 +499,7 @@ template<Cop0Instruction instr> void ExecuteCop0Instruction()
                     Cop0Instruction::MFC0,
                     Cop0Instruction::DMTC0,
                     Cop0Instruction::DMFC0)) {
-        LOG_INSTR(std::format("{} {}, {}", current_instr_name, RT, cop0_reg_str_repr[RD]))
+        LOG_INSTR(std::format("{} {}, {}", current_instr_name, RT, cop0_reg_str_repr[RD]));
         Cop0Move<instr>(RT, RD);
     } else {
         LOG_INSTR(current_instr_name.data());
@@ -545,9 +544,7 @@ template<Cop1Instruction instr> void ExecuteCop1Instruction()
     } else {
         static_assert(always_false<instr>);
     }
-    if constexpr (log_cpu_instructions) {
-        // Log::CpuInstruction(last_instr_fetch_phys_addr, current_instr_log_output);
-    }
+    LOG_INSTR(current_instr_log_output);
 }
 
 template<Cop2Instruction instr> void ExecuteCop2Instruction()
@@ -558,8 +555,7 @@ template<Cop2Instruction instr> void ExecuteCop2Instruction()
     } else {
         static_assert(always_false<instr>);
     }
-    if constexpr (log_cpu_instructions) {
-        // Log::CpuInstruction(last_instr_fetch_phys_addr, current_instr_log_output);
-    }
+    LOG_INSTR(current_instr_log_output);
 }
+
 } // namespace n64::vr4300

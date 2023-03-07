@@ -101,7 +101,7 @@ void InitRun(bool hle_pif)
 
 void NotifyIllegalInstrCode(u32 instr_code)
 {
-    log_fatal(std::format("Illegal CPU instruction code {:08X} encountered.\n", instr_code));
+    log_error(std::format("Illegal CPU instruction code {:08X} encountered.\n", instr_code));
 }
 
 void PowerOn()

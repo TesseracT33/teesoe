@@ -46,9 +46,18 @@ void Initialize()
 /* 0 - $7F'FFFF */
 template<std::signed_integral Int> Int Read(u32 addr)
 { /* CPU precondition: addr is always aligned */
+    // RDRAM is stored in LE, word-wise
+    if constexpr (sizeof(Int) == 1) addr ^= 3;
+    if constexpr (sizeof(Int) == 2) addr ^= 2;
+    u8 const* rdram_src = rdram + (addr & (sizeof(rdram) - 1));
     Int ret;
-    std::memcpy(&ret, rdram + (addr & (sizeof(rdram) - 1)), sizeof(Int));
-    return std::byteswap(ret);
+    if constexpr (sizeof(Int) <= 4) {
+        std::memcpy(&ret, rdram_src, sizeof(Int));
+    } else {
+        std::memcpy(&ret, rdram_src + 4, 4);
+        std::memcpy(reinterpret_cast<u8*>(&ret) + 4, rdram_src, 4);
+    }
+    return ret;
 }
 
 /* $03F0'0000 - $03FF'FFFF */
@@ -86,23 +95,36 @@ template<size_t access_size, typename... MaskT> void Write(u32 addr, s64 data, M
 { /* Precondition: phys_addr is aligned to access_size if sizeof...(mask) == 0 */
     static_assert(std::has_single_bit(access_size) && access_size <= 8);
     static_assert(sizeof...(mask) <= 1);
-    auto to_write = [&] {
-        if constexpr (access_size == 1) return u8(data);
-        if constexpr (access_size == 2) return std::byteswap(u16(data));
-        if constexpr (access_size == 4) return std::byteswap(u32(data));
-        if constexpr (access_size == 8) return std::byteswap(data);
-    }();
+    // RDRAM is stored in LE, word-wise
     static constexpr bool apply_mask = sizeof...(mask) == 1;
     if constexpr (apply_mask) {
         addr &= ~(access_size - 1);
     }
-    u8* ram = rdram + (addr & (sizeof(rdram) - 1));
+    if constexpr (access_size == 1) addr ^= 3;
+    if constexpr (access_size == 2) addr ^= 2;
+    u8* rdram_dst = rdram + (addr & (sizeof(rdram) - 1));
+    auto to_write = [&] {
+        if constexpr (access_size == 1) return u8(data);
+        if constexpr (access_size == 2) return u16(data);
+        if constexpr (access_size == 4) return u32(data);
+        if constexpr (access_size == 8) return data;
+    }();
     if constexpr (apply_mask) {
         u64 existing;
-        std::memcpy(&existing, ram, access_size);
-        to_write |= existing & (..., mask);
+        if constexpr (access_size <= 4) {
+            std::memcpy(&existing, rdram_dst, access_size);
+        } else {
+            std::memcpy(&existing, rdram_dst + 4, 4);
+            std::memcpy(reinterpret_cast<u8*>(&existing) + 4, rdram_dst, 4);
+        }
+        to_write |= existing & (..., ~mask);
     }
-    std::memcpy(ram, &to_write, access_size);
+    if constexpr (access_size <= 4) {
+        std::memcpy(rdram_dst, &to_write, access_size);
+    } else {
+        std::memcpy(rdram_dst, reinterpret_cast<u8 const*>(&to_write) + 4, 4);
+        std::memcpy(rdram_dst + 4, &to_write, 4);
+    }
 }
 
 /* $03F0'0000 - $03FF'FFFF */
@@ -119,7 +141,7 @@ template void Write<1>(u32, s64);
 template void Write<2>(u32, s64);
 template void Write<4>(u32, s64);
 template void Write<8>(u32, s64);
-template void Write<4, s64>(u32, s64, s64);
-template void Write<8, s64>(u32, s64, s64);
+template void Write<4, u32>(u32, s64, u32);
+template void Write<8, u64>(u32, s64, u64);
 
 } // namespace n64::rdram

@@ -92,14 +92,24 @@ template<DmaType dma_type> void InitDMA()
     portion, the number of rows, and a "skip" value that corresponds to the bytes between the end of a row and the
     beginning of the following one. Notice that this applies only to RDRAM: accesses in IMEM/DMEM are always linear. */
     if (skip == 0) {
-        std::memcpy(dst_ptr, src_ptr, bytes_to_copy);
+        for (size_t i = 0; i < bytes_to_copy; i += 4) {
+            s32 val;
+            std::memcpy(&val, src_ptr + i, 4);
+            val = std::byteswap(val); // rdram LE, rsp ram BE
+            std::memcpy(dst_ptr + i, &val, 4);
+        }
     } else {
         for (s32 i = 0; i < rows; ++i) {
             s32 bytes_to_copy_this_row = std::min(bytes_to_copy, bytes_per_row);
-            std::memcpy(dst_ptr, src_ptr, bytes_to_copy_this_row);
+            for (s32 i = 0; i < bytes_to_copy_this_row; i += 4) {
+                s32 val;
+                std::memcpy(&val, src_ptr, 4);
+                val = std::byteswap(val); // rdram LE, rsp ram BE
+                std::memcpy(dst_ptr, &val, 4);
+                src_ptr += 4;
+                dst_ptr += 4;
+            }
             bytes_to_copy -= bytes_to_copy_this_row;
-            src_ptr += bytes_to_copy_this_row;
-            dst_ptr += bytes_to_copy_this_row;
             if constexpr (dma_type == DmaType::RdToSp) {
                 src_ptr += skip;
             } else {

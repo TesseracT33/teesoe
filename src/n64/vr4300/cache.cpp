@@ -35,8 +35,8 @@ struct ICacheLine {
 static std::array<DCacheLine, 512> d_cache; /* 8 KB */
 static std::array<ICacheLine, 512> i_cache; /* 16 KB */
 
-static void FillCacheLine(auto& cache_line, u32 phys_addr);
-static void WritebackCacheLine(auto& cache_line, u32 new_phys_addr);
+static void FillCacheLine(auto& cache_line, u32 paddr);
+static void WritebackCacheLine(auto& cache_line, u32 new_paddr);
 
 void CACHE(u32 rs, u32 rt, s16 imm16)
 {
@@ -58,7 +58,7 @@ void CACHE(u32 rs, u32 rt, s16 imm16)
     auto op = rt >> 2;
     auto virt_addr = gpr[rs] + imm16;
     bool cacheable_area;
-    auto phys_addr = active_virtual_to_physical_fun_read(virt_addr,
+    auto paddr = active_virtual_to_physical_fun_read(virt_addr,
       cacheable_area); /* may go unused below, but could also cause a TLB exception */
     if (exception_has_occurred) {
         AdvancePipeline(cycles);
@@ -70,7 +70,7 @@ void CACHE(u32 rs, u32 rt, s16 imm16)
         static constexpr bool is_d_cache = sizeof(cache_line) == sizeof(DCacheLine);
 
         auto WriteBack = [&] {
-            WritebackCacheLine(cache_line, phys_addr);
+            WritebackCacheLine(cache_line, paddr);
             cycles = 40;
         };
         /* TODO: in which situations do we abort if the cache line is tagged as invalid? */
@@ -102,16 +102,16 @@ void CACHE(u32 rs, u32 rt, s16 imm16)
 
         case 3: /* Create_Dirty_Exclusive */
             if constexpr (is_d_cache) {
-                if (cache_line.dirty && (phys_addr & ~0xFFF) != cache_line.ptag) {
+                if (cache_line.dirty && (paddr & ~0xFFF) != cache_line.ptag) {
                     WriteBack();
                 }
                 cache_line.dirty = cache_line.valid = true;
-                cache_line.ptag = phys_addr & ~0xFFF;
+                cache_line.ptag = paddr & ~0xFFF;
             }
             break;
 
         case 4: /* Hit_Invalidate */
-            if ((phys_addr & ~0xFFF) == cache_line.ptag) {
+            if ((paddr & ~0xFFF) == cache_line.ptag) {
                 cache_line.valid = false;
                 if constexpr (is_d_cache) {
                     cache_line.dirty = false;
@@ -121,14 +121,14 @@ void CACHE(u32 rs, u32 rt, s16 imm16)
 
         case 5: /* Hit_Write_Back_Invalidate (D-Cache), Fill (I-Cache) */
             if constexpr (is_d_cache) {
-                if ((phys_addr & ~0xFFF) == cache_line.ptag) {
+                if ((paddr & ~0xFFF) == cache_line.ptag) {
                     if (cache_line.dirty) {
                         WriteBack();
                     }
                     cache_line.valid = false;
                 }
             } else {
-                FillCacheLine(cache_line, phys_addr);
+                FillCacheLine(cache_line, paddr);
                 cycles = 40;
             }
             break;
@@ -139,7 +139,7 @@ void CACHE(u32 rs, u32 rt, s16 imm16)
                     break;
                 }
             }
-            if ((phys_addr & ~0xFFF) == cache_line.ptag) {
+            if ((paddr & ~0xFFF) == cache_line.ptag) {
                 WriteBack();
             }
             break;
@@ -161,94 +161,119 @@ void CACHE(u32 rs, u32 rt, s16 imm16)
     AdvancePipeline(cycles);
 }
 
-void FillCacheLine(auto& cache_line, u32 phys_addr)
+void FillCacheLine(auto& cache_line, u32 paddr)
 {
     /* TODO: For now, we are lazy and assume that only RDRAM is cached. Other regions are too;
     https://discord.com/channels/465585922579103744/600463718924681232/1034605516900544582 */
-    auto rdram_offset = phys_addr & ~(sizeof(cache_line.data) - 1);
+    auto rdram_offset = paddr & ~(sizeof(cache_line.data) - 1);
     if (rdram_offset >= rdram::GetSize()) {
-        log_warn(std::format("Attempted to fill cache line from p_addr {} (beyond RDRAM)", rdram_offset));
+        log_warn(std::format("Attempted to fill cache line from physical addr ${:08X} (beyond RDRAM)", rdram_offset));
     }
     std::memcpy(cache_line.data, rdram_ptr + rdram_offset, sizeof(cache_line.data));
-    cache_line.ptag = phys_addr & ~0xFFF;
+    cache_line.ptag = paddr & ~0xFFF;
     cache_line.valid = true;
     if constexpr (sizeof(cache_line) == sizeof(DCacheLine)) {
         cache_line.dirty = false;
     }
 }
 
-template<std::signed_integral Int, MemOp mem_op> Int ReadCacheableArea(u32 phys_addr)
-{ /* Precondition: phys_addr is aligned to sizeof(Int) */
+template<std::signed_integral Int, MemOp mem_op> Int ReadCacheableArea(u32 paddr)
+{ /* Precondition: paddr is aligned to sizeof(Int) */
     static_assert(one_of(mem_op, MemOp::InstrFetch, MemOp::Read));
     if constexpr (log_cpu_instructions && mem_op == MemOp::InstrFetch) {
-        last_instr_fetch_phys_addr = phys_addr;
+        last_instr_fetch_phys_addr = paddr;
     }
-    Int ret;
+    auto ReadFromCacheLine = [paddr](auto const& cache_line) mutable {
+        // RDRAM is stored in LE, word-wise
+        if constexpr (sizeof(Int) == 1) paddr ^= 3;
+        if constexpr (sizeof(Int) == 2) paddr ^= 2;
+        u8 const* cache_src = cache_line.data + (paddr & (sizeof(cache_line.data) - 1));
+        Int ret;
+        if constexpr (sizeof(Int) <= 4) {
+            std::memcpy(&ret, cache_src, sizeof(Int));
+        } else {
+            std::memcpy(&ret, cache_src + 4, 4);
+            std::memcpy(reinterpret_cast<u8*>(&ret) + 4, cache_src, 4);
+        }
+        return ret;
+    };
     if constexpr (mem_op == MemOp::InstrFetch) {
-        ICacheLine& cache_line = i_cache[phys_addr >> 5 & 0x1FF];
-        if (cache_line.valid && (phys_addr & ~0xFFF) == cache_line.ptag) { /* cache hit */
+        ICacheLine& cache_line = i_cache[paddr >> 5 & 0x1FF];
+        if (cache_line.valid && (paddr & ~0xFFF) == cache_line.ptag) { /* cache hit */
             p_cycle_counter += cache_hit_read_cycle_delay;
         } else { /* cache miss */
-            FillCacheLine(cache_line, phys_addr);
+            FillCacheLine(cache_line, paddr);
             p_cycle_counter += cache_miss_cycle_delay;
         }
-        std::memcpy(&ret, cache_line.data + (phys_addr & (sizeof(cache_line.data) - 1)), sizeof(Int));
+        return ReadFromCacheLine(cache_line);
     } else { /* MemOp::Read */
-        DCacheLine& cache_line = d_cache[phys_addr >> 4 & 0x1FF];
-        if (cache_line.valid && (phys_addr & ~0xFFF) == cache_line.ptag) { /* cache hit */
+        DCacheLine& cache_line = d_cache[paddr >> 4 & 0x1FF];
+        if (cache_line.valid && (paddr & ~0xFFF) == cache_line.ptag) { /* cache hit */
             p_cycle_counter += cache_hit_read_cycle_delay;
         } else { /* cache miss */
             if (cache_line.valid && cache_line.dirty) {
-                WritebackCacheLine(cache_line, phys_addr);
+                WritebackCacheLine(cache_line, paddr);
             }
-            FillCacheLine(cache_line, phys_addr);
+            FillCacheLine(cache_line, paddr);
             p_cycle_counter += cache_miss_cycle_delay;
         }
-        std::memcpy(&ret, cache_line.data + (phys_addr & (sizeof(cache_line.data) - 1)), sizeof(Int));
+        return ReadFromCacheLine(cache_line);
     }
-    return std::byteswap(ret);
 }
 
-template<size_t access_size, typename... MaskT> void WriteCacheableArea(u32 phys_addr, s64 data, MaskT... mask)
-{ /* Precondition: phys_addr is aligned to access_size if sizeof...(mask) == 0 */
+template<size_t access_size, typename... MaskT> void WriteCacheableArea(u32 paddr, s64 data, MaskT... mask)
+{ /* Precondition: paddr is aligned to access_size if sizeof...(mask) == 0 */
     static_assert(std::has_single_bit(access_size) && access_size <= 8);
     static_assert(sizeof...(mask) <= 1);
-    DCacheLine& cache_line = d_cache[phys_addr >> 4 & 0x1FF];
-    if (cache_line.valid && (phys_addr & ~0xFFF) == cache_line.ptag) { /* cache hit */
+    DCacheLine& cache_line = d_cache[paddr >> 4 & 0x1FF];
+    if (cache_line.valid && (paddr & ~0xFFF) == cache_line.ptag) { /* cache hit */
         cache_line.dirty = true;
         p_cycle_counter += cache_hit_write_cycle_delay;
     } else { /* cache miss */
         if (cache_line.valid && cache_line.dirty) {
-            WritebackCacheLine(cache_line, phys_addr);
+            WritebackCacheLine(cache_line, paddr);
         }
-        FillCacheLine(cache_line, phys_addr);
+        FillCacheLine(cache_line, paddr);
         p_cycle_counter += cache_miss_cycle_delay;
     }
-    auto to_write = [&] {
-        if constexpr (access_size == 1) return u8(data);
-        if constexpr (access_size == 2) return std::byteswap(u16(data));
-        if constexpr (access_size == 4) return std::byteswap(u32(data));
-        if constexpr (access_size == 8) return std::byteswap(data);
-    }();
     static constexpr bool apply_mask = sizeof...(mask) == 1;
     if constexpr (apply_mask) {
-        phys_addr &= ~(access_size - 1);
+        paddr &= ~(access_size - 1);
     }
-    u8* cache = cache_line.data + (phys_addr & (sizeof(cache_line.data) - 1));
+    // RDRAM is stored in LE, word-wise
+    if constexpr (access_size == 1) paddr ^= 3;
+    if constexpr (access_size == 2) paddr ^= 2;
+    u8* cache_dst = cache_line.data + (paddr & (sizeof(cache_line.data) - 1));
+    auto to_write = [&] {
+        if constexpr (access_size == 1) return u8(data);
+        if constexpr (access_size == 2) return u16(data);
+        if constexpr (access_size == 4) return u32(data);
+        if constexpr (access_size == 8) return data;
+    }();
     if constexpr (apply_mask) {
         u64 existing;
-        std::memcpy(&existing, cache, access_size);
-        to_write |= existing & (..., mask);
+        if constexpr (access_size <= 4) {
+            std::memcpy(&existing, cache_dst, access_size);
+        } else {
+            std::memcpy(&existing, cache_dst + 4, 4);
+            std::memcpy(reinterpret_cast<u8*>(&existing) + 4, cache_dst, 4);
+        }
+        to_write |= existing & (..., ~mask);
     }
-    std::memcpy(cache, &to_write, access_size);
+    if constexpr (access_size <= 4) {
+        std::memcpy(cache_dst, &to_write, access_size);
+    } else {
+        std::memcpy(cache_dst, reinterpret_cast<u8 const*>(&to_write) + 4, 4);
+        std::memcpy(cache_dst + 4, &to_write, 4);
+    }
     cache_line.dirty = true;
 }
 
-void WritebackCacheLine(auto& cache_line, u32 new_phys_addr)
+void WritebackCacheLine(auto& cache_line, u32 new_paddr)
 {
     /* The address in the main memory to be written is the address in the cache tag
         and not the physical address translated by using TLB */
-    auto rdram_offset = cache_line.ptag | new_phys_addr & 0xFFF & ~(sizeof(cache_line.data) - 1);
+    auto rdram_offset = cache_line.ptag | new_paddr & 0xFFF & ~(sizeof(cache_line.data) - 1);
     std::memcpy(rdram_ptr + rdram_offset, cache_line.data, sizeof(cache_line.data));
     if constexpr (sizeof(cache_line) == sizeof(DCacheLine)) {
         cache_line.dirty = false;
@@ -264,6 +289,6 @@ template void WriteCacheableArea<1>(u32, s64);
 template void WriteCacheableArea<2>(u32, s64);
 template void WriteCacheableArea<4>(u32, s64);
 template void WriteCacheableArea<8>(u32, s64);
-template void WriteCacheableArea<4, s64>(u32, s64, s64);
-template void WriteCacheableArea<8, s64>(u32, s64, s64);
+template void WriteCacheableArea<4, u32>(u32, s64, u32);
+template void WriteCacheableArea<8, u64>(u32, s64, u64);
 } // namespace n64::vr4300

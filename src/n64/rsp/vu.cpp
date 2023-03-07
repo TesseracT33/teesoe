@@ -1432,7 +1432,6 @@ template<VectorInstruction instr> void VectorLoadStore(u32 instr_code)
         }
     } else if constexpr (instr == LHV || instr == LFV || instr == SHV || instr == SFV) {
         /* TODO */
-        assert(false);
     } else {
         static_assert(always_false<instr>);
     }

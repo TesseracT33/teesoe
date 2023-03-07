@@ -9,47 +9,11 @@
 #include "util.hpp"
 #include "vr4300.hpp"
 
-#include <array>
 #include <bit>
 #include <cassert>
 #include <cstring>
 
 namespace n64::vr4300 {
-
-constexpr std::array cop0_reg_str_repr = {
-    "INDEX",
-    "RANDOM",
-    "ENTRY_LO_0",
-    "ENTRY_LO_1",
-    "CONTEXT",
-    "PAGE_MASK",
-    "WIRED",
-    "COP0_7",
-    "BAD_V_ADDR",
-    "COUNT",
-    "ENTRY_HI",
-    "COMPARE",
-    "STATUS",
-    "CAUSE",
-    "EPC",
-    "PR_ID",
-    "CONFIG",
-    "LL_ADDR",
-    "WATCH_LO",
-    "WATCH_HI",
-    "X_CONTEXT",
-    "COP0_21",
-    "COP0_22",
-    "COP0_23",
-    "COP0_24",
-    "COP0_25",
-    "PARITY_ERROR",
-    "COP0_27",
-    "TAG_LO",
-    "TAG_HI",
-    "ERROR_EPC",
-};
-static_assert(cop0_reg_str_repr.size() == 31);
 
 void Cop0Registers::OnWriteToCause()
 {

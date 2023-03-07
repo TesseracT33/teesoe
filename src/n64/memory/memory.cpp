@@ -132,7 +132,7 @@ template void Write<1>(u32, s64);
 template void Write<2>(u32, s64);
 template void Write<4>(u32, s64);
 template void Write<8>(u32, s64);
-template void Write<4, s64>(u32, s64, s64);
-template void Write<8, s64>(u32, s64, s64);
+template void Write<4, u32>(u32, s64, u32);
+template void Write<8, u64>(u32, s64, u64);
 
 } // namespace n64::memory
