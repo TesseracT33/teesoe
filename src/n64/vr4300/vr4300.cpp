@@ -37,6 +37,10 @@ void CheckInterrupts()
     bool prev_interrupt = interrupt;
     interrupt = cop0.status.ie & !cop0.status.exl & !cop0.status.erl & bool(cop0.cause.ip & cop0.status.im);
     if (interrupt && !prev_interrupt) {
+        if constexpr (log_interrupts) {
+            log(
+              std::format("INTERRUPT; cause.ip = ${:02X}; status.im = ${:02X}", u8(cop0.cause.ip), u8(cop0.status.im)));
+        }
         SignalException<Exception::Interrupt>();
     }
 }

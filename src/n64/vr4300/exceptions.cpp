@@ -150,7 +150,7 @@ template<Exception exception> u64 GetExceptionVector()
 
 void HandleException()
 {
-    if constexpr (log_cpu_exceptions) {
+    if constexpr (log_exceptions) {
         log(std::format("EXCEPTION: {}", ExceptionToString(occurred_exception)));
     }
 
