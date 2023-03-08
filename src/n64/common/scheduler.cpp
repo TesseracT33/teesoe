@@ -1,4 +1,5 @@
 #include "scheduler.hpp"
+#include "interface/ai.hpp"
 #include "interface/vi.hpp"
 #include "n64.hpp"
 #include "rsp/rsp.hpp"
@@ -97,6 +98,7 @@ void Run()
         s64 rsp_step_dur = cpu_cycles_per_update - rsp_cycle_overrun;
         cpu_cycle_overrun = vr4300::Run(cpu_step_dur);
         rsp_cycle_overrun = rsp::Run(rsp_step_dur);
+        ai::Step(cpu_step_dur);
         CheckEvents(cpu_step_dur);
     }
 }

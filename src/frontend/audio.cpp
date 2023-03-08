@@ -61,4 +61,14 @@ void on_device_removed(SDL_Event event)
     // TODO
 }
 
+void push_sample(s16 left, s16 right)
+{
+    // TODO
+}
+
+void set_sample_rate(u32 sample_rate)
+{
+    // TODO
+}
+
 } // namespace frontend::audio

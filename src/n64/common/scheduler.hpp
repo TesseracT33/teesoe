@@ -7,7 +7,6 @@ namespace n64::scheduler {
 using EventCallback = void (*)();
 
 enum class EventType {
-    AudioSample,
     CountCompareMatch,
     PiDmaFinish,
     SiDmaFinish,
