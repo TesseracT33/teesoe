@@ -1,7 +1,5 @@
 #pragma once
 
-#include <string_view>
-
 namespace n64 {
 
 inline constexpr bool enable_logging = false;
@@ -21,8 +19,6 @@ inline constexpr bool log_io_vi = enable_logging && (log_io_all || false);
 inline constexpr bool log_io_rdp = enable_logging && (log_io_all || false);
 inline constexpr bool log_io_rsp = enable_logging && (log_io_all || false);
 inline constexpr bool log_rsp_instructions = enable_logging && false;
-
-inline constexpr std::string_view log_path = "C:\\n64.log";
 
 inline constexpr bool skip_boot_rom = true;
 
