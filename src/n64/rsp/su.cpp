@@ -438,7 +438,7 @@ void Break()
     }
     sp.status.halted = sp.status.broke = true;
     if (sp.status.intbreak) {
-        mi::SetInterruptFlag(mi::InterruptType::SP);
+        mi::RaiseInterrupt(mi::InterruptType::SP);
     }
     AdvancePipeline(1);
 }

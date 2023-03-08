@@ -171,7 +171,7 @@ void OnDmaFinish()
         }
     }
 
-    mi::SetInterruptFlag(mi::InterruptType::SP);
+    mi::RaiseInterrupt(mi::InterruptType::SP);
 }
 
 u32 ReadReg(u32 addr)
@@ -312,11 +312,11 @@ void WriteReg(u32 addr, u32 data)
             if ((data & 8) && !(data & 0x10)) {
                 /* 	CLR_INTR: Acknowledge a pending RSP MI interrupt. This must be done any time a RSP MI interrupt
                 was generated, otherwise the interrupt line on the VR4300 will stay asserted. */
-                mi::ClearInterruptFlag(mi::InterruptType::SP);
+                mi::ClearInterrupt(mi::InterruptType::SP);
             } else if (!(data & 8) && (data & 0x10)) {
                 /* 	SET_INTR: Manually trigger a RSP MI interrupt on the VR4300. It might be useful if the RSP wants to
                 manually trigger a VR4300 interrupt at any point during its execution. */
-                mi::SetInterruptFlag(mi::InterruptType::SP);
+                mi::RaiseInterrupt(mi::InterruptType::SP);
             }
             if ((data & 0x20) && !(data & 0x40)) {
                 /* CLR_SSTEP: Disable single-step mode. */

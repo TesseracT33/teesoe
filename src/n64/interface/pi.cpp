@@ -107,7 +107,7 @@ void OnDmaFinish()
 {
     SetStatusFlag(StatusFlag::DmaCompleted);
     ClearStatusFlag(StatusFlag::DmaBusy);
-    mi::SetInterruptFlag(mi::InterruptType::PI);
+    mi::RaiseInterrupt(mi::InterruptType::PI);
     pi.dram_addr = (pi.dram_addr + dma_len) & 0xFF'FFFF;
     pi.cart_addr = (pi.cart_addr + dma_len) & 0xFF'FFFF;
 }
@@ -178,13 +178,13 @@ void WriteReg(u32 addr, u32 data)
         if (data & reset_dma_mask) {
             /* Reset the DMA controller and stop any transfer being done */
             pi.status = 0;
-            mi::ClearInterruptFlag(mi::InterruptType::PI); /* TODO: correct? */
+            mi::ClearInterrupt(mi::InterruptType::PI); /* TODO: correct? */
             scheduler::RemoveEvent(scheduler::EventType::PiDmaFinish);
         }
         if (data & clear_interrupt_mask) {
             /* Clear Interrupt */
             ClearStatusFlag(StatusFlag::DmaCompleted);
-            mi::ClearInterruptFlag(mi::InterruptType::PI);
+            mi::ClearInterrupt(mi::InterruptType::PI);
         }
     } break;
 

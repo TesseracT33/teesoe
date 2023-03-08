@@ -84,7 +84,7 @@ void Sample()
             dma_len[0] -= 4;
         }
         if (dma_len[0] == 0 && --dma_count > 0) {
-            mi::SetInterruptFlag(mi::InterruptType::AI);
+            mi::RaiseInterrupt(mi::InterruptType::AI);
             bool addr_carry_bug = !(dma_addr[0] & 0x1FFF);
             dma_addr[0] = dma_addr[1];
             dma_len[0] = dma_len[1];
@@ -121,7 +121,7 @@ void WriteReg(u32 addr, u32 data)
     case Register::Len:
         if (dma_count < 2) {
             if (dma_count == 0) {
-                mi::SetInterruptFlag(mi::InterruptType::AI);
+                mi::RaiseInterrupt(mi::InterruptType::AI);
             }
             dma_len[dma_count++] = data & 0x3'FFF8;
         }
@@ -129,7 +129,7 @@ void WriteReg(u32 addr, u32 data)
 
     case Register::Control: dma_enable = data & 1; break;
 
-    case Register::Status: mi::ClearInterruptFlag(mi::InterruptType::AI); break;
+    case Register::Status: mi::ClearInterrupt(mi::InterruptType::AI); break;
 
     case Register::Dacrate: {
         dacrate = data & 0x3FFF;

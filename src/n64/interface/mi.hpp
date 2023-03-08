@@ -14,10 +14,10 @@ enum class InterruptType : s32 {
     DP = 1 << 5 /* Set when a full sync completes */
 };
 
-void ClearInterruptFlag(InterruptType);
+void ClearInterrupt(InterruptType);
 void Initialize();
 u32 ReadReg(u32 addr);
-void SetInterruptFlag(InterruptType);
+void RaiseInterrupt(InterruptType);
 void WriteReg(u32 addr, u32 data);
 
 } // namespace n64::mi

@@ -113,7 +113,7 @@ void OnDmaFinish()
 {
     SetStatusFlag(StatusFlag::Interrupt);
     ClearStatusFlag(StatusFlag::DmaBusy);
-    mi::SetInterruptFlag(mi::InterruptType::SI);
+    mi::RaiseInterrupt(mi::InterruptType::SI);
     si.dram_addr = (si.dram_addr + dma_len) & 0xFF'FFFF;
     *pif_addr_reg_last_dma = (*pif_addr_reg_last_dma + dma_len) & 0x7FC;
 }
@@ -185,7 +185,7 @@ void WriteReg(u32 addr, u32 data)
         /* Writing any value to si.STATUS clears bit 12 (SI Interrupt flag), not only here,
            but also in the RCP Interrupt Cause register and in MI. */
         ClearStatusFlag(StatusFlag::Interrupt);
-        mi::ClearInterruptFlag(mi::InterruptType::SI);
+        mi::ClearInterrupt(mi::InterruptType::SI);
         // TODO: RCP flag
         break;
 

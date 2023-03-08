@@ -177,7 +177,7 @@ template<CommandLocation cmd_loc> void LoadExecuteCommands()
         if (opcode == 0x29) { /* full sync command */
             implementation->OnFullSync();
             dp.status.pipe_busy = dp.status.start_gclk = false;
-            mi::SetInterruptFlag(mi::InterruptType::DP);
+            mi::RaiseInterrupt(mi::InterruptType::DP);
         }
         queue_word_offset += cmd_word_len;
     }

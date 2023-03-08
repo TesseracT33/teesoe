@@ -34,7 +34,7 @@ void CheckVideoInterrupt()
     bool prev_interrupt = interrupt;
     interrupt = vi.v_current == vi.v_intr;
     if (interrupt && !prev_interrupt) {
-        mi::SetInterruptFlag(mi::InterruptType::VI);
+        mi::RaiseInterrupt(mi::InterruptType::VI);
     }
 }
 
@@ -128,7 +128,7 @@ void WriteReg(u32 addr, u32 data)
         CheckVideoInterrupt();
         break;
 
-    case Register::VCurrent: mi::ClearInterruptFlag(mi::InterruptType::VI); break;
+    case Register::VCurrent: mi::ClearInterrupt(mi::InterruptType::VI); break;
 
     case Register::Burst: vi.burst = data & 0x3FFF'FFFF; break;
 

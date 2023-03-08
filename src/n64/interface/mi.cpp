@@ -33,7 +33,7 @@ void CheckInterrupts()
     }
 }
 
-void ClearInterruptFlag(InterruptType interrupt_type)
+void ClearInterrupt(InterruptType interrupt_type)
 {
     mi.interrupt &= ~std::to_underlying(interrupt_type);
     CheckInterrupts();
@@ -43,6 +43,12 @@ void Initialize()
 {
     mi.mode = mi.interrupt = mi.mask = 0;
     mi.version = 0x0202'0102;
+}
+
+void RaiseInterrupt(InterruptType interrupt_type)
+{
+    mi.interrupt |= std::to_underlying(interrupt_type);
+    CheckInterrupts();
 }
 
 u32 ReadReg(u32 addr)
@@ -68,12 +74,6 @@ constexpr std::string_view RegOffsetToStr(u32 reg_offset)
     }
 }
 
-void SetInterruptFlag(InterruptType interrupt_type)
-{
-    mi.interrupt |= std::to_underlying(interrupt_type);
-    CheckInterrupts();
-}
-
 void WriteReg(u32 addr, u32 data)
 {
     static_assert(sizeof(mi) >> 2 == 4);
@@ -85,7 +85,7 @@ void WriteReg(u32 addr, u32 data)
     if (offset == Register::Mode) {
         mi.mode = data;
         if (mi.mode & 0x800) {
-            ClearInterruptFlag(InterruptType::DP);
+            ClearInterrupt(InterruptType::DP);
         }
     } else if (offset == Register::Mask) {
         static constexpr s32 clear_sp_mask = 1 << 0;
