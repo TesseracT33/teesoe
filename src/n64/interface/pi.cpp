@@ -7,6 +7,7 @@
 #include "scheduler.hpp"
 
 #include <algorithm>
+#include <cassert>
 #include <cstring>
 #include <format>
 #include <string_view>
@@ -65,17 +66,35 @@ template<DmaType type> void InitDma()
     dma_len = std::min(bytes_until_rdram_end, bytes_until_cart_end);
     if constexpr (type == DmaType::CartToRdram) {
         dma_len = std::min(dma_len, size_t(pi.wr_len + 1));
-        // See https://n64brew.dev/wiki/Peripheral_Interface#Unaligned_DMA_transfer for behaviour when addr is unaligned
-        static constexpr size_t block_size = 128;
-        size_t num_bytes_first_block = block_size - (pi.dram_addr & (block_size - 1));
-        if (num_bytes_first_block > (pi.dram_addr & 7)) {
-            std::memcpy(rdram_ptr, cart_ptr, std::min(dma_len, num_bytes_first_block - (pi.dram_addr & 7)));
+        // TODO: temporary workaround to make nm64 work. If cart and rdram are both in LE, making a simple dma to rdram
+        // does not work if either addr is not work-aligned. E.g.: given cart addr 0x0032e6a6 and aligned rdram:
+        // - cart BE, rdram BE
+        //     cart 0x0032e6a4 : ffff0000 00120000 00100028
+        //     rdram                 0000 00120000 00100028
+        // - cart LE, rdram LE
+        //     cart 0x0032e6a4 : 0000ffff 00001200 28001000
+        //     rdram           :     ffff 00001200 28001000
+        // The two first two bytes copied are incorrect. Temporarily, make cart BE and use the below..
+        assert(!(dma_len & 3));
+        assert(!(pi.dram_addr & 3));
+        for (size_t i = 0; i < dma_len; i += 4) {
+            u32 val;
+            std::memcpy(&val, cart_ptr + i, 4);
+            val = std::byteswap(val);
+            std::memcpy(rdram_ptr + i, &val, 4);
         }
-        if (dma_len > num_bytes_first_block) {
-            std::memcpy(rdram_ptr + num_bytes_first_block,
-              cart_ptr + num_bytes_first_block,
-              dma_len - num_bytes_first_block);
-        }
+        //// See https://n64brew.dev/wiki/Peripheral_Interface#Unaligned_DMA_transfer for behaviour when addr is
+        /// unaligned
+        // static constexpr size_t block_size = 128;
+        // size_t num_bytes_first_block = block_size - (pi.dram_addr & (block_size - 1));
+        // if (num_bytes_first_block > (pi.dram_addr & 7)) {
+        //     std::memcpy(rdram_ptr, cart_ptr, std::min(dma_len, num_bytes_first_block - (pi.dram_addr & 7)));
+        // }
+        // if (dma_len > num_bytes_first_block) {
+        //     std::memcpy(rdram_ptr + num_bytes_first_block,
+        //       cart_ptr + num_bytes_first_block,
+        //       dma_len - num_bytes_first_block);
+        // }
         if constexpr (log_dma) {
             log(std::format("From cart ROM ${:X} to RDRAM ${:X}: ${:X} bytes", pi.cart_addr, pi.dram_addr, dma_len));
         }
