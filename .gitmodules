@@ -10,3 +10,6 @@
 [submodule "ext/nativefiledialog-extended"]
 	path = ext/nativefiledialog-extended
 	url = https://github.com/btzy/nativefiledialog-extended
+[submodule "ext/yaml-cpp"]
+	path = ext/yaml-cpp
+	url = https://github.com/jbeder/yaml-cpp

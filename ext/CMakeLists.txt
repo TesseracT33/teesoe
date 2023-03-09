@@ -89,3 +89,7 @@ target_link_libraries(teesoe parallel-rdp-standalone)
 ##### nativefiledialog-extended #########################
 add_subdirectory(nativefiledialog-extended)
 target_link_libraries(teesoe nfd)
+
+#### yaml-cpp #########################
+add_subdirectory(yaml-cpp)
+target_link_libraries(teesoe yaml-cpp)
