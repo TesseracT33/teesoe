@@ -67,7 +67,7 @@ void InitializeRegisters()
 {
     std::memset(&gpr, 0, sizeof(gpr));
     // std::memset(&fpr, 0, sizeof(fpr));
-    gpr.Set(Reg::sp, 0xFFFF'FFFF'A400'1FF0);
+    gpr.set(29, 0xFFFF'FFFF'A400'1FF0);
     cop0.SetRaw(cop0_index_index, 0x3F);
     cop0.SetRaw(cop0_index_config, 0x7006'E463);
     cop0.SetRaw(cop0_index_context, 0x007F'FFF0);
@@ -86,9 +86,9 @@ void InitRun(bool hle_pif)
 {
     if (hle_pif) {
         /* https://github.com/Dillonb/n64-resources/blob/master/bootn64.html */
-        gpr.Set(20, 1);
-        gpr.Set(22, 0x3F);
-        gpr.Set(29, 0xA400'1FF0);
+        gpr.set(20, 1);
+        gpr.set(22, 0x3F);
+        gpr.set(29, 0xA400'1FF0);
         cop0.SetRaw(cop0_index_status, 0x3400'0000);
         cop0.SetRaw(cop0_index_config, 0x7006'E463);
         for (u64 i = 0; i < 0x1000; i += 4) {

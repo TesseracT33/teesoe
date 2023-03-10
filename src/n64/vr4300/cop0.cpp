@@ -277,7 +277,7 @@ template<Cop0Instruction instr> void Cop0Move(u32 rt, u32 rd)
         /* Move From System Control Coprocessor;
            Loads the contents of the word of the general purpose register rd of CP0
            to the general purpose register rt of the CPU. */
-        gpr.Set(rt, s32(cop0.Get(rd)));
+        gpr.set(rt, s32(cop0.Get(rd)));
     } else if constexpr (instr == DMTC0) {
         /* Doubleword Move To System Control Coprocessor;
            Loads the contents of the doubleword of the general purpose register rt of the CPU
@@ -287,7 +287,7 @@ template<Cop0Instruction instr> void Cop0Move(u32 rt, u32 rd)
         /* Doubleword Move From System Control Coprocessor;
            Loads the contents of the doubleword of the general purpose register rd of CP0
            to the general purpose register rt of the CPU. */
-        gpr.Set(rt, cop0.Get(rd));
+        gpr.set(rt, cop0.Get(rd));
     } else {
         static_assert(always_false<instr>);
     }

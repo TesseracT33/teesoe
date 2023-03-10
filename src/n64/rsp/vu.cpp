@@ -1459,7 +1459,7 @@ template<VectorInstruction instr> void Move(u32 instr_code)
     } else if constexpr (instr == MFC2) {
         /* Pseudo-code: GPR[rt](31..0) = sign_extend(VS<elem>(15..0)) */
         u8* v = (u8*)(&vpr[vs]);
-        gpr.Set(rt, s16(v[element ^ 1] | v[element + 1 & 0xF ^ 1] << 8));
+        gpr.set(rt, s16(v[element ^ 1] | v[element + 1 & 0xF ^ 1] << 8));
     } else if constexpr (instr == CTC2) {
         /* Pseudo-code: CTRL(15..0) = GPR(15..0) */
         /* Control registers (16-bit) are encoded in two __m128i. Each lane represents one bit. */
@@ -1492,7 +1492,7 @@ template<VectorInstruction instr> void Move(u32 instr_code)
         vs = std::min(vs & 3, 2u);
         int lo = _mm_movemask_epi8(_mm_packs_epi16(ctrl_reg[vs].low, _mm_setzero_si128()));
         int hi = _mm_movemask_epi8(_mm_packs_epi16(ctrl_reg[vs].high, _mm_setzero_si128()));
-        gpr.Set(rt, s16(hi << 8 | lo));
+        gpr.set(rt, s16(hi << 8 | lo));
     } else {
         static_assert(always_false<instr>);
     }

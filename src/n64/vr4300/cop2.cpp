@@ -32,8 +32,8 @@ template<Cop2Instruction instr> void Cop2Move(u32 rt)
 
     using enum Cop2Instruction;
 
-    if constexpr (one_of(instr, CFC2, MFC2)) gpr.Set(rt, s32(cop2_latch));
-    else if constexpr (instr == DMFC2) gpr.Set(rt, cop2_latch);
+    if constexpr (one_of(instr, CFC2, MFC2)) gpr.set(rt, s32(cop2_latch));
+    else if constexpr (instr == DMFC2) gpr.set(rt, cop2_latch);
     else if constexpr (one_of(instr, CTC2, DMTC2, MTC2)) cop2_latch = gpr[rt];
     else if constexpr (one_of(instr, DCFC2, DCTC2)) SignalException<Exception::ReservedInstructionCop2>();
     else static_assert(always_false<instr>);

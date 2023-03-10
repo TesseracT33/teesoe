@@ -1,5 +1,6 @@
 #pragma once
 
+#include "mips/gpr.hpp"
 #include "types.hpp"
 
 #include <array>
@@ -79,20 +80,7 @@ template<ScalarInstruction> void Branch(u32 instr_code);
 template<ScalarInstruction> void Move(u32 instr_code);
 void Break();
 
-class GPR /* scalar general-purpose registers */
-{
-    std::array<s32, 32> gpr{};
-
-public:
-    s32 Get(size_t index) const { return gpr[index]; }
-    void Set(size_t index, s32 data)
-    {
-        /* gpr[0] is hardwired to 0. Prefer setting it to zero every time over a branch checking if 'index' is zero. */
-        gpr[index] = data;
-        gpr[0] = 0;
-    }
-    s32& operator[](size_t index) { return gpr[index]; }
-} inline gpr;
+inline mips::Gpr<s32> gpr;
 
 inline bool ll_bit; /* Read from / written to by load linked and store conditional instructions. */
 

@@ -62,7 +62,7 @@ template<ScalarInstruction instr> void ScalarLoad(u32 instr_code)
         }
     }();
 
-    gpr.Set(rt, result);
+    gpr.set(rt, result);
 
     AdvancePipeline(1);
 }
@@ -105,9 +105,9 @@ template<ScalarInstruction instr> void ScalarStore(u32 instr_code)
            rt to 0. */
         if (ll_bit == 1) {
             WriteDMEM(address, gpr[rt]);
-            gpr.Set(rt, 1);
+            gpr.set(rt, 1);
         } else {
-            gpr.Set(rt, 0);
+            gpr.set(rt, 0);
         }
     } else {
         static_assert(always_false<instr>,
@@ -136,7 +136,7 @@ template<ScalarInstruction instr> void AluImmediate(u32 instr_code)
         }();
     }
 
-    gpr.Set(rt, [&] {
+    gpr.set(rt, [&] {
         if constexpr (instr == ADDI || instr == ADDIU) {
             /* Add Immediate (Unsigned);
                Sign-extends the 16-bit immediate and adds it to register rs. Stores the
@@ -196,7 +196,7 @@ template<ScalarInstruction instr> void AluThreeOperand(u32 instr_code)
         current_instr_log_output = std::format("{} {}, {}, {}", current_instr_name, rd, rs, rt);
     }
 
-    gpr.Set(rd, [&] {
+    gpr.set(rd, [&] {
         if constexpr (instr == ADD || instr == ADDU) {
             /* Add (Unsigned);
                Adds the contents of register rs and rt, and stores the 32-bit result to register rd.
@@ -263,7 +263,7 @@ template<ScalarInstruction instr> void Shift(u32 instr_code)
         }();
     }
 
-    gpr.Set(rd, [&] {
+    gpr.set(rd, [&] {
         if constexpr (instr == SLL) {
             /* Shift Left Logical;
                Shifts the contents of register rt sa bits to the left, and inserts 0 to the low-order bits.
@@ -348,10 +348,10 @@ template<ScalarInstruction instr> void Jump(u32 instr_code)
     }
 
     if constexpr (instr == JAL) {
-        gpr.Set(31, 4 + (in_branch_delay_slot ? addr_to_jump_to : pc)); /* TODO: mask with $FFF? */
+        gpr.set(31, 4 + (in_branch_delay_slot ? addr_to_jump_to : pc)); /* TODO: mask with $FFF? */
     } else if constexpr (instr == JALR) {
         auto rd = instr_code >> 11 & 0x1F;
-        gpr.Set(rd, 4 + (in_branch_delay_slot ? addr_to_jump_to : pc)); /* TODO: mask with $FFF? */
+        gpr.set(rd, 4 + (in_branch_delay_slot ? addr_to_jump_to : pc)); /* TODO: mask with $FFF? */
     }
 
     AdvancePipeline(1);
@@ -390,7 +390,7 @@ template<ScalarInstruction instr> void Branch(u32 instr_code)
     }();
 
     if constexpr (instr == BLTZAL || instr == BGEZAL) {
-        gpr.Set(31, 0xFFF & (4 + (in_branch_delay_slot ? addr_to_jump_to : pc)));
+        gpr.set(31, 0xFFF & (4 + (in_branch_delay_slot ? addr_to_jump_to : pc)));
     }
     if (branch_cond) {
         auto offset = s16(instr_code) << 2;
@@ -417,8 +417,8 @@ template<ScalarInstruction instr> void Move(u32 instr_code)
 
     if constexpr (instr == MFC0) {
         /* Move From System Control Coprocessor */
-        if (rdp_reg) gpr.Set(rt, rdp::ReadReg(reg_addr));
-        else gpr.Set(rt, rsp::ReadReg(reg_addr));
+        if (rdp_reg) gpr.set(rt, rdp::ReadReg(reg_addr));
+        else gpr.set(rt, rsp::ReadReg(reg_addr));
     } else if constexpr (instr == MTC0) {
         /* Move To System Control Coprocessor */
         if (rdp_reg) rdp::WriteReg(reg_addr, gpr[rt]);

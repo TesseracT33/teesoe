@@ -436,7 +436,7 @@ template<Cop1Instruction instr> void FpuMove(u32 instr_code)
     } else if constexpr (instr == MFC1) {
         /* Move Word From FPU;
            Transfers the contents of FPU general purpose register fs to CPU general purpose register rt. */
-        gpr.Set(rt, u64(fpr.Get<s32>(fs)));
+        gpr.set(rt, u64(fpr.Get<s32>(fs)));
     } else if constexpr (instr == CTC1) {
         /* Move Control Word To FPU;
            Transfers the contents of CPU general purpose register rt to FPU control register fs. */
@@ -444,7 +444,7 @@ template<Cop1Instruction instr> void FpuMove(u32 instr_code)
     } else if constexpr (instr == CFC1) {
         /* Move Control Word From FPU;
            Transfers the contents of FPU control register fs to CPU general purpose register rt. */
-        gpr.Set(rt, s32(fpu_control.Get(fs)));
+        gpr.set(rt, s32(fpu_control.Get(fs)));
     } else if constexpr (instr == DMTC1) {
         /* Doubleword Move To FPU;
            Transfers the contents of CPU general purpose register rt to FPU general purpose register fs. */
@@ -452,7 +452,7 @@ template<Cop1Instruction instr> void FpuMove(u32 instr_code)
     } else if constexpr (instr == DMFC1) {
         /* Doubleword Move From FPU;
            Transfers the contents of FPU general purpose register fs to CPU general purpose register rt. */
-        gpr.Set(rt, fpr.Get<s64>(fs));
+        gpr.set(rt, fpr.Get<s64>(fs));
     } else if constexpr (instr == DCFC1 || instr == DCTC1) {
         ClearAllExceptions();
         SignalUnimplementedOp();

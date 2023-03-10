@@ -1,5 +1,6 @@
 #pragma once
 
+#include "mips/gpr.hpp"
 #include "types.hpp"
 
 #include <array>
@@ -190,15 +191,6 @@ void SYNC();
 void SYSCALL();
 void BREAK();
 
-class GPR {
-    std::array<s64, 32> gpr{};
-
-public:
-    s64 Get(size_t index) const;
-    s64 Get(Reg reg) const;
-    void Set(size_t index, s64 data);
-    void Set(Reg reg, s64 data);
-    s64 operator[](size_t index);
-} inline gpr;
+inline mips::Gpr<s64> gpr;
 
 } // namespace n64::vr4300

@@ -21,33 +21,6 @@
 
 namespace n64::vr4300 {
 
-s64 GPR::Get(size_t index) const
-{
-    return gpr[index];
-}
-
-s64 GPR::Get(Reg reg) const
-{
-    return gpr[std::to_underlying(reg)];
-}
-
-void GPR::Set(size_t index, s64 data)
-{ /* gpr[0] is hardwired to 0. Prefer setting it to zero every time over a branch checking if 'index' is zero. */
-    gpr[index] = data;
-    gpr[0] = 0;
-}
-
-void GPR::Set(Reg reg, s64 data)
-{
-    gpr[std::to_underlying(reg)] = data;
-    gpr[0] = 0;
-}
-
-s64 GPR::operator[](size_t index)
-{ /* returns by value so that assignments have to made through function "Set". */
-    return gpr[index];
-}
-
 template<CpuInstruction instr> void Load(u32 rs, u32 rt, s16 imm16)
 {
     using enum CpuInstruction;
@@ -173,26 +146,26 @@ template<CpuInstruction instr> void Load(u32 rs, u32 rt, s16 imm16)
             u32 bits_from_last_boundary = (addr & 3) << 3;
             result <<= bits_from_last_boundary;
             s32 untouched_gpr = s32(gpr[rt] & ((1 << bits_from_last_boundary) - 1));
-            gpr.Set(rt, result | untouched_gpr);
+            gpr.set(rt, result | untouched_gpr);
         } else if constexpr (instr == LDL) {
             u32 bits_from_last_boundary = (addr & 7) << 3;
             result <<= bits_from_last_boundary;
             s64 untouched_gpr = gpr[rt] & ((1ll << bits_from_last_boundary) - 1);
-            gpr.Set(rt, result | untouched_gpr);
+            gpr.set(rt, result | untouched_gpr);
         } else if constexpr (instr == LWR) {
             u32 bytes_from_last_boundary = addr & 3;
             result >>= 8 * (3 - bytes_from_last_boundary);
             s32 untouched_gpr = s32(gpr[rt] & right_load_mask[bytes_from_last_boundary]);
-            gpr.Set(rt, result | untouched_gpr);
+            gpr.set(rt, result | untouched_gpr);
         } else if constexpr (instr == LDR) {
             u32 bytes_from_last_boundary = addr & 7;
             result >>= 8 * (7 - bytes_from_last_boundary);
             s64 untouched_gpr = gpr[rt] & right_load_mask[bytes_from_last_boundary];
-            gpr.Set(rt, result | untouched_gpr);
+            gpr.set(rt, result | untouched_gpr);
         }
         AdvancePipeline(2);
     } else { /* Aligned read */
-        gpr.Set(rt, result);
+        gpr.set(rt, result);
         AdvancePipeline(1);
     }
 }
@@ -261,9 +234,9 @@ template<CpuInstruction instr> void Store(u32 rs, u32 rt, s16 imm16)
            rt to 0. */
         if (ll_bit == 1) {
             WriteVirtual<4>(addr, gpr[rt]);
-            gpr.Set(rt, 1);
+            gpr.set(rt, 1);
         } else {
-            gpr.Set(rt, 0);
+            gpr.set(rt, 0);
         }
     } else if constexpr (instr == SCD) {
         /* Store Conditional Doubleword;
@@ -273,9 +246,9 @@ template<CpuInstruction instr> void Store(u32 rs, u32 rt, s16 imm16)
            rt to 0. */
         if (ll_bit == 1) {
             WriteVirtual<8>(addr, gpr[rt]);
-            gpr.Set(rt, 1);
+            gpr.set(rt, 1);
         } else {
-            gpr.Set(rt, 0);
+            gpr.set(rt, 0);
         }
     } else {
         static_assert(always_false<instr>);
@@ -310,47 +283,47 @@ template<CpuInstruction instr> void AluImmediate(u32 rs, u32 rt, s16 imm16)
         if (overflow) {
             SignalException<Exception::IntegerOverflow>();
         } else {
-            gpr.Set(rt, sum);
+            gpr.set(rt, sum);
         }
     } else if constexpr (instr == ADDIU) {
         /* Add Immediate Unsigned;
            Sign-extends the 16-bit immediate and adds it to register rs. Stores the 32-bit
            result to register rt (sign-extends the result in the 64-bit mode). Does not
            generate an exception even if an integer overflow occurs. */
-        gpr.Set(rt, s32(gpr[rs] + imm));
+        gpr.set(rt, s32(gpr[rs] + imm));
     } else if constexpr (instr == SLTI) {
         /* Set On Less Than Immediate;
            Sign-extends the 16-bit immediate and compares it with register rs as a
            signed integer. If rs is less than the immediate, stores 1 to register rt;
            otherwise, stores 0 to register rt. */
-        gpr.Set(rt, gpr[rs] < imm);
+        gpr.set(rt, gpr[rs] < imm);
     } else if constexpr (instr == SLTIU) {
         /* Set On Less Than Immediate Unsigned;
            Sign-extends the 16-bit immediate and compares it with register rs as an
            unsigned integer. If rs is less than the immediate, stores 1 to register rt;
            otherwise, stores 0 to register rt. */
-        gpr.Set(rt, u64(gpr[rs]) < imm);
+        gpr.set(rt, u64(gpr[rs]) < imm);
     } else if constexpr (instr == ANDI) {
         /* And Immediate;
            Zero-extends the 16-bit immediate, ANDs it with register rs, and stores the
            result to register rt. */
-        gpr.Set(rt, gpr[rs] & imm);
+        gpr.set(rt, gpr[rs] & imm);
     } else if constexpr (instr == ORI) {
         /* Or Immediate;
            Zero-extends the 16-bit immediate, ORs it with register rs, and stores the
            result to register rt. */
-        gpr.Set(rt, gpr[rs] | imm);
+        gpr.set(rt, gpr[rs] | imm);
     } else if constexpr (instr == XORI) {
         /* Exclusive Or Immediate;
            Zero-extends the 16-bit immediate, exclusive-ORs it with register rs, and
            stores the result to register rt. */
-        gpr.Set(rt, gpr[rs] ^ imm);
+        gpr.set(rt, gpr[rs] ^ imm);
     } else if constexpr (instr == LUI) {
         /* Load Upper Immediate;
            Shifts the 16-bit immediate 16 bits to the left, and clears the low-order 16 bits
            of the word to 0.
            Stores the result to register rt (by sign-extending the result in the 64-bit mode). */
-        gpr.Set(rt, s32(imm << 16));
+        gpr.set(rt, s32(imm << 16));
     } else if constexpr (instr == DADDI) {
         /* Doubleword Add Immediate;
            Sign-extends the 16-bit immediate to 64 bits, and adds it to register rs. Stores
@@ -366,7 +339,7 @@ template<CpuInstruction instr> void AluImmediate(u32 rs, u32 rt, s16 imm16)
         if (overflow) {
             SignalException<Exception::IntegerOverflow>();
         } else {
-            gpr.Set(rt, sum);
+            gpr.set(rt, sum);
         }
     } else if constexpr (instr == DADDIU) {
         /* Doubleword Add Immediate Unsigned;
@@ -374,7 +347,7 @@ template<CpuInstruction instr> void AluImmediate(u32 rs, u32 rt, s16 imm16)
            the 64-bit result to register rt. Does not generate an exception even if an
            integer overflow occurs. */
         s64 sum = gpr[rs] + imm;
-        gpr.Set(rt, sum);
+        gpr.set(rt, sum);
     } else {
         static_assert(always_false<instr>);
     }
@@ -403,13 +376,13 @@ template<CpuInstruction instr> void AluThreeOperand(u32 rs, u32 rt, u32 rd)
         if (overflow) {
             SignalException<Exception::IntegerOverflow>();
         } else {
-            gpr.Set(rd, sum);
+            gpr.set(rd, sum);
         }
     } else if constexpr (instr == ADDU) {
         /* Add Unsigned;
            Adds the contents of register rs and rt, and stores (sign-extends in the 64-bit mode)
            the 32-bit result to register rd. Does not generate an exception even if an integer overflow occurs. */
-        gpr.Set(rd, s32(gpr[rs] + gpr[rt]));
+        gpr.set(rd, s32(gpr[rs] + gpr[rt]));
     } else if constexpr (instr == SUB) {
         /* Subtract;
            Subtracts the contents of register rs from register rt, and stores (sign-extends
@@ -425,42 +398,42 @@ template<CpuInstruction instr> void AluThreeOperand(u32 rs, u32 rt, u32 rd)
         if (overflow) {
             SignalException<Exception::IntegerOverflow>();
         } else {
-            gpr.Set(rd, sum);
+            gpr.set(rd, sum);
         }
     } else if constexpr (instr == SUBU) {
         /* Subtract Unsigned;
            Subtracts the contents of register rt from register rs, and stores (sign-extends
            in the 64-bit mode) the 32-bit result to register rd.
            Does not generate an exception even if an integer overflow occurs.*/
-        gpr.Set(rd, s32(gpr[rs] - gpr[rt]));
+        gpr.set(rd, s32(gpr[rs] - gpr[rt]));
     } else if constexpr (instr == SLT) {
         /* Set On Less Than;
            Compares the contents of registers rs and rt as 64-bit signed integers.
            If the contents of register rs are less than those of rt, stores 1 to register rd;
            otherwise, stores 0 to rd. */
-        gpr.Set(rd, gpr[rs] < gpr[rt]);
+        gpr.set(rd, gpr[rs] < gpr[rt]);
     } else if constexpr (instr == SLTU) {
         /* Set On Less Than Unsigned;
            Compares the contents of registers rs and rt as 64-bit unsigned integers.
            If the contents of register rs are less than those of rt, stores 1 to register rd;
            otherwise, stores 0 to rd. */
-        gpr.Set(rd, u64(gpr[rs]) < u64(gpr[rt]));
+        gpr.set(rd, u64(gpr[rs]) < u64(gpr[rt]));
     } else if constexpr (instr == AND) {
         /* And;
            ANDs the contents of registers rs and rt in bit units, and stores the result to register rd. */
-        gpr.Set(rd, gpr[rs] & gpr[rt]);
+        gpr.set(rd, gpr[rs] & gpr[rt]);
     } else if constexpr (instr == OR) {
         /* Or;
            ORs the contents of registers rs and rt in bit units, and stores the result to register rd. */
-        gpr.Set(rd, gpr[rs] | gpr[rt]);
+        gpr.set(rd, gpr[rs] | gpr[rt]);
     } else if constexpr (instr == XOR) {
         /* Exclusive Or;
            Exclusive-ORs the contents of registers rs and rt in bit units, and stores the result to register rd. */
-        gpr.Set(rd, gpr[rs] ^ gpr[rt]);
+        gpr.set(rd, gpr[rs] ^ gpr[rt]);
     } else if constexpr (instr == NOR) {
         /* Nor;
            NORs the contents of registers rs and rt in bit units, and stores the result to register rd. */
-        gpr.Set(rd, ~(gpr[rs] | gpr[rt]));
+        gpr.set(rd, ~(gpr[rs] | gpr[rt]));
     } else if constexpr (instr == DADD) {
         /* Doubleword Add;
            Adds the contents of registers rs and rt, and stores the 64-bit result to register rd.
@@ -476,13 +449,13 @@ template<CpuInstruction instr> void AluThreeOperand(u32 rs, u32 rt, u32 rd)
         if (overflow) {
             SignalException<Exception::IntegerOverflow>();
         } else {
-            gpr.Set(rd, sum);
+            gpr.set(rd, sum);
         }
     } else if constexpr (instr == DADDU) {
         /* Doubleword Add Unsigned;
            Adds the contents of registers rs and rt, and stores the 64-bit result to register rd.
            Does not generate an exception even if an integer overflow occurs. */
-        gpr.Set(rd, gpr[rs] + gpr[rt]);
+        gpr.set(rd, gpr[rs] + gpr[rt]);
     } else if constexpr (instr == DSUB) {
         /* Doubleword Subtract;
            Subtracts the contents of register rt from register rs, and stores the 64-bit
@@ -498,13 +471,13 @@ template<CpuInstruction instr> void AluThreeOperand(u32 rs, u32 rt, u32 rd)
         if (overflow) {
             SignalException<Exception::IntegerOverflow>();
         } else {
-            gpr.Set(rd, sum);
+            gpr.set(rd, sum);
         }
     } else if constexpr (instr == DSUBU) {
         /* Doubleword Subtract Unsigned;
            Subtracts the contents of register rt from register rs, and stores the 64-bit result to register rd.
            Does not generate an exception even if an integer overflow occurs. */
-        gpr.Set(rd, gpr[rs] - gpr[rt]);
+        gpr.set(rd, gpr[rs] - gpr[rt]);
     } else {
         static_assert(always_false<instr>);
     }
@@ -567,7 +540,7 @@ template<CpuInstruction instr> void Shift(u32 rt, u32 rd, u32 sa)
         }
     }());
 
-    gpr.Set(rd, result);
+    gpr.set(rd, result);
     AdvancePipeline(1);
 }
 
@@ -621,7 +594,7 @@ template<CpuInstruction instr> void ShiftVariable(u32 rs, u32 rt, u32 rd)
         }
     }());
 
-    gpr.Set(rd, result);
+    gpr.set(rd, result);
     AdvancePipeline(1);
 }
 
@@ -774,7 +747,7 @@ template<CpuInstruction instr> void Branch(u32 rs, s16 imm16)
         else static_assert(always_false<instr>);
     }();
     if constexpr (one_of(instr, BLTZAL, BGEZAL, BLTZALL, BGEZALL)) {
-        gpr.Set(31, 4 + (in_branch_delay_slot ? addr_to_jump_to : pc));
+        gpr.set(31, 4 + (in_branch_delay_slot ? addr_to_jump_to : pc));
     }
     if (branch_cond) {
         auto offset = imm16 << 2;
@@ -868,7 +841,7 @@ void JAL(u32 imm26)
         u64 target = pc & 0xFFFF'FFFF'F000'0000 | imm26 << 2;
         PrepareJump(target);
     }
-    gpr.Set(31, 4 + (in_branch_delay_slot ? addr_to_jump_to : pc));
+    gpr.set(31, 4 + (in_branch_delay_slot ? addr_to_jump_to : pc));
     AdvancePipeline(1);
 }
 
@@ -895,19 +868,19 @@ void JALR(u32 rs, u32 rd)
             PrepareJump(target);
         }
     }
-    gpr.Set(rd, 4 + (in_branch_delay_slot ? addr_to_jump_to : pc));
+    gpr.set(rd, 4 + (in_branch_delay_slot ? addr_to_jump_to : pc));
     AdvancePipeline(1);
 }
 
 void MFLO(u32 rd)
 {
-    gpr.Set(rd, lo_reg);
+    gpr.set(rd, lo_reg);
     AdvancePipeline(1);
 }
 
 void MFHI(u32 rd)
 {
-    gpr.Set(rd, hi_reg);
+    gpr.set(rd, hi_reg);
     AdvancePipeline(1);
 }
 
