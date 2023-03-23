@@ -74,6 +74,7 @@ template<ComputeInstr2Op, std::floating_point> static void Compute(u32 fs, u32 f
 template<FpuNum, FpuNum> static void Convert(u32 fs, u32 fd);
 template<std::floating_point Float> static Float Flush(Float f);
 constexpr char FmtToChar(u32 fmt);
+bool FpuUsable();
 static bool IsQuietNan(f32 f);
 static bool IsQuietNan(f64 f);
 static bool IsValidInput(std::floating_point auto f);
@@ -216,6 +217,17 @@ constexpr char FmtToChar(Fmt fmt)
     }
 }
 
+bool FpuUsable()
+{
+    if (cop0.status.cu1) {
+        ClearAllExceptions();
+        return true;
+    } else {
+        SignalCoprocessorUnusableException(1);
+        return false;
+    }
+}
+
 void ClearAllExceptions()
 {
     fcr31 = std::bit_cast<FCR31>(std::bit_cast<u32>(fcr31) & 0xFFFC'0FFF);
@@ -273,7 +285,8 @@ bool IsValidOutput(std::floating_point auto& f)
 
 void OnInvalidFormat()
 {
-    AdvancePipeline(2);
+    if (!FpuUsable()) return;
+    AdvancePipeline(1);
     SignalUnimplementedOp();
     SignalException<Exception::FloatingPoint>();
 }
@@ -373,18 +386,18 @@ template<std::floating_point Float> Float Flush(Float f)
 }
 
 bool IsQuietNan(f32 f)
-{ /* Precondition: std::isnan(f) == true */
+{ /* Precondition: std::isnan(f) */
     return std::bit_cast<u32>(f) >> 22 & 1;
 }
 
 bool IsQuietNan(f64 f)
-{ /* Precondition: std::isnan(f) == true */
+{ /* Precondition: std::isnan(f) */
     return std::bit_cast<u64>(f) >> 51 & 1;
 }
 
 void bc1f(s16 imm)
 {
-    ClearAllExceptions();
+    if (!FpuUsable()) return;
     s64 offset = s64(imm) << 2;
     if (!fcr31.c) {
         Jump(pc + offset);
@@ -393,7 +406,7 @@ void bc1f(s16 imm)
 
 void bc1fl(s16 imm)
 {
-    ClearAllExceptions();
+    if (!FpuUsable()) return;
     s64 offset = s64(imm) << 2;
     if (!fcr31.c) {
         Jump(pc + offset);
@@ -404,7 +417,7 @@ void bc1fl(s16 imm)
 
 void bc1t(s16 imm)
 {
-    ClearAllExceptions();
+    if (!FpuUsable()) return;
     s64 offset = s64(imm) << 2;
     if (fcr31.c) {
         Jump(pc + offset);
@@ -413,7 +426,7 @@ void bc1t(s16 imm)
 
 void bc1tl(s16 imm)
 {
-    ClearAllExceptions();
+    if (!FpuUsable()) return;
     s64 offset = s64(imm) << 2;
     if (fcr31.c) {
         Jump(pc + offset);
@@ -424,10 +437,10 @@ void bc1tl(s16 imm)
 
 template<Fmt fmt> void c(u32 fs, u32 ft, u8 cond)
 {
-    ClearAllExceptions();
     if constexpr (!one_of(fmt, Fmt::Float32, Fmt::Float64)) {
         OnInvalidFormat();
     } else {
+        if (!FpuUsable()) return;
         using Float = FmtToType<fmt>::type;
         /* See VR4300 User's Manual by NEC, p. 566
             Ordered instructions are: LE, LT, NGE, NGL, NGLE, NGT, SEQ, SF (cond.3 set)
@@ -459,87 +472,124 @@ template<Fmt fmt> void c(u32 fs, u32 ft, u8 cond)
 
 void cfc1(u32 fs, u32 rt)
 {
-    gpr.set(rt, s32(fpu_control.Get(fs)));
+    if (cop0.status.cu1) {
+        gpr.set(rt, s32(fpu_control.Get(fs)));
+    } else {
+        SignalCoprocessorUnusableException(1);
+    }
 }
 
 void ctc1(u32 fs, u32 rt)
 {
-    fpu_control.Set(fs, u32(gpr[rt]));
+    if (cop0.status.cu1) {
+        fpu_control.Set(fs, u32(gpr[rt]));
+    } else {
+        SignalCoprocessorUnusableException(1);
+    }
 }
 
 void dcfc1()
 {
-    ClearAllExceptions();
-    SignalUnimplementedOp();
-    SignalException<Exception::FloatingPoint>();
-    AdvancePipeline(1);
+    if (FpuUsable()) {
+        SignalUnimplementedOp();
+        SignalException<Exception::FloatingPoint>();
+        AdvancePipeline(1);
+    }
 }
 
 void dctc1()
 {
-    ClearAllExceptions();
-    SignalUnimplementedOp();
-    SignalException<Exception::FloatingPoint>();
-    AdvancePipeline(1);
+    if (FpuUsable()) {
+        SignalUnimplementedOp();
+        SignalException<Exception::FloatingPoint>();
+        AdvancePipeline(1);
+    }
 }
 
 void dmfc1(u32 fs, u32 rt)
 {
-    gpr.set(rt, fpr.Get<s64>(fs));
-    AdvancePipeline(1);
+    if (cop0.status.cu1) {
+        gpr.set(rt, fpr.Get<s64>(fs));
+        AdvancePipeline(1);
+    } else {
+        SignalCoprocessorUnusableException(1);
+    }
 }
 
 void dmtc1(u32 fs, u32 rt)
 {
-    fpr.Set<s64>(fs, s64(gpr[rt]));
-    AdvancePipeline(1);
+    if (cop0.status.cu1) {
+        fpr.Set<s64>(fs, s64(gpr[rt]));
+        AdvancePipeline(1);
+    } else {
+        SignalCoprocessorUnusableException(1);
+    }
 }
 
 void ldc1(u32 base, u32 ft, s16 imm)
 {
-    s64 val = ReadVirtual<s64>(gpr[base] + imm);
-    if (!exception_occurred) {
-        fpr.Set(ft, val);
+    if (cop0.status.cu1) {
+        s64 val = ReadVirtual<s64>(gpr[base] + imm);
+        if (!exception_occurred) {
+            fpr.Set(ft, val);
+        }
+        AdvancePipeline(1);
+    } else {
+        SignalCoprocessorUnusableException(1);
     }
-    AdvancePipeline(1);
 }
 
 void lwc1(u32 base, u32 ft, s16 imm)
 {
-    s32 val = ReadVirtual<s32>(gpr[base] + imm);
-    if (!exception_occurred) {
-        fpr.Set(ft, val);
+    if (cop0.status.cu1) {
+        s32 val = ReadVirtual<s32>(gpr[base] + imm);
+        if (!exception_occurred) {
+            fpr.Set(ft, val);
+        }
+        AdvancePipeline(1);
+    } else {
+        SignalCoprocessorUnusableException(1);
     }
-    AdvancePipeline(1);
 }
 
 void mfc1(u32 fs, u32 rt)
 {
-    gpr.set(rt, u64(fpr.Get<s32>(fs)));
-    AdvancePipeline(1);
+    if (FpuUsable()) {
+        gpr.set(rt, u64(fpr.Get<s32>(fs)));
+        AdvancePipeline(1);
+    }
 }
 
 void mtc1(u32 fs, u32 rt)
 {
-    fpr.Set<s32>(fs, s32(gpr[rt]));
-    AdvancePipeline(1);
+    if (FpuUsable()) {
+        fpr.Set<s32>(fs, s32(gpr[rt]));
+        AdvancePipeline(1);
+    }
 }
 
 void sdc1(u32 base, u32 ft, s16 imm)
 {
-    WriteVirtual<8>(gpr[base] + imm, fpr.Get<s64>(ft));
-    AdvancePipeline(1);
+    if (cop0.status.cu1) {
+        WriteVirtual<8>(gpr[base] + imm, fpr.Get<s64>(ft));
+        AdvancePipeline(1);
+    } else {
+        SignalCoprocessorUnusableException(1);
+    }
 }
 
 void swc1(u32 base, u32 ft, s16 imm)
 {
-    WriteVirtual<4>(gpr[base] + imm, fpr.Get<s32>(ft));
-    AdvancePipeline(1);
+    if (cop0.status.cu1) {
+        WriteVirtual<4>(gpr[base] + imm, fpr.Get<s32>(ft));
+        AdvancePipeline(1);
+    } else {
+        SignalCoprocessorUnusableException(1);
+    }
 }
 
 template<Fmt fmt> void ceil_l(u32 fs, u32 fd)
 {
-    ClearAllExceptions();
     if constexpr (fmt == Fmt::Invalid) {
         OnInvalidFormat();
     } else if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
@@ -551,7 +601,6 @@ template<Fmt fmt> void ceil_l(u32 fs, u32 fd)
 
 template<Fmt fmt> void ceil_w(u32 fs, u32 fd)
 {
-    ClearAllExceptions();
     if constexpr (fmt == Fmt::Invalid) {
         OnInvalidFormat();
     } else if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
@@ -563,7 +612,6 @@ template<Fmt fmt> void ceil_w(u32 fs, u32 fd)
 
 template<Fmt fmt> void cvt_d(u32 fs, u32 fd)
 {
-    ClearAllExceptions();
     if constexpr (fmt == Fmt::Invalid) {
         OnInvalidFormat();
     } else {
@@ -573,7 +621,6 @@ template<Fmt fmt> void cvt_d(u32 fs, u32 fd)
 
 template<Fmt fmt> void cvt_l(u32 fs, u32 fd)
 {
-    ClearAllExceptions();
     if constexpr (fmt == Fmt::Invalid) {
         OnInvalidFormat();
     } else {
@@ -583,7 +630,6 @@ template<Fmt fmt> void cvt_l(u32 fs, u32 fd)
 
 template<Fmt fmt> void cvt_s(u32 fs, u32 fd)
 {
-    ClearAllExceptions();
     if constexpr (fmt == Fmt::Invalid) {
         OnInvalidFormat();
     } else {
@@ -593,7 +639,6 @@ template<Fmt fmt> void cvt_s(u32 fs, u32 fd)
 
 template<Fmt fmt> void cvt_w(u32 fs, u32 fd)
 {
-    ClearAllExceptions();
     if constexpr (fmt == Fmt::Invalid) {
         OnInvalidFormat();
     } else {
@@ -603,7 +648,6 @@ template<Fmt fmt> void cvt_w(u32 fs, u32 fd)
 
 template<Fmt fmt> void floor_l(u32 fs, u32 fd)
 {
-    ClearAllExceptions();
     if constexpr (fmt == Fmt::Invalid) {
         OnInvalidFormat();
     } else if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
@@ -615,7 +659,6 @@ template<Fmt fmt> void floor_l(u32 fs, u32 fd)
 
 template<Fmt fmt> void floor_w(u32 fs, u32 fd)
 {
-    ClearAllExceptions();
     if constexpr (fmt == Fmt::Invalid) {
         OnInvalidFormat();
     } else if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
@@ -627,7 +670,6 @@ template<Fmt fmt> void floor_w(u32 fs, u32 fd)
 
 template<Fmt fmt> void round_l(u32 fs, u32 fd)
 {
-    ClearAllExceptions();
     if constexpr (fmt == Fmt::Invalid) {
         OnInvalidFormat();
     } else if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
@@ -639,7 +681,6 @@ template<Fmt fmt> void round_l(u32 fs, u32 fd)
 
 template<Fmt fmt> void round_w(u32 fs, u32 fd)
 {
-    ClearAllExceptions();
     if constexpr (fmt == Fmt::Invalid) {
         OnInvalidFormat();
     } else if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
@@ -651,7 +692,6 @@ template<Fmt fmt> void round_w(u32 fs, u32 fd)
 
 template<Fmt fmt> void trunc_l(u32 fs, u32 fd)
 {
-    ClearAllExceptions();
     if constexpr (fmt == Fmt::Invalid) {
         OnInvalidFormat();
     } else if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
@@ -663,7 +703,6 @@ template<Fmt fmt> void trunc_l(u32 fs, u32 fd)
 
 template<Fmt fmt> void trunc_w(u32 fs, u32 fd)
 {
-    ClearAllExceptions();
     if constexpr (fmt == Fmt::Invalid) {
         OnInvalidFormat();
     } else if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
@@ -675,7 +714,6 @@ template<Fmt fmt> void trunc_w(u32 fs, u32 fd)
 
 template<Fmt fmt> void abs(u32 fs, u32 fd)
 {
-    ClearAllExceptions();
     if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
         Compute<ComputeInstr1Op::ABS, typename FmtToType<fmt>::type>(fs, fd);
     } else {
@@ -685,7 +723,6 @@ template<Fmt fmt> void abs(u32 fs, u32 fd)
 
 template<Fmt fmt> void add(u32 fs, u32 ft, u32 fd)
 {
-    ClearAllExceptions();
     if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
         Compute<ComputeInstr2Op::ADD, typename FmtToType<fmt>::type>(fs, ft, fd);
     } else {
@@ -695,7 +732,6 @@ template<Fmt fmt> void add(u32 fs, u32 ft, u32 fd)
 
 template<Fmt fmt> void div(u32 fs, u32 ft, u32 fd)
 {
-    ClearAllExceptions();
     if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
         Compute<ComputeInstr2Op::DIV, typename FmtToType<fmt>::type>(fs, ft, fd);
     } else {
@@ -705,7 +741,6 @@ template<Fmt fmt> void div(u32 fs, u32 ft, u32 fd)
 
 template<Fmt fmt> void mov(u32 fs, u32 fd)
 {
-    ClearAllExceptions();
     if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
         Compute<ComputeInstr1Op::MOV, typename FmtToType<fmt>::type>(fs, fd);
     } else {
@@ -715,7 +750,6 @@ template<Fmt fmt> void mov(u32 fs, u32 fd)
 
 template<Fmt fmt> void mul(u32 fs, u32 ft, u32 fd)
 {
-    ClearAllExceptions();
     if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
         Compute<ComputeInstr2Op::MUL, typename FmtToType<fmt>::type>(fs, ft, fd);
     } else {
@@ -725,7 +759,6 @@ template<Fmt fmt> void mul(u32 fs, u32 ft, u32 fd)
 
 template<Fmt fmt> void neg(u32 fs, u32 fd)
 {
-    ClearAllExceptions();
     if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
         Compute<ComputeInstr1Op::NEG, typename FmtToType<fmt>::type>(fs, fd);
     } else {
@@ -735,7 +768,6 @@ template<Fmt fmt> void neg(u32 fs, u32 fd)
 
 template<Fmt fmt> void sqrt(u32 fs, u32 fd)
 {
-    ClearAllExceptions();
     if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
         Compute<ComputeInstr1Op::SQRT, typename FmtToType<fmt>::type>(fs, fd);
     } else {
@@ -745,7 +777,6 @@ template<Fmt fmt> void sqrt(u32 fs, u32 fd)
 
 template<Fmt fmt> void sub(u32 fs, u32 ft, u32 fd)
 {
-    ClearAllExceptions();
     if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
         Compute<ComputeInstr2Op::SUB, typename FmtToType<fmt>::type>(fs, ft, fd);
     } else {
@@ -755,6 +786,7 @@ template<Fmt fmt> void sub(u32 fs, u32 ft, u32 fd)
 
 template<ComputeInstr1Op instr, std::floating_point Float> void Compute(u32 fs, u32 fd)
 {
+    if (!FpuUsable()) return;
     using enum ComputeInstr1Op;
     Float op = fpr.Get<Float>(fs);
     if constexpr (instr != MOV) {
@@ -790,6 +822,7 @@ template<ComputeInstr1Op instr, std::floating_point Float> void Compute(u32 fs, 
 
 template<ComputeInstr2Op instr, std::floating_point Float> void Compute(u32 fs, u32 ft, u32 fd)
 {
+    if (!FpuUsable()) return;
     using enum ComputeInstr2Op;
     Float op1 = fpr.Get<Float>(fs);
     if (!IsValidInput(op1)) {
@@ -827,6 +860,8 @@ template<ComputeInstr2Op instr, std::floating_point Float> void Compute(u32 fs, 
 
 template<RoundInstr instr, FpuNum From, FpuNum To> void Round(u32 fs, u32 fd)
 {
+    if (!FpuUsable()) return;
+
     From source = fpr.Get<From>(fs);
 
     To result = To([source] {
@@ -868,6 +903,8 @@ template<RoundInstr instr, FpuNum From, FpuNum To> void Round(u32 fs, u32 fd)
 
 template<FpuNum From, FpuNum To> static void Convert(u32 fs, u32 fd)
 {
+    if (!FpuUsable()) return;
+
     /* TODO: the below is assuming that conv. between W and L takes 2 cycles.
                 See footnote 2 in table 7-14, VR4300 manual */
     static constexpr int cycles = [&] {
