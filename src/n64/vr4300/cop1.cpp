@@ -1,9 +1,7 @@
 #include "cop1.hpp"
 #include "cop0.hpp"
-#include "cpu.hpp"
 #include "exceptions.hpp"
 #include "mmu.hpp"
-#include "n64_build_options.hpp"
 #include "util.hpp"
 #include "vr4300.hpp"
 
@@ -17,18 +15,48 @@
 #include <type_traits>
 #include <utility>
 
-/* For invoking a parameter-free lambda template */
-#define INVOKE(LAMBDA, ...) LAMBDA.template operator()<__VA_ARGS__>()
-
 namespace n64::vr4300 {
 
-/* Table 17.4 in VR4300 user manual by NEC; the 'fmt' instruction operand specifies in which format registers should be
-interpreted in. The below maps formats to identifiers. */
-enum FmtTypeID {
-    Float32 = 16,
-    Float64 = 17,
-    Int32 = 20,
-    Int64 = 21
+template<typename T>
+concept FpuNum = std::same_as<f32, T> || std::same_as<f64, T> || std::same_as<s32, T> || std::same_as<s64, T>;
+
+template<Fmt> struct FmtToType {};
+
+template<> struct FmtToType<Fmt::Float32> {
+    using type = f32;
+};
+
+template<> struct FmtToType<Fmt::Float64> {
+    using type = f64;
+};
+
+template<> struct FmtToType<Fmt::Int32> {
+    using type = s32;
+};
+
+template<> struct FmtToType<Fmt::Int64> {
+    using type = s64;
+};
+
+enum class ComputeInstr1Op {
+    ABS,
+    MOV,
+    NEG,
+    SQRT,
+};
+
+enum class ComputeInstr2Op {
+    ADD,
+    SUB,
+    MUL,
+    DIV,
+};
+
+enum class RoundInstr {
+    CEIL,
+    FLOOR,
+    ROUND,
+    TRUNC,
 };
 
 enum class FpuException {
@@ -41,12 +69,17 @@ enum class FpuException {
 };
 
 static void ClearAllExceptions();
+template<ComputeInstr1Op, std::floating_point> static void Compute(u32 fs, u32 fd);
+template<ComputeInstr2Op, std::floating_point> static void Compute(u32 fs, u32 ft, u32 fd);
+template<FpuNum, FpuNum> static void Convert(u32 fs, u32 fd);
 template<std::floating_point Float> static Float Flush(Float f);
 constexpr char FmtToChar(u32 fmt);
-static bool IsQuietNan(std::floating_point auto f);
+static bool IsQuietNan(f32 f);
+static bool IsQuietNan(f64 f);
 static bool IsValidInput(std::floating_point auto f);
 static bool IsValidOutput(std::floating_point auto& f);
 static void OnInvalidFormat();
+template<RoundInstr, FpuNum, FpuNum> static void Round(u32 fs, u32 fd);
 static bool SignalDivZero();
 static bool SignalInexactOp();
 static bool SignalInvalidOp();
@@ -93,8 +126,8 @@ struct FPUControl {
 
 /* General-purpose floating point registers. */
 struct FGR {
-    template<FpuNumericType T> T Get(size_t index) const;
-    template<FpuNumericType T> void Set(size_t index, T data);
+    template<FpuNum T> T Get(size_t index) const;
+    template<FpuNum T> void Set(size_t index, T data);
 
 private:
     std::array<s64, 32> fpr;
@@ -102,7 +135,7 @@ private:
 
 constexpr u32 fcr0 = 0xA00;
 
-constexpr std::array compare_cond_strings = {
+[[maybe_unused]] constexpr std::array compare_cond_strings = {
     "F",
     "UN",
     "EQ",
@@ -147,7 +180,7 @@ void FPUControl::Set(size_t index, u32 data)
     }
 }
 
-template<FpuNumericType T> T FGR::Get(size_t index) const
+template<FpuNum T> T FGR::Get(size_t index) const
 {
     if constexpr (sizeof(T) == 4) {
         u32 data = [&] {
@@ -161,7 +194,7 @@ template<FpuNumericType T> T FGR::Get(size_t index) const
     }
 }
 
-template<FpuNumericType T> void FGR::Set(size_t index, T value)
+template<FpuNum T> void FGR::Set(size_t index, T value)
 {
     if constexpr (sizeof(T) == 4) {
         if (cop0.status.fr || !(index & 1)) std::memcpy(&fpr[index], &value, 4);
@@ -172,14 +205,14 @@ template<FpuNumericType T> void FGR::Set(size_t index, T value)
     }
 }
 
-constexpr char FmtToChar(u32 fmt)
+constexpr char FmtToChar(Fmt fmt)
 {
     switch (fmt) {
-    case FmtTypeID::Float32: return 'S';
-    case FmtTypeID::Float64: return 'D';
-    case FmtTypeID::Int32: return 'W';
-    case FmtTypeID::Int64: return 'L';
-    default: return '?';
+    case Fmt::Float32: return 'S';
+    case Fmt::Float64: return 'D';
+    case Fmt::Int32: return 'W';
+    case Fmt::Int64: return 'L';
+    case Fmt::Invalid: return '?';
     }
 }
 
@@ -189,7 +222,7 @@ void ClearAllExceptions()
     std::feclearexcept(FE_ALL_EXCEPT);
 }
 
-void InitializeFpu()
+void InitCop1()
 {
     std::fesetround(FE_TONEAREST); /* corresponds to fcr31.rm == 0b00 */
 }
@@ -339,148 +372,476 @@ template<std::floating_point Float> Float Flush(Float f)
     }
 }
 
-template<> bool IsQuietNan(f32 f)
+bool IsQuietNan(f32 f)
 { /* Precondition: std::isnan(f) == true */
     return std::bit_cast<u32>(f) >> 22 & 1;
 }
 
-template<> bool IsQuietNan(f64 f)
+bool IsQuietNan(f64 f)
 { /* Precondition: std::isnan(f) == true */
     return std::bit_cast<u64>(f) >> 51 & 1;
 }
 
-template<Cop1Instruction instr> void FpuLoad(u32 instr_code)
+void bc1f(s16 imm)
 {
-    if (!cop0.status.cu1) {
-        SignalCoprocessorUnusableException(1);
-        AdvancePipeline(1);
-        return;
-    }
-
-    using enum Cop1Instruction;
-
-    s16 offset = instr_code & 0xFFFF;
-    auto ft = instr_code >> 16 & 0x1F;
-    auto base = instr_code >> 21 & 0x1F;
-    auto addr = gpr[base] + offset;
-
-    if constexpr (log_cpu_instructions) {
-        current_instr_log_output = std::format("{} {}, ${:X}",
-          current_instr_name,
-          ft,
-          static_cast<std::make_unsigned<decltype(addr)>::type>(addr));
-    }
-
-    auto result = [&] {
-        if constexpr (instr == LWC1) return ReadVirtual<s32>(addr);
-        else if constexpr (instr == LDC1) return ReadVirtual<s64>(addr);
-        else static_assert(always_false<instr>);
-    }();
-
-    AdvancePipeline(1);
-
-    if (!exception_has_occurred) {
-        fpr.Set(ft, result);
-    }
-}
-
-template<Cop1Instruction instr> void FpuStore(u32 instr_code)
-{
-    if (!cop0.status.cu1) {
-        SignalCoprocessorUnusableException(1);
-        AdvancePipeline(1);
-        return;
-    }
-
-    using enum Cop1Instruction;
-
-    s16 offset = instr_code & 0xFFFF;
-    auto ft = instr_code >> 16 & 0x1F;
-    auto base = instr_code >> 21 & 0x1F;
-    auto addr = gpr[base] + offset;
-
-    if constexpr (log_cpu_instructions) {
-        current_instr_log_output = std::format("{} {}, ${:X}",
-          current_instr_name,
-          ft,
-          static_cast<std::make_unsigned<decltype(addr)>::type>(addr));
-    }
-
-    if constexpr (instr == SWC1) WriteVirtual<4>(addr, fpr.Get<s32>(ft));
-    else if constexpr (instr == SDC1) WriteVirtual<4>(addr, fpr.Get<s64>(ft));
-    else static_assert(always_false<instr>);
-
-    AdvancePipeline(1);
-}
-
-template<Cop1Instruction instr> void FpuMove(u32 instr_code)
-{
-    using enum Cop1Instruction;
-    if (!cop0.status.cu1) {
-        SignalCoprocessorUnusableException(1);
-        AdvancePipeline(1);
-        return;
-    }
-
-    auto fs = instr_code >> 11 & 0x1F;
-    auto rt = instr_code >> 16 & 0x1F;
-
-    if constexpr (log_cpu_instructions) {
-        current_instr_log_output = std::format("{} {}, {}", current_instr_name, rt, fs);
-    }
-
-    if constexpr (instr == MTC1) {
-        /* Move Word To FPU;
-           Transfers the contents of CPU general purpose register rt to FPU general purpose register fs. */
-        fpr.Set<s32>(fs, s32(gpr[rt]));
-    } else if constexpr (instr == MFC1) {
-        /* Move Word From FPU;
-           Transfers the contents of FPU general purpose register fs to CPU general purpose register rt. */
-        gpr.set(rt, u64(fpr.Get<s32>(fs)));
-    } else if constexpr (instr == CTC1) {
-        /* Move Control Word To FPU;
-           Transfers the contents of CPU general purpose register rt to FPU control register fs. */
-        fpu_control.Set(fs, u32(gpr[rt]));
-    } else if constexpr (instr == CFC1) {
-        /* Move Control Word From FPU;
-           Transfers the contents of FPU control register fs to CPU general purpose register rt. */
-        gpr.set(rt, s32(fpu_control.Get(fs)));
-    } else if constexpr (instr == DMTC1) {
-        /* Doubleword Move To FPU;
-           Transfers the contents of CPU general purpose register rt to FPU general purpose register fs. */
-        fpr.Set<s64>(fs, s64(gpr[rt]));
-    } else if constexpr (instr == DMFC1) {
-        /* Doubleword Move From FPU;
-           Transfers the contents of FPU general purpose register fs to CPU general purpose register rt. */
-        gpr.set(rt, fpr.Get<s64>(fs));
-    } else if constexpr (instr == DCFC1 || instr == DCTC1) {
-        ClearAllExceptions();
-        SignalUnimplementedOp();
-        SignalException<Exception::FloatingPoint>();
-    } else {
-        static_assert(always_false<instr>);
-    }
-
-    AdvancePipeline(2);
-}
-
-template<Cop1Instruction instr> void FpuConvert(u32 instr_code)
-{
-    if (!cop0.status.cu1) {
-        SignalCoprocessorUnusableException(1);
-        AdvancePipeline(1);
-        return;
-    }
     ClearAllExceptions();
+    s64 offset = s64(imm) << 2;
+    if (!fcr31.c) {
+        Jump(pc + offset);
+    }
+}
 
-    using enum Cop1Instruction;
+void bc1fl(s16 imm)
+{
+    ClearAllExceptions();
+    s64 offset = s64(imm) << 2;
+    if (!fcr31.c) {
+        Jump(pc + offset);
+    } else {
+        pc += 4;
+    }
+}
 
-    /* Test for unimplemented operation exception sources for CVT/round instructions. These cannot be found out from
-       std::fetestexcept. This function should be called after the conversion has been made. For all these instructions,
-       an unimplemented exception will occur if either:
-         * If the source operand is infinity or NaN, or
-         * If overflow occurs during conversion to integer format. */
-    auto TestForUnimplementedException = [&]<typename From, typename To>(From source) -> bool {
+void bc1t(s16 imm)
+{
+    ClearAllExceptions();
+    s64 offset = s64(imm) << 2;
+    if (fcr31.c) {
+        Jump(pc + offset);
+    }
+}
+
+void bc1tl(s16 imm)
+{
+    ClearAllExceptions();
+    s64 offset = s64(imm) << 2;
+    if (fcr31.c) {
+        Jump(pc + offset);
+    } else {
+        pc += 4;
+    }
+}
+
+template<Fmt fmt> void c(u32 fs, u32 ft, u8 cond)
+{
+    ClearAllExceptions();
+    if constexpr (!one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+        OnInvalidFormat();
+    } else {
+        using Float = FmtToType<fmt>::type;
+        /* See VR4300 User's Manual by NEC, p. 566
+            Ordered instructions are: LE, LT, NGE, NGL, NGLE, NGT, SEQ, SF (cond.3 set)
+            Unordered: EQ, F, OLE, OLT, UEQ, ULE, ULT, UN (cond.3 clear) */
+        auto IsValidInput = [cond](std::floating_point auto f) {
+            if (std::isnan(f) && ((cond & 8) || IsQuietNan(f))) {
+                bool signal_fpu_exc = SignalInvalidOp();
+                if (signal_fpu_exc) SignalException<Exception::FloatingPoint>();
+                return !signal_fpu_exc;
+            } else return true;
+        };
+        Float op1 = fpr.Get<Float>(fs);
+        Float op2 = fpr.Get<Float>(ft);
+        if (std::isnan(op1) || std::isnan(op2)) {
+            if (!IsValidInput(op1)) {
+                AdvancePipeline(1);
+                return;
+            }
+            if (!IsValidInput(op2)) {
+                AdvancePipeline(1);
+                return;
+            }
+            fcr31.c = cond & 1;
+        } else {
+            fcr31.c = (cond >> 2 & 1) & (op1 < op2) | (cond >> 1 & 1) & (op1 == op2);
+        }
+    }
+}
+
+void cfc1(u32 fs, u32 rt)
+{
+    gpr.set(rt, s32(fpu_control.Get(fs)));
+}
+
+void ctc1(u32 fs, u32 rt)
+{
+    fpu_control.Set(fs, u32(gpr[rt]));
+}
+
+void dcfc1()
+{
+    ClearAllExceptions();
+    SignalUnimplementedOp();
+    SignalException<Exception::FloatingPoint>();
+    AdvancePipeline(1);
+}
+
+void dctc1()
+{
+    ClearAllExceptions();
+    SignalUnimplementedOp();
+    SignalException<Exception::FloatingPoint>();
+    AdvancePipeline(1);
+}
+
+void dmfc1(u32 fs, u32 rt)
+{
+    gpr.set(rt, fpr.Get<s64>(fs));
+    AdvancePipeline(1);
+}
+
+void dmtc1(u32 fs, u32 rt)
+{
+    fpr.Set<s64>(fs, s64(gpr[rt]));
+    AdvancePipeline(1);
+}
+
+void ldc1(u32 base, u32 ft, s16 imm)
+{
+    s64 val = ReadVirtual<s64>(gpr[base] + imm);
+    if (!exception_occurred) {
+        fpr.Set(ft, val);
+    }
+    AdvancePipeline(1);
+}
+
+void lwc1(u32 base, u32 ft, s16 imm)
+{
+    s32 val = ReadVirtual<s32>(gpr[base] + imm);
+    if (!exception_occurred) {
+        fpr.Set(ft, val);
+    }
+    AdvancePipeline(1);
+}
+
+void mfc1(u32 fs, u32 rt)
+{
+    gpr.set(rt, u64(fpr.Get<s32>(fs)));
+    AdvancePipeline(1);
+}
+
+void mtc1(u32 fs, u32 rt)
+{
+    fpr.Set<s32>(fs, s32(gpr[rt]));
+    AdvancePipeline(1);
+}
+
+void sdc1(u32 base, u32 ft, s16 imm)
+{
+    WriteVirtual<8>(gpr[base] + imm, fpr.Get<s64>(ft));
+    AdvancePipeline(1);
+}
+
+void swc1(u32 base, u32 ft, s16 imm)
+{
+    WriteVirtual<4>(gpr[base] + imm, fpr.Get<s32>(ft));
+    AdvancePipeline(1);
+}
+
+template<Fmt fmt> void ceil_l(u32 fs, u32 fd)
+{
+    ClearAllExceptions();
+    if constexpr (fmt == Fmt::Invalid) {
+        OnInvalidFormat();
+    } else if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+        Round<RoundInstr::CEIL, typename FmtToType<fmt>::type, s64>(fs, fd);
+    } else {
+        // Result is undefined
+    }
+}
+
+template<Fmt fmt> void ceil_w(u32 fs, u32 fd)
+{
+    ClearAllExceptions();
+    if constexpr (fmt == Fmt::Invalid) {
+        OnInvalidFormat();
+    } else if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+        Round<RoundInstr::CEIL, typename FmtToType<fmt>::type, s32>(fs, fd);
+    } else {
+        // Result is undefined
+    }
+}
+
+template<Fmt fmt> void cvt_d(u32 fs, u32 fd)
+{
+    ClearAllExceptions();
+    if constexpr (fmt == Fmt::Invalid) {
+        OnInvalidFormat();
+    } else {
+        Convert<typename FmtToType<fmt>::type, f64>(fs, fd);
+    }
+}
+
+template<Fmt fmt> void cvt_l(u32 fs, u32 fd)
+{
+    ClearAllExceptions();
+    if constexpr (fmt == Fmt::Invalid) {
+        OnInvalidFormat();
+    } else {
+        Convert<typename FmtToType<fmt>::type, s64>(fs, fd);
+    }
+}
+
+template<Fmt fmt> void cvt_s(u32 fs, u32 fd)
+{
+    ClearAllExceptions();
+    if constexpr (fmt == Fmt::Invalid) {
+        OnInvalidFormat();
+    } else {
+        Convert<typename FmtToType<fmt>::type, f32>(fs, fd);
+    }
+}
+
+template<Fmt fmt> void cvt_w(u32 fs, u32 fd)
+{
+    ClearAllExceptions();
+    if constexpr (fmt == Fmt::Invalid) {
+        OnInvalidFormat();
+    } else {
+        Convert<typename FmtToType<fmt>::type, s32>(fs, fd);
+    }
+}
+
+template<Fmt fmt> void floor_l(u32 fs, u32 fd)
+{
+    ClearAllExceptions();
+    if constexpr (fmt == Fmt::Invalid) {
+        OnInvalidFormat();
+    } else if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+        Round<RoundInstr::FLOOR, typename FmtToType<fmt>::type, s64>(fs, fd);
+    } else {
+        // Result is undefined
+    }
+}
+
+template<Fmt fmt> void floor_w(u32 fs, u32 fd)
+{
+    ClearAllExceptions();
+    if constexpr (fmt == Fmt::Invalid) {
+        OnInvalidFormat();
+    } else if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+        Round<RoundInstr::FLOOR, typename FmtToType<fmt>::type, s32>(fs, fd);
+    } else {
+        // Result is undefined
+    }
+}
+
+template<Fmt fmt> void round_l(u32 fs, u32 fd)
+{
+    ClearAllExceptions();
+    if constexpr (fmt == Fmt::Invalid) {
+        OnInvalidFormat();
+    } else if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+        Round<RoundInstr::ROUND, typename FmtToType<fmt>::type, s64>(fs, fd);
+    } else {
+        // Result is undefined
+    }
+}
+
+template<Fmt fmt> void round_w(u32 fs, u32 fd)
+{
+    ClearAllExceptions();
+    if constexpr (fmt == Fmt::Invalid) {
+        OnInvalidFormat();
+    } else if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+        Round<RoundInstr::ROUND, typename FmtToType<fmt>::type, s32>(fs, fd);
+    } else {
+        // Result is undefined
+    }
+}
+
+template<Fmt fmt> void trunc_l(u32 fs, u32 fd)
+{
+    ClearAllExceptions();
+    if constexpr (fmt == Fmt::Invalid) {
+        OnInvalidFormat();
+    } else if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+        Round<RoundInstr::TRUNC, typename FmtToType<fmt>::type, s64>(fs, fd);
+    } else {
+        // Result is undefined
+    }
+}
+
+template<Fmt fmt> void trunc_w(u32 fs, u32 fd)
+{
+    ClearAllExceptions();
+    if constexpr (fmt == Fmt::Invalid) {
+        OnInvalidFormat();
+    } else if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+        Round<RoundInstr::TRUNC, typename FmtToType<fmt>::type, s32>(fs, fd);
+    } else {
+        // Result is undefined
+    }
+}
+
+template<Fmt fmt> void abs(u32 fs, u32 fd)
+{
+    ClearAllExceptions();
+    if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+        Compute<ComputeInstr1Op::ABS, typename FmtToType<fmt>::type>(fs, fd);
+    } else {
+        OnInvalidFormat();
+    }
+}
+
+template<Fmt fmt> void add(u32 fs, u32 ft, u32 fd)
+{
+    ClearAllExceptions();
+    if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+        Compute<ComputeInstr2Op::ADD, typename FmtToType<fmt>::type>(fs, ft, fd);
+    } else {
+        OnInvalidFormat();
+    }
+}
+
+template<Fmt fmt> void div(u32 fs, u32 ft, u32 fd)
+{
+    ClearAllExceptions();
+    if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+        Compute<ComputeInstr2Op::DIV, typename FmtToType<fmt>::type>(fs, ft, fd);
+    } else {
+        OnInvalidFormat();
+    }
+}
+
+template<Fmt fmt> void mov(u32 fs, u32 fd)
+{
+    ClearAllExceptions();
+    if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+        Compute<ComputeInstr1Op::MOV, typename FmtToType<fmt>::type>(fs, fd);
+    } else {
+        OnInvalidFormat();
+    }
+}
+
+template<Fmt fmt> void mul(u32 fs, u32 ft, u32 fd)
+{
+    ClearAllExceptions();
+    if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+        Compute<ComputeInstr2Op::MUL, typename FmtToType<fmt>::type>(fs, ft, fd);
+    } else {
+        OnInvalidFormat();
+    }
+}
+
+template<Fmt fmt> void neg(u32 fs, u32 fd)
+{
+    ClearAllExceptions();
+    if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+        Compute<ComputeInstr1Op::NEG, typename FmtToType<fmt>::type>(fs, fd);
+    } else {
+        OnInvalidFormat();
+    }
+}
+
+template<Fmt fmt> void sqrt(u32 fs, u32 fd)
+{
+    ClearAllExceptions();
+    if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+        Compute<ComputeInstr1Op::SQRT, typename FmtToType<fmt>::type>(fs, fd);
+    } else {
+        OnInvalidFormat();
+    }
+}
+
+template<Fmt fmt> void sub(u32 fs, u32 ft, u32 fd)
+{
+    ClearAllExceptions();
+    if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+        Compute<ComputeInstr2Op::SUB, typename FmtToType<fmt>::type>(fs, ft, fd);
+    } else {
+        OnInvalidFormat();
+    }
+}
+
+template<ComputeInstr1Op instr, std::floating_point Float> void Compute(u32 fs, u32 fd)
+{
+    using enum ComputeInstr1Op;
+    Float op = fpr.Get<Float>(fs);
+    if constexpr (instr != MOV) {
+        if (!IsValidInput(op)) {
+            AdvancePipeline(2);
+            return;
+        }
+    }
+    Float result = [op] {
+        if constexpr (instr == ABS) {
+            return std::abs(op);
+        }
+        if constexpr (instr == MOV) {
+            return op;
+        }
+        if constexpr (instr == NEG) {
+            return -op;
+        }
+        if constexpr (instr == SQRT) {
+            AdvancePipeline(sizeof(Float) == 4 ? 28 : 57);
+            return std::sqrt(op);
+        }
+    }();
+    if constexpr (instr == MOV) {
+        fpr.Set<Float>(fd, result);
+    } else {
+        bool exc_raised = TestAllExceptions();
+        if (!exc_raised && IsValidOutput(result)) {
+            fpr.Set<Float>(fd, result);
+        }
+    }
+}
+
+template<ComputeInstr2Op instr, std::floating_point Float> void Compute(u32 fs, u32 ft, u32 fd)
+{
+    using enum ComputeInstr2Op;
+    Float op1 = fpr.Get<Float>(fs);
+    if (!IsValidInput(op1)) {
+        AdvancePipeline(1);
+        return;
+    }
+    Float op2 = fpr.Get<Float>(ft);
+    if (!IsValidInput(op2)) {
+        AdvancePipeline(1);
+        return;
+    }
+    Float result = [op1, op2] {
+        if constexpr (instr == ADD) {
+            AdvancePipeline(2);
+            return op1 + op2;
+        }
+        if constexpr (instr == SUB) {
+            AdvancePipeline(2);
+            return op1 - op2;
+        }
+        if constexpr (instr == MUL) {
+            AdvancePipeline(sizeof(Float) == 4 ? 4 : 7);
+            return op1 * op2;
+        }
+        if constexpr (instr == DIV) {
+            AdvancePipeline(sizeof(Float) == 4 ? 28 : 57);
+            return op1 / op2;
+        }
+    }();
+    bool exc_raised = TestAllExceptions();
+    if (!exc_raised && IsValidOutput(result)) {
+        fpr.Set<Float>(fd, result);
+    }
+}
+
+template<RoundInstr instr, FpuNum From, FpuNum To> void Round(u32 fs, u32 fd)
+{
+    From source = fpr.Get<From>(fs);
+
+    To result = To([source] {
+        if constexpr (instr == RoundInstr::ROUND) return std::nearbyint(source);
+        if constexpr (instr == RoundInstr::TRUNC) return std::trunc(source);
+        if constexpr (instr == RoundInstr::CEIL) return std::ceil(source);
+        if constexpr (instr == RoundInstr::FLOOR) return std::floor(source);
+    }());
+
+    fcr31.cause_unimplemented = [source] {
+        /* Test for unimplemented operation exception sources for CVT/round instructions. These cannot be found out from
+        std::fetestexcept. This function should be called after the conversion has been made. For all these
+        instructions, an unimplemented exception will occur if either:
+        * If the source operand is infinity or NaN, or
+        * If overflow occurs during conversion to integer format. */
         if constexpr (std::integral<From> && std::same_as<To, f64>) {
             return false; /* zero-cost shortcut; integers cannot be infinity or NaN, and the operation is then always
                              exact when converting to a double */
@@ -494,412 +855,67 @@ template<Cop1Instruction instr> void FpuConvert(u32 instr_code)
             return std::fetestexcept(FE_OVERFLOW) != 0; // TODO: should this also include underflow?
         }
         return false;
-    };
-
-    auto fd = instr_code >> 6 & 0x1F;
-    auto fs = instr_code >> 11 & 0x1F;
-    auto fmt = instr_code >> 21 & 0x1F;
-
-    if constexpr (log_cpu_instructions) {
-        current_instr_log_output = std::format("{}.{} {}, {}", current_instr_name, FmtToChar(fmt), fd, fs);
-    }
-
-    if constexpr (one_of(instr, CVT_S, CVT_D, CVT_W, CVT_L)) {
-        /* CVT.S/CVT.D: Convert To Single/Double Floating-point Format;
-           Converts the contents of floating-point register fs from the specified format (fmt)
-           to a single/double-precision floating-point format. Stores the rounded result to floating-point register fd.
-           CVT.W/CVT.L: Convert To Single/Long Fixed-point Format;
-           Converts the contents of floating-point register fs from the specified format (fmt)
-           to a 32/64-bit fixed-point format. Stores the rounded result to floating-point register fd. */
-        auto Convert = [&]<FpuNumericType InputType> {
-            /* Interpret a source operand as type 'From', "convert" (round according to the current rounding mode) it to
-             * a new type 'To', and store the result. */
-            auto Convert = [&]<FpuNumericType From, FpuNumericType To> {
-                /* TODO: the below is assuming that conv. between W and L takes 2 cycles.
-                See footnote 2 in table 7-14, VR4300 manual */
-                static constexpr int cycles = [&] {
-                    if constexpr (std::same_as<From, To>) return 1;
-                    else if constexpr (std::same_as<From, f32> && std::same_as<To, f64>) return 1;
-                    else if constexpr (std::same_as<From, f64> && std::same_as<To, f32>) return 2;
-                    else if constexpr (std::integral<From> && std::integral<To>) return 2;
-                    else return 5;
-                }();
-                AdvancePipeline(cycles);
-                if constexpr (std::same_as<From, To> || std::integral<From> && std::integral<To>) {
-                    SignalUnimplementedOp();
-                    SignalException<Exception::FloatingPoint>();
-                    return;
-                }
-                From source = fpr.Get<From>(fs);
-                if constexpr (std::floating_point<From>) {
-                    if (!IsValidInput(source)) return;
-                }
-                if constexpr (std::same_as<From, s64> && std::floating_point<To>) {
-                    if (source >= s64(0x0080'0000'0000'0000) || source < s64(0xFF80'0000'0000'0000)) {
-                        SignalUnimplementedOp();
-                        SignalException<Exception::FloatingPoint>();
-                        return;
-                    }
-                }
-                To conv = To(source);
-                bool exc_raised = TestAllExceptions();
-                if constexpr (std::floating_point<From> && std::same_as<To, s64>) {
-                    if (conv >= s64(0x0020'0000'0000'0000) || conv < s64(0xFFE0'0000'0000'0000)) {
-                        SignalUnimplementedOp();
-                        SignalException<Exception::FloatingPoint>();
-                        return;
-                    }
-                }
-                if constexpr (std::floating_point<To>) {
-                    if (!exc_raised && IsValidOutput(conv)) {
-                        fpr.Set<To>(fd, conv);
-                    }
-                } else if (exc_raised) {
-                    SignalException<Exception::FloatingPoint>();
-                } else {
-                    fpr.Set<To>(fd, conv);
-                }
-            };
-            if constexpr (instr == CVT_S) INVOKE(Convert, InputType, f32);
-            if constexpr (instr == CVT_D) INVOKE(Convert, InputType, f64);
-            if constexpr (instr == CVT_W) INVOKE(Convert, InputType, s32);
-            if constexpr (instr == CVT_L) INVOKE(Convert, InputType, s64);
-        };
-
-        switch (fmt) {
-        case FmtTypeID::Float32: INVOKE(Convert, f32); break;
-        case FmtTypeID::Float64: INVOKE(Convert, f64); break;
-        case FmtTypeID::Int32: INVOKE(Convert, s32); break;
-        case FmtTypeID::Int64: INVOKE(Convert, s64); break;
-        default: OnInvalidFormat(); break;
-        }
-
-        TestAllExceptions();
-    } else if constexpr (one_of(instr, ROUND_W, TRUNC_W, CEIL_W, FLOOR_W, ROUND_L, TRUNC_L, CEIL_L, FLOOR_L)) {
-        /* ROUND.L/ROUND.W/TRUNC.L/TRUNC.W/CEIL.L/CEIL.W/FLOOR.L/FLOOR.W: Round/Truncate/Ceiling/Floor To Single/Long
-           Fixed-point Format; Rounds the contents of floating-point register fs to a value closest to the 32/64-bit
-           fixed-point format and converts them from the specified format (fmt). Stores the result to floating-point
-           register fd. */
-
-        /* Interpret the source operand (as a float), and round it to an integer (s32 or s64). */
-        auto Round = [&]<std::floating_point InputFloat, std::signed_integral OutputInt> {
-            InputFloat source = fpr.Get<InputFloat>(fs);
-
-            OutputInt result = [&] {
-                if constexpr (one_of(instr, ROUND_W, ROUND_L)) return OutputInt(std::nearbyint(source));
-                if constexpr (one_of(instr, TRUNC_W, TRUNC_L)) return OutputInt(std::trunc(source));
-                if constexpr (one_of(instr, CEIL_W, CEIL_L)) return OutputInt(std::ceil(source));
-                if constexpr (one_of(instr, FLOOR_W, FLOOR_L)) return OutputInt(std::floor(source));
-            }();
-
-            fcr31.cause_unimplemented =
-              TestForUnimplementedException.template operator()<InputFloat, OutputInt>(source);
-
-            /* If the invalid operation exception occurs, but the exception is not enabled, return INT_MAX */
-            if (std::fetestexcept(FE_INVALID) && !fcr31.enable_inexact) {
-                fpr.Set<OutputInt>(fd, std::numeric_limits<OutputInt>::max());
-            } else {
-                fpr.Set<OutputInt>(fd, result);
-            }
-        };
-
-        static constexpr bool round_to_s32 = one_of(instr, ROUND_W, TRUNC_W, CEIL_W, FLOOR_W);
-
-        switch (fmt) {
-        case FmtTypeID::Float32:
-            if constexpr (round_to_s32) INVOKE(Round, f32, s32);
-            else INVOKE(Round, f32, s64);
-            AdvancePipeline(5);
-            break;
-
-        case FmtTypeID::Float64:
-            if constexpr (round_to_s32) INVOKE(Round, f64, s32);
-            else INVOKE(Round, f64, s64);
-            AdvancePipeline(5);
-            break;
-
-        case FmtTypeID::Int32:
-        case FmtTypeID::Int64:
-            /* If the input format is integer, the result is undefined,
-               according to table B-19 in "MIPS IV Instruction Set (Revision 3.2)" by Charles Price, 1995.
-               For now, just don't do anything.
-               TODO possibly change */
-            AdvancePipeline(1);
-            break;
-
-        default: OnInvalidFormat();
-        }
-    } else {
-        static_assert(always_false<instr>);
-    }
-}
-
-template<Cop1Instruction instr> void FpuCompute(u32 instr_code)
-{
-    if (!cop0.status.cu1) {
-        SignalCoprocessorUnusableException(1);
-        AdvancePipeline(1);
-        return;
-    }
-    ClearAllExceptions();
-
-    using enum Cop1Instruction;
-
-    auto fd = instr_code >> 6 & 0x1F;
-    auto fs = instr_code >> 11 & 0x1F;
-    auto ft = instr_code >> 16 & 0x1F;
-    auto fmt = instr_code >> 21 & 0x1F;
-
-    if constexpr (one_of(instr, ADD, SUB, MUL, DIV)) {
-        if constexpr (log_cpu_instructions) {
-            current_instr_log_output = std::format("{}.{} {}, {}, {}", current_instr_name, FmtToChar(fmt), fd, fs, ft);
-        }
-
-        auto Compute = [&]<std::floating_point Float> {
-            Float op1 = fpr.Get<Float>(fs);
-            if (!IsValidInput(op1)) {
-                AdvancePipeline(2);
-                return;
-            }
-            Float op2 = fpr.Get<Float>(ft);
-            if (!IsValidInput(op2)) {
-                AdvancePipeline(2);
-                return;
-            }
-            Float result = [&] {
-                if constexpr (instr == ADD) {
-                    AdvancePipeline(3);
-                    return op1 + op2;
-                }
-                if constexpr (instr == SUB) {
-                    AdvancePipeline(3);
-                    return op1 - op2;
-                }
-                if constexpr (instr == MUL) {
-                    if constexpr (sizeof(Float) == 4) AdvancePipeline(5);
-                    else AdvancePipeline(8);
-                    return op1 * op2;
-                }
-                if constexpr (instr == DIV) {
-                    if constexpr (sizeof(Float) == 4) AdvancePipeline(29);
-                    else AdvancePipeline(58);
-                    return op1 / op2;
-                }
-            }();
-            bool exc_raised = TestAllExceptions();
-            if (!exc_raised && IsValidOutput(result)) {
-                fpr.Set<Float>(fd, result);
-            }
-        };
-
-        switch (fmt) {
-        case FmtTypeID::Float32: INVOKE(Compute, f32); break;
-        case FmtTypeID::Float64: INVOKE(Compute, f64); break;
-        default: OnInvalidFormat(); break;
-        }
-    } else if constexpr (one_of(instr, ABS, MOV, NEG, SQRT)) {
-        if constexpr (log_cpu_instructions) {
-            current_instr_log_output = std::format("{}.{} {}, {}", current_instr_name, FmtToChar(fmt), fd, fs);
-        }
-
-        auto Compute = [&]<std::floating_point Float> {
-            Float op = fpr.Get<Float>(fs);
-            if constexpr (instr != MOV) {
-                if (!IsValidInput(op)) {
-                    AdvancePipeline(2);
-                    return;
-                }
-            }
-            Float result = [&] {
-                if constexpr (instr == ABS) {
-                    AdvancePipeline(1);
-                    return std::abs(op);
-                }
-                if constexpr (instr == MOV) {
-                    AdvancePipeline(1);
-                    return op;
-                }
-                if constexpr (instr == NEG) {
-                    AdvancePipeline(1);
-                    return -op;
-                }
-                if constexpr (instr == SQRT) {
-                    if constexpr (sizeof(op) == 4) AdvancePipeline(29);
-                    else AdvancePipeline(58);
-                    return std::sqrt(op);
-                }
-            }();
-            if constexpr (instr == MOV) {
-                fpr.Set<Float>(fd, result);
-            } else {
-                bool exc_raised = TestAllExceptions();
-                if (!exc_raised && IsValidOutput(result)) {
-                    fpr.Set<Float>(fd, result);
-                }
-            }
-        };
-
-        switch (fmt) {
-        case FmtTypeID::Float32: INVOKE(Compute, f32); break;
-        case FmtTypeID::Float64: INVOKE(Compute, f64); break;
-        default: OnInvalidFormat(); break;
-        }
-    } else {
-        static_assert(always_false<instr>);
-    }
-}
-
-template<Cop1Instruction instr> void FpuBranch(u32 instr_code)
-{
-    if (!cop0.status.cu1) {
-        SignalCoprocessorUnusableException(1);
-        AdvancePipeline(1);
-        return;
-    }
-    ClearAllExceptions();
-
-    using enum Cop1Instruction;
-
-    /* For all instructions: Adds the instruction address in the delay slot and a 16-bit offset (shifted 2 bits
-       to the left and sign-extended) to calculate the branch target address.
-
-       BC1T: Branch On FPU True;
-       If the FPU condition line is true, branches to the target address (delay of one instruction).
-
-       BC1F: Branch On FPU False;
-       If the FPU condition line is false, branches to the target address (delay of one instruction).
-
-       BC1TL: Branch On FPU True Likely;
-       If the FPU condition line is true, branches to the target address (delay of one instruction).
-       If conditional branch does not take place, the instruction in the delay slot is invalidated.
-
-       BC1FL: Branch On FPU False Likely;
-       If the FPU condition line is false, branches to the target address (delay of one instruction).
-       If conditional branch does not take place, the instruction in the delay slot is invalidated. */
-
-    if constexpr (log_cpu_instructions) {
-        current_instr_log_output = std::format("{} ${:X}", current_instr_name, s16(instr_code));
-    }
-
-    s64 offset = s64(s16(instr_code)) << 2;
-
-    bool branch_cond = [&] {
-        if constexpr (one_of(instr, BC1T, BC1TL)) return fcr31.c;
-        if constexpr (one_of(instr, BC1F, BC1FL)) return !fcr31.c;
     }();
 
-    if (branch_cond) {
-        PrepareJump(pc + offset);
-    } else if constexpr (one_of(instr, BC1TL, BC1FL)) {
-        pc += 4; /* The instruction in the branch delay slot is discarded. TODO: manual says "invalidated" */
+    /* If the invalid operation exception occurs, but the exception is not enabled, return INT_MAX */
+    if (std::fetestexcept(FE_INVALID) && !fcr31.enable_inexact) {
+        fpr.Set<To>(fd, std::numeric_limits<To>::max());
+    } else {
+        fpr.Set<To>(fd, result);
     }
-
-    AdvancePipeline(1); /* TODO: not 2? */
+    AdvancePipeline(4);
 }
 
-void FpuCompare(u32 instr_code)
+template<FpuNum From, FpuNum To> static void Convert(u32 fs, u32 fd)
 {
-    /* Floating-point Compare;
-       Interprets and arithmetically compares the contents of FPU registers fs and ft
-       in the specified format (fmt). The result is identified by comparison and the
-       specified condition (cond). After a delay of one instruction, the comparison
-       result can be used by the FPU branch instruction of the CPU. */
-    if (!cop0.status.cu1) {
-        SignalCoprocessorUnusableException(1);
-        AdvancePipeline(1);
+    /* TODO: the below is assuming that conv. between W and L takes 2 cycles.
+                See footnote 2 in table 7-14, VR4300 manual */
+    static constexpr int cycles = [&] {
+        if constexpr (std::same_as<From, To>) return 0;
+        else if constexpr (std::same_as<From, f32> && std::same_as<To, f64>) return 0;
+        else if constexpr (std::same_as<From, f64> && std::same_as<To, f32>) return 1;
+        else if constexpr (std::integral<From> && std::integral<To>) return 1;
+        else return 4;
+    }();
+    if constexpr (cycles > 0) {
+        AdvancePipeline(cycles);
+    }
+    if constexpr (std::same_as<From, To> || std::integral<From> && std::integral<To>) {
+        SignalUnimplementedOp();
+        SignalException<Exception::FloatingPoint>();
         return;
     }
-    ClearAllExceptions();
-
-    auto cond = instr_code & 0xF;
-    auto fs = instr_code >> 11 & 0x1F;
-    auto ft = instr_code >> 16 & 0x1F;
-    auto fmt = instr_code >> 21 & 0x1F;
-
-    if constexpr (log_cpu_instructions) {
-        current_instr_log_output = std::format("C.{}.{} {}, {}", compare_cond_strings[cond], FmtToChar(fmt), fs, ft);
+    From source = fpr.Get<From>(fs);
+    if constexpr (std::floating_point<From>) {
+        if (!IsValidInput(source)) return;
     }
-
-    auto Compare = [&]<std::floating_point Float> {
-        /* See VR4300 User's Manual by NEC, p. 566
-        Ordered instructions are: LE, LT, NGE, NGL, NGLE, NGT, SEQ, SF (cond.3 set)
-        Unordered: EQ, F, OLE, OLT, UEQ, ULE, ULT, UN (cond.3 clear) */
-        auto IsValidInput = [&](std::floating_point auto f) {
-            if (std::isnan(f) && ((cond & 8) || IsQuietNan(f))) {
-                bool signal_fpu_exc = SignalInvalidOp();
-                if (signal_fpu_exc) SignalException<Exception::FloatingPoint>();
-                return !signal_fpu_exc;
-            } else return true;
-        };
-        Float op1 = fpr.Get<Float>(fs);
-        Float op2 = fpr.Get<Float>(ft);
-        if (std::isnan(op1) || std::isnan(op2)) {
-            if (!IsValidInput(op1)) {
-                AdvancePipeline(2);
-                return;
-            }
-            if (!IsValidInput(op2)) {
-                AdvancePipeline(2);
-                return;
-            }
-            fcr31.c = cond & 1;
-        } else {
-            fcr31.c = (cond >> 2 & 1) & (op1 < op2) | (cond >> 1 & 1) & (op1 == op2);
+    if constexpr (std::same_as<From, s64> && std::floating_point<To>) {
+        if (source >= s64(0x0080'0000'0000'0000) || source < s64(0xFF80'0000'0000'0000)) {
+            SignalUnimplementedOp();
+            SignalException<Exception::FloatingPoint>();
+            return;
         }
-        AdvancePipeline(1);
-    };
-
-    switch (fmt) {
-    case FmtTypeID::Float32: INVOKE(Compare, f32); break;
-    case FmtTypeID::Float64: INVOKE(Compare, f64); break;
-    default: OnInvalidFormat(); break;
     }
+    To conv = To(source);
+    bool exc_raised = TestAllExceptions();
+    if constexpr (std::floating_point<From> && std::same_as<To, s64>) {
+        if (conv >= s64(0x0020'0000'0000'0000) || conv < s64(0xFFE0'0000'0000'0000)) {
+            SignalUnimplementedOp();
+            SignalException<Exception::FloatingPoint>();
+            return;
+        }
+    }
+    if constexpr (std::floating_point<To>) {
+        if (!exc_raised && IsValidOutput(conv)) {
+            fpr.Set<To>(fd, conv);
+        }
+    } else if (exc_raised) {
+        SignalException<Exception::FloatingPoint>();
+    } else {
+        fpr.Set<To>(fd, conv);
+    }
+    TestAllExceptions();
 }
-
-template bool IsQuietNan<f32>(f32);
-template bool IsQuietNan<f64>(f64);
-
-template void FpuLoad<Cop1Instruction::LWC1>(u32);
-template void FpuLoad<Cop1Instruction::LDC1>(u32);
-
-template void FpuStore<Cop1Instruction::SWC1>(u32);
-template void FpuStore<Cop1Instruction::SDC1>(u32);
-
-template void FpuMove<Cop1Instruction::MTC1>(u32);
-template void FpuMove<Cop1Instruction::MFC1>(u32);
-template void FpuMove<Cop1Instruction::CTC1>(u32);
-template void FpuMove<Cop1Instruction::CFC1>(u32);
-template void FpuMove<Cop1Instruction::DMTC1>(u32);
-template void FpuMove<Cop1Instruction::DMFC1>(u32);
-template void FpuMove<Cop1Instruction::DCFC1>(u32);
-template void FpuMove<Cop1Instruction::DCTC1>(u32);
-
-template void FpuConvert<Cop1Instruction::CVT_S>(u32);
-template void FpuConvert<Cop1Instruction::CVT_D>(u32);
-template void FpuConvert<Cop1Instruction::CVT_L>(u32);
-template void FpuConvert<Cop1Instruction::CVT_W>(u32);
-template void FpuConvert<Cop1Instruction::ROUND_L>(u32);
-template void FpuConvert<Cop1Instruction::ROUND_W>(u32);
-template void FpuConvert<Cop1Instruction::TRUNC_L>(u32);
-template void FpuConvert<Cop1Instruction::TRUNC_W>(u32);
-template void FpuConvert<Cop1Instruction::CEIL_L>(u32);
-template void FpuConvert<Cop1Instruction::CEIL_W>(u32);
-template void FpuConvert<Cop1Instruction::FLOOR_L>(u32);
-template void FpuConvert<Cop1Instruction::FLOOR_W>(u32);
-
-template void FpuCompute<Cop1Instruction::ADD>(u32);
-template void FpuCompute<Cop1Instruction::SUB>(u32);
-template void FpuCompute<Cop1Instruction::MUL>(u32);
-template void FpuCompute<Cop1Instruction::DIV>(u32);
-template void FpuCompute<Cop1Instruction::ABS>(u32);
-template void FpuCompute<Cop1Instruction::MOV>(u32);
-template void FpuCompute<Cop1Instruction::NEG>(u32);
-template void FpuCompute<Cop1Instruction::SQRT>(u32);
-
-template void FpuBranch<Cop1Instruction::BC1T>(u32);
-template void FpuBranch<Cop1Instruction::BC1F>(u32);
-template void FpuBranch<Cop1Instruction::BC1TL>(u32);
-template void FpuBranch<Cop1Instruction::BC1FL>(u32);
 
 template s32 FGR::Get<s32>(size_t) const;
 template s64 FGR::Get<s64>(size_t) const;
@@ -910,4 +926,34 @@ template void FGR::Set<s32>(size_t, s32);
 template void FGR::Set<s64>(size_t, s64);
 template void FGR::Set<f32>(size_t, f32);
 template void FGR::Set<f64>(size_t, f64);
+
+#define INST_FMT_SPEC(instr, ...)                   \
+    template void instr<Fmt::Float32>(__VA_ARGS__); \
+    template void instr<Fmt::Float64>(__VA_ARGS__); \
+    template void instr<Fmt::Int32>(__VA_ARGS__);   \
+    template void instr<Fmt::Int64>(__VA_ARGS__);   \
+    template void instr<Fmt::Invalid>(__VA_ARGS__);
+
+INST_FMT_SPEC(c, u32, u32, u8);
+INST_FMT_SPEC(ceil_l, u32, u32);
+INST_FMT_SPEC(ceil_w, u32, u32);
+INST_FMT_SPEC(cvt_d, u32, u32);
+INST_FMT_SPEC(cvt_l, u32, u32);
+INST_FMT_SPEC(cvt_s, u32, u32);
+INST_FMT_SPEC(cvt_w, u32, u32);
+INST_FMT_SPEC(floor_l, u32, u32);
+INST_FMT_SPEC(floor_w, u32, u32);
+INST_FMT_SPEC(round_l, u32, u32);
+INST_FMT_SPEC(round_w, u32, u32);
+INST_FMT_SPEC(trunc_l, u32, u32);
+INST_FMT_SPEC(trunc_w, u32, u32);
+INST_FMT_SPEC(abs, u32, u32);
+INST_FMT_SPEC(add, u32, u32, u32);
+INST_FMT_SPEC(div, u32, u32, u32);
+INST_FMT_SPEC(mov, u32, u32);
+INST_FMT_SPEC(mul, u32, u32, u32);
+INST_FMT_SPEC(neg, u32, u32);
+INST_FMT_SPEC(sqrt, u32, u32);
+INST_FMT_SPEC(sub, u32, u32, u32);
+
 } // namespace n64::vr4300

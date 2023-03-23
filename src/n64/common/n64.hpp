@@ -29,6 +29,16 @@ private:
 
 namespace n64 {
 
+enum class Cpu {
+    RSP,
+    VR4300
+};
+
+enum class CpuImpl {
+    Interpreter,
+    JIT
+};
+
 inline constexpr uint cpu_cycles_per_second = 93'750'000;
 inline constexpr uint rsp_cycles_per_second = 62'500'500;
 inline constexpr uint cpu_cycles_per_frame = cpu_cycles_per_second / 60; /* 1,562,500 */

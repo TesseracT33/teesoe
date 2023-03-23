@@ -103,7 +103,7 @@ template<std::signed_integral Int, Alignment alignment, MemOp mem_op> Int ReadVi
     }
     bool cacheable_area;
     u32 physical_address = active_virtual_to_physical_fun_read(virtual_address, cacheable_area);
-    if (exception_has_occurred) {
+    if (exception_occurred) {
         return {};
     }
     if constexpr (mem_op == MemOp::InstrFetch) {
@@ -361,7 +361,7 @@ template<size_t access_size, Alignment alignment> void WriteVirtual(u64 virtual_
     }
     bool cacheable_area;
     u32 physical_address = active_virtual_to_physical_fun_write(virtual_address, cacheable_area);
-    if (exception_has_occurred) {
+    if (exception_occurred) {
         return;
     }
     static constexpr bool use_mask = alignment != Alignment::Aligned;
@@ -388,19 +388,12 @@ template<size_t access_size, Alignment alignment> void WriteVirtual(u64 virtual_
     }
 }
 
-void TLBP()
+void tlbp()
 {
-    /* Translation Lookaside Buffer Probe;
-       Searches a TLB entry that matches with the contents of the entry Hi register and
-       sets the number of that TLB entry to the index register. If a TLB entry that
-       matches is not found, sets the most significant bit of the index register. */
-    AdvancePipeline(1);
-
     if (operating_mode != OperatingMode::Kernel && !cop0.status.cu0) {
         SignalCoprocessorUnusableException(0);
         return;
     }
-
     auto index = std::ranges::find_if(tlb_entries, [](TlbEntry const& entry) {
         u64 vpn2_mask = 0xFF'FFFF'E000 & ~u64(entry.page_mask);
         if ((std::bit_cast<u64>(entry.entry_hi) & vpn2_mask) != (std::bit_cast<u64>(cop0.entry_hi) & vpn2_mask))
@@ -418,55 +411,34 @@ void TLBP()
     }
 }
 
-void TLBR()
+void tlbr()
 {
-    /* Translation Lookaside Buffer Read;
-       The EntryHi and EntryLo registers are loaded with the contents of the TLB entry
-       pointed at by the contents of the Index register. The G bit (which controls ASID matching)
-       read from the TLB is written into both of the EntryLo0 and EntryLo1 registers. */
-    AdvancePipeline(1);
-
     if (operating_mode != OperatingMode::Kernel && !cop0.status.cu0) {
         SignalCoprocessorUnusableException(0);
-        return;
+    } else {
+        tlb_entries[cop0.index.value & 31].Read();
     }
-
-    tlb_entries[cop0.index.value & 0x1F].Read();
 }
 
-void TLBWI()
+void tlbwi()
 {
-    /* Translation Lookaside Buffer Write Index;
-       The TLB entry pointed at by the Index register is loaded with the contents of the
-       EntryHi and EntryLo registers. The G bit of the TLB is written with the logical
-       AND of the G bits in the EntryLo0 and EntryLo1 registers. */
-    AdvancePipeline(1);
-
     if (operating_mode != OperatingMode::Kernel && !cop0.status.cu0) {
         SignalCoprocessorUnusableException(0);
-        return;
+    } else {
+        tlb_entries[cop0.index.value & 31].Write();
     }
-
-    tlb_entries[cop0.index.value & 0x1F].Write();
 }
 
-void TLBWR()
+void tlbwr()
 {
-    /* Translation Lookaside Buffer Write Random;
-       The TLB entry pointed at by the Random register is loaded with the contents of
-       the EntryHi and EntryLo registers. The G bit of the TLB is written with the logical
-       AND of the G bits in the EntryLo0 and EntryLo1 registers.
-       The 'wired' register determines which TLB entries cannot be overwritten. */
-    AdvancePipeline(1);
-
     if (operating_mode != OperatingMode::Kernel && !cop0.status.cu0) {
         SignalCoprocessorUnusableException(0);
-        return;
-    }
-    auto index = random_generator.Generate() & 0x1F;
-    auto wired = cop0.wired & 0x1F;
-    if (index > wired) {
-        tlb_entries[index].Write();
+    } else {
+        auto index = random_generator.Generate() & 31;
+        auto wired = cop0.wired & 0x1F;
+        if (index > wired) {
+            tlb_entries[index].Write();
+        }
     }
 }
 

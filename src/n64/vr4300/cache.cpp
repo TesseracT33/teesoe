@@ -1,6 +1,5 @@
 #include "cache.hpp"
 #include "cop0.hpp"
-#include "cpu.hpp"
 #include "exceptions.hpp"
 #include "log.hpp"
 #include "memory/memory.hpp"
@@ -35,10 +34,12 @@ struct ICacheLine {
 static std::array<DCacheLine, 512> d_cache; /* 8 KB */
 static std::array<ICacheLine, 512> i_cache; /* 16 KB */
 
+static u8* rdram_ptr;
+
 static void FillCacheLine(auto& cache_line, u32 paddr);
 static void WritebackCacheLine(auto& cache_line, u32 new_paddr);
 
-void CACHE(u32 rs, u32 rt, s16 imm16)
+void cache(u32 rs, u32 rt, s16 imm)
 {
     /* Cache op;
        Sign-extends the 16-bit offset to 32 bits and adds it to register base to
@@ -56,11 +57,11 @@ void CACHE(u32 rs, u32 rt, s16 imm16)
 #endif
     auto cache = rt & 3;
     auto op = rt >> 2;
-    auto virt_addr = gpr[rs] + imm16;
+    auto virt_addr = gpr[rs] + imm;
     bool cacheable_area;
     auto paddr = active_virtual_to_physical_fun_read(virt_addr,
       cacheable_area); /* may go unused below, but could also cause a TLB exception */
-    if (exception_has_occurred) {
+    if (exception_occurred) {
         AdvancePipeline(cycles);
         return;
     }
@@ -175,6 +176,11 @@ void FillCacheLine(auto& cache_line, u32 paddr)
     if constexpr (sizeof(cache_line) == sizeof(DCacheLine)) {
         cache_line.dirty = false;
     }
+}
+
+void InitCache()
+{
+    rdram_ptr = rdram::GetPointerToMemory(0);
 }
 
 template<std::signed_integral Int, MemOp mem_op> Int ReadCacheableArea(u32 paddr)

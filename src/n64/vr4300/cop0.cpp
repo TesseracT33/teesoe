@@ -1,6 +1,5 @@
 #include "cop0.hpp"
 #include "cop1.hpp"
-#include "cpu.hpp"
 #include "exceptions.hpp"
 #include "memory/memory.hpp"
 #include "mmu.hpp"
@@ -53,32 +52,31 @@ u64 Cop0Registers::Get(size_t reg_index) const
     };
 
     switch (reg_index & 31) {
-    case cop0_index_index: return StructToInt(index);
-    case cop0_index_random:
-        return random_generator.Generate(); /* Generate a random number in the interval [wired, 31] */
-    case cop0_index_entry_lo_0: return StructToInt(entry_lo[0]);
-    case cop0_index_entry_lo_1: return StructToInt(entry_lo[1]);
-    case cop0_index_context: return StructToInt(context);
-    case cop0_index_page_mask: return page_mask;
-    case cop0_index_wired: return wired;
-    case cop0_index_bad_v_addr: return bad_v_addr;
-    case cop0_index_count: return u32(count >> 1); /* See the declaration of 'count' */
-    case cop0_index_entry_hi: return StructToInt(entry_hi);
-    case cop0_index_compare: return u32(compare >> 1); /* See the declaration of 'compare' */
-    case cop0_index_status: return StructToInt(status);
-    case cop0_index_cause: return StructToInt(cause);
-    case cop0_index_epc: return epc;
-    case cop0_index_pr_id: return StructToInt(pr_id);
-    case cop0_index_config: return StructToInt(config);
-    case cop0_index_ll_addr: return ll_addr;
-    case cop0_index_watch_lo: return StructToInt(watch_lo);
-    case cop0_index_watch_hi: return StructToInt(watch_hi);
-    case cop0_index_x_context: return StructToInt(x_context);
-    case cop0_index_parity_error: return StructToInt(parity_error);
-    case cop0_index_cache_error: return cache_error;
-    case cop0_index_tag_lo: return StructToInt(tag_lo);
-    case cop0_index_tag_hi: return tag_hi;
-    case cop0_index_error_epc: return error_epc;
+    case Cop0Reg::index: return StructToInt(index);
+    case Cop0Reg::random: return random_generator.Generate(); /* Generate a random number in the interval [wired, 31] */
+    case Cop0Reg::entry_lo_0: return StructToInt(entry_lo[0]);
+    case Cop0Reg::entry_lo_1: return StructToInt(entry_lo[1]);
+    case Cop0Reg::context: return StructToInt(context);
+    case Cop0Reg::page_mask: return page_mask;
+    case Cop0Reg::wired: return wired;
+    case Cop0Reg::bad_v_addr: return bad_v_addr;
+    case Cop0Reg::count: return u32(count >> 1); /* See the declaration of 'count' */
+    case Cop0Reg::entry_hi: return StructToInt(entry_hi);
+    case Cop0Reg::compare: return u32(compare >> 1); /* See the declaration of 'compare' */
+    case Cop0Reg::status: return StructToInt(status);
+    case Cop0Reg::cause: return StructToInt(cause);
+    case Cop0Reg::epc: return epc;
+    case Cop0Reg::pr_id: return StructToInt(pr_id);
+    case Cop0Reg::config: return StructToInt(config);
+    case Cop0Reg::ll_addr: return ll_addr;
+    case Cop0Reg::watch_lo: return StructToInt(watch_lo);
+    case Cop0Reg::watch_hi: return StructToInt(watch_hi);
+    case Cop0Reg::x_context: return StructToInt(x_context);
+    case Cop0Reg::parity_error: return StructToInt(parity_error);
+    case Cop0Reg::cache_error: return cache_error;
+    case Cop0Reg::tag_lo: return StructToInt(tag_lo);
+    case Cop0Reg::tag_hi: return tag_hi;
+    case Cop0Reg::error_epc: return error_epc;
     case 7: return cop0_unused_7;
     case 21: return cop0_unused_21;
     case 22: return cop0_unused_22;
@@ -118,105 +116,105 @@ template<bool raw> void Cop0Registers::Set(size_t reg_index, std::integral auto 
     };
 
     switch (reg_index) { /* Masks are used for bits that are non-writeable. */
-    case cop0_index_index:
+    case Cop0Reg::index:
         if constexpr (raw) IntToStruct(index, value);
         else IntToStructMasked(index, value, 0x8000'003F);
         break;
 
-    case cop0_index_random:
+    case Cop0Reg::random:
         if constexpr (raw) random = value;
         else random = value & 0x20;
         break;
 
-    case cop0_index_entry_lo_0:
+    case Cop0Reg::entry_lo_0:
         if constexpr (raw) IntToStruct(entry_lo[0], value);
         else IntToStructMasked(entry_lo[0], value, 0x3FFF'FFFF);
         break;
 
-    case cop0_index_entry_lo_1:
+    case Cop0Reg::entry_lo_1:
         if constexpr (raw) IntToStruct(entry_lo[1], value);
         else IntToStructMasked(entry_lo[1], value, 0x3FFF'FFFF);
         break;
 
-    case cop0_index_context:
+    case Cop0Reg::context:
         if constexpr (raw) IntToStruct(context, value);
         else IntToStructMasked(context, value, ~0xFull);
         break;
 
-    case cop0_index_page_mask:
+    case Cop0Reg::page_mask:
         if constexpr (raw) page_mask = value;
         else page_mask = value & 0x01FF'E000;
         break;
 
-    case cop0_index_wired:
+    case Cop0Reg::wired:
         if constexpr (raw) wired = value;
         else wired = value & 0x3F;
         OnWriteToWired();
         break;
 
-    case cop0_index_bad_v_addr:
+    case Cop0Reg::bad_v_addr:
         if constexpr (raw) bad_v_addr = value;
         break;
 
-    case cop0_index_count:
+    case Cop0Reg::count:
         count = value << 1; /* See the declaration of 'count' */
         OnWriteToCount();
         break;
 
-    case cop0_index_entry_hi:
+    case Cop0Reg::entry_hi:
         if constexpr (raw) IntToStruct(entry_hi, value);
         else IntToStructMasked(entry_hi, value, 0xC000'00FF'FFFF'E0FF);
         break;
 
-    case cop0_index_compare:
+    case Cop0Reg::compare:
         compare = value << 1; /* See the declaration of 'compare' */
         OnWriteToCompare();
         break;
 
-    case cop0_index_status:
+    case Cop0Reg::status:
         if constexpr (raw) IntToStruct(status, value);
         else IntToStructMasked(status, value, 0xFF57'FFFF);
         OnWriteToStatus();
         break;
 
-    case cop0_index_cause:
+    case Cop0Reg::cause:
         if constexpr (raw) IntToStruct(cause, value);
         else IntToStructMasked(cause, value, 0x300);
         OnWriteToCause();
         break;
 
-    case cop0_index_epc: epc = value; break;
+    case Cop0Reg::epc: epc = value; break;
 
-    case cop0_index_config:
+    case Cop0Reg::config:
         if constexpr (raw) IntToStruct(config, value);
         else IntToStructMasked(config, value, 0xF00'800F);
         break;
 
-    case cop0_index_ll_addr: ll_addr = value; break;
+    case Cop0Reg::ll_addr: ll_addr = value; break;
 
-    case cop0_index_watch_lo:
+    case Cop0Reg::watch_lo:
         if constexpr (raw) IntToStruct(watch_lo, value);
         else IntToStructMasked(watch_lo, value, 0xFFFF'FFFB);
         break;
 
-    case cop0_index_watch_hi: IntToStruct(watch_hi, value); break;
+    case Cop0Reg::watch_hi: IntToStruct(watch_hi, value); break;
 
-    case cop0_index_x_context:
+    case Cop0Reg::x_context:
         if constexpr (raw) IntToStruct(x_context, value);
         else IntToStructMasked(x_context, value, ~0xFull);
         break;
 
-    case cop0_index_parity_error:
+    case Cop0Reg::parity_error:
         if constexpr (raw) IntToStruct(parity_error, value);
         else IntToStructMasked(parity_error, value, 0xFF);
         break;
 
-    case cop0_index_tag_lo:
+    case Cop0Reg::tag_lo:
         if constexpr (raw) IntToStruct(tag_lo, value);
         else IntToStructMasked(tag_lo, value, 0x0FFF'FFC0);
         break;
 
-    case cop0_index_error_epc: error_epc = value; break;
+    case Cop0Reg::error_epc: error_epc = value; break;
 
     case 7: cop0_unused_7 = u32(value); break;
     case 21: cop0_unused_21 = u32(value); break;
@@ -250,60 +248,42 @@ template<bool initial_add> void ReloadCountCompareEvent()
     }
 }
 
-template<Cop0Instruction instr> void Cop0Move(u32 rt, u32 rd)
+void dmfc0(u32 rt, u32 rd)
 {
-    AdvancePipeline(1);
-    using enum Cop0Instruction;
-
     if (operating_mode != OperatingMode::Kernel) {
         if (!cop0.status.cu0) {
             SignalCoprocessorUnusableException(0);
             return;
         }
-        if constexpr (one_of(instr, DMFC0, DMTC0)) {
-            if (addressing_mode == AddressingMode::_32bit) {
-                SignalException<Exception::ReservedInstruction>();
-                return;
-            }
+        if (addressing_mode == AddressingMode::_32bit) {
+            SignalException<Exception::ReservedInstruction>();
+            return;
         }
     }
-
-    if constexpr (instr == MTC0) {
-        /* Move To System Control Coprocessor;
-           Loads the contents of the word of the general purpose register rt of the CPU
-           to the general purpose register rd of CP0. */
-        cop0.Set(rd, s32(gpr[rt]));
-    } else if constexpr (instr == MFC0) {
-        /* Move From System Control Coprocessor;
-           Loads the contents of the word of the general purpose register rd of CP0
-           to the general purpose register rt of the CPU. */
-        gpr.set(rt, s32(cop0.Get(rd)));
-    } else if constexpr (instr == DMTC0) {
-        /* Doubleword Move To System Control Coprocessor;
-           Loads the contents of the doubleword of the general purpose register rt of the CPU
-           to the general purpose register rd of CP0. */
-        cop0.Set(rd, gpr[rt]);
-    } else if constexpr (instr == DMFC0) {
-        /* Doubleword Move From System Control Coprocessor;
-           Loads the contents of the doubleword of the general purpose register rd of CP0
-           to the general purpose register rt of the CPU. */
-        gpr.set(rt, cop0.Get(rd));
-    } else {
-        static_assert(always_false<instr>);
-    }
+    gpr.set(rt, cop0.Get(rd));
 }
 
-void ERET()
+void dmtc0(u32 rt, u32 rd)
 {
-    /* Return From Exception;
-       Returns from an exception, interrupt, or error trap. */
-    AdvancePipeline(1);
+    if (operating_mode != OperatingMode::Kernel) {
+        if (!cop0.status.cu0) {
+            SignalCoprocessorUnusableException(0);
+            return;
+        }
+        if (addressing_mode == AddressingMode::_32bit) {
+            SignalException<Exception::ReservedInstruction>();
+            return;
+        }
+    }
+    cop0.Set(rd, gpr[rt]);
+}
 
+void eret()
+{
     if (operating_mode != OperatingMode::Kernel && !cop0.status.cu0) {
         SignalCoprocessorUnusableException(0);
         return;
     }
-
     if (cop0.status.erl == 0) {
         pc = cop0.epc;
         cop0.status.exl = 0;
@@ -313,7 +293,6 @@ void ERET()
     }
     CheckInterrupts();
     ll_bit = 0;
-
     /* Check if the pc is misaligned, and if so, signal an exception right away.
        Then, there is no need to check if the pc is misaligned every time an instruction is fetched
        (this is one of the few places where the pc can be set to a misaligned value). */
@@ -323,6 +302,24 @@ void ERET()
     SetActiveVirtualToPhysicalFunctions();
 }
 
+void mfc0(u32 rt, u32 rd)
+{
+    if (operating_mode != OperatingMode::Kernel && !cop0.status.cu0) {
+        SignalCoprocessorUnusableException(0);
+    } else {
+        gpr.set(rt, s32(cop0.Get(rd)));
+    }
+}
+
+void mtc0(u32 rt, u32 rd)
+{
+    if (operating_mode != OperatingMode::Kernel && !cop0.status.cu0) {
+        SignalCoprocessorUnusableException(0);
+    } else {
+        cop0.Set(rd, s32(gpr[rt]));
+    }
+}
+
 template void Cop0Registers::Set<false>(size_t, s32);
 template void Cop0Registers::Set<false>(size_t, u32);
 template void Cop0Registers::Set<false>(size_t, u64);
@@ -330,11 +327,7 @@ template void Cop0Registers::Set<true>(size_t, s32);
 template void Cop0Registers::Set<true>(size_t, u32);
 template void Cop0Registers::Set<true>(size_t, u64);
 
-template void Cop0Move<Cop0Instruction::MTC0>(u32, u32);
-template void Cop0Move<Cop0Instruction::MFC0>(u32, u32);
-template void Cop0Move<Cop0Instruction::DMTC0>(u32, u32);
-template void Cop0Move<Cop0Instruction::DMFC0>(u32, u32);
-
 template void ReloadCountCompareEvent<false>();
 template void ReloadCountCompareEvent<true>();
+
 } // namespace n64::vr4300

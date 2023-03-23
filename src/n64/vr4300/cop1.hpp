@@ -2,70 +2,58 @@
 
 #include "types.hpp"
 
-#include <concepts>
-
 namespace n64::vr4300 {
 
-template<typename T>
-concept FpuNumericType = std::same_as<f32, T> || std::same_as<f64, T> || std::same_as<s32, T> || std::same_as<s64, T>;
-
-enum class Cop1Instruction {
-    /* Load/store/transfer instructions */
-    LWC1,
-    SWC1,
-    LDC1,
-    SDC1,
-    MTC1,
-    MFC1,
-    CTC1,
-    CFC1,
-    DMTC1,
-    DMFC1,
-    DCFC1,
-    DCTC1,
-
-    /* Conversion instructions */
-    CVT_S,
-    CVT_D,
-    CVT_L,
-    CVT_W,
-    ROUND_L,
-    ROUND_W,
-    TRUNC_L,
-    TRUNC_W,
-    CEIL_L,
-    CEIL_W,
-    FLOOR_L,
-    FLOOR_W,
-
-    /* Computational instructions */
-    ADD,
-    SUB,
-    MUL,
-    DIV,
-    ABS,
-    MOV,
-    NEG,
-    SQRT,
-
-    /* Branch instructions */
-    BC1T,
-    BC1F,
-    BC1TL,
-    BC1FL,
-
-    /* Compare */
-    C
+enum class Fmt {
+    Float32 = 16,
+    Float64 = 17,
+    Int32 = 20,
+    Int64 = 21,
+    Invalid,
 };
 
-/* COP1/FPU instructions */
-template<Cop1Instruction> void FpuLoad(u32 instr_code);
-template<Cop1Instruction> void FpuStore(u32 instr_code);
-template<Cop1Instruction> void FpuMove(u32 instr_code);
-template<Cop1Instruction> void FpuConvert(u32 instr_code);
-template<Cop1Instruction> void FpuCompute(u32 instr_code);
-template<Cop1Instruction> void FpuBranch(u32 instr_code);
-void FpuCompare(u32 instr_code);
-void InitializeFpu();
+void bc1f(s16 imm);
+void bc1fl(s16 imm);
+void bc1t(s16 imm);
+void bc1tl(s16 imm);
+
+void cfc1(u32 fs, u32 rt);
+void ctc1(u32 fs, u32 rt);
+void dcfc1();
+void dctc1();
+void dmfc1(u32 fs, u32 rt);
+void dmtc1(u32 fs, u32 rt);
+void ldc1(u32 base, u32 ft, s16 imm);
+void lwc1(u32 base, u32 ft, s16 imm);
+void mfc1(u32 fs, u32 rt);
+void mtc1(u32 fs, u32 rt);
+void sdc1(u32 base, u32 ft, s16 imm);
+void swc1(u32 base, u32 ft, s16 imm);
+
+template<Fmt> void c(u32 fs, u32 ft, u8 cond);
+
+template<Fmt> void ceil_l(u32 fs, u32 fd);
+template<Fmt> void ceil_w(u32 fs, u32 fd);
+template<Fmt> void cvt_d(u32 fs, u32 fd);
+template<Fmt> void cvt_l(u32 fs, u32 fd);
+template<Fmt> void cvt_s(u32 fs, u32 fd);
+template<Fmt> void cvt_w(u32 fs, u32 fd);
+template<Fmt> void floor_l(u32 fs, u32 fd);
+template<Fmt> void floor_w(u32 fs, u32 fd);
+template<Fmt> void round_l(u32 fs, u32 fd);
+template<Fmt> void round_w(u32 fs, u32 fd);
+template<Fmt> void trunc_l(u32 fs, u32 fd);
+template<Fmt> void trunc_w(u32 fs, u32 fd);
+
+template<Fmt> void abs(u32 fs, u32 fd);
+template<Fmt> void add(u32 fs, u32 ft, u32 fd);
+template<Fmt> void div(u32 fs, u32 ft, u32 fd);
+template<Fmt> void mov(u32 fs, u32 fd);
+template<Fmt> void mul(u32 fs, u32 ft, u32 fd);
+template<Fmt> void neg(u32 fs, u32 fd);
+template<Fmt> void sqrt(u32 fs, u32 fd);
+template<Fmt> void sub(u32 fs, u32 ft, u32 fd);
+
+void InitCop1();
 
 } // namespace n64::vr4300

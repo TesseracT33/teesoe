@@ -2,7 +2,6 @@
 #include "build_options.hpp"
 #include "cop0.hpp"
 #include "cop1.hpp"
-#include "cpu.hpp"
 #include "frontend/message.hpp"
 #include "mmu.hpp"
 #include "vr4300.hpp"

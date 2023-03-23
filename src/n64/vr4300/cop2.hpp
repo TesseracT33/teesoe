@@ -4,18 +4,15 @@
 
 namespace n64::vr4300 {
 
-enum class Cop2Instruction {
-    CFC2,
-    CTC2,
-    MFC2,
-    MTC2,
-    DCFC2,
-    DCTC2,
-    DMFC2,
-    DMTC2
-};
+void cfc2(u32 rt);
+void ctc2(u32 rt);
+void dcfc2();
+void dctc2();
+void dmfc2(u32 rt);
+void dmtc2(u32 rt);
+void mfc2(u32 rt);
+void mtc2(u32 rt);
 
-template<Cop2Instruction> void Cop2Move(u32 rt);
-void InitializeCop22();
+void InitCop2();
 
 } // namespace n64::vr4300

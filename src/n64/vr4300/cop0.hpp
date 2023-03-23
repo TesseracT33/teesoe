@@ -8,46 +8,33 @@
 
 namespace n64::vr4300 {
 
-enum class Cop0Instruction {
-    /* Move instructions */
-    MTC0,
-    MFC0,
-    DMTC0,
-    DMFC0,
-    /* TLB instructions */
-    TLBP,
-    TLBR,
-    TLBWI,
-    TLBWR,
-    /* Misc. instructions */
-    ERET
+enum Cop0Reg {
+    index = 0,
+    random = 1,
+    entry_lo_0 = 2,
+    entry_lo_1 = 3,
+    context = 4,
+    page_mask = 5,
+    wired = 6,
+    bad_v_addr = 8,
+    count = 9,
+    entry_hi = 10,
+    compare = 11,
+    status = 12,
+    cause = 13,
+    epc = 14,
+    pr_id = 15,
+    config = 16,
+    ll_addr = 17,
+    watch_lo = 18,
+    watch_hi = 19,
+    x_context = 20,
+    parity_error = 26,
+    cache_error = 27,
+    tag_lo = 28,
+    tag_hi = 29,
+    error_epc = 30
 };
-
-inline constexpr uint cop0_index_index = 0;
-inline constexpr uint cop0_index_random = 1;
-inline constexpr uint cop0_index_entry_lo_0 = 2;
-inline constexpr uint cop0_index_entry_lo_1 = 3;
-inline constexpr uint cop0_index_context = 4;
-inline constexpr uint cop0_index_page_mask = 5;
-inline constexpr uint cop0_index_wired = 6;
-inline constexpr uint cop0_index_bad_v_addr = 8;
-inline constexpr uint cop0_index_count = 9;
-inline constexpr uint cop0_index_entry_hi = 10;
-inline constexpr uint cop0_index_compare = 11;
-inline constexpr uint cop0_index_status = 12;
-inline constexpr uint cop0_index_cause = 13;
-inline constexpr uint cop0_index_epc = 14;
-inline constexpr uint cop0_index_pr_id = 15;
-inline constexpr uint cop0_index_config = 16;
-inline constexpr uint cop0_index_ll_addr = 17;
-inline constexpr uint cop0_index_watch_lo = 18;
-inline constexpr uint cop0_index_watch_hi = 19;
-inline constexpr uint cop0_index_x_context = 20;
-inline constexpr uint cop0_index_parity_error = 26;
-inline constexpr uint cop0_index_cache_error = 27;
-inline constexpr uint cop0_index_tag_lo = 28;
-inline constexpr uint cop0_index_tag_hi = 29;
-inline constexpr uint cop0_index_error_epc = 30;
 
 inline constexpr std::array cop0_reg_str_repr = {
     "INDEX",
@@ -87,9 +74,11 @@ static_assert(cop0_reg_str_repr.size() == 31);
 void OnCountCompareMatchEvent();
 template<bool initial_add = false> void ReloadCountCompareEvent();
 
-/* COP0 instructions */
-template<Cop0Instruction> void Cop0Move(u32 rt, u32 rd);
-void ERET();
+void dmfc0(u32 rt, u32 rd);
+void dmtc0(u32 rt, u32 rd);
+void eret();
+void mfc0(u32 rt, u32 rd);
+void mtc0(u32 rt, u32 rd);
 
 /* TODO: for registers that contain only one field, make them simple u32/u64, not structs */
 struct Cop0Registers {

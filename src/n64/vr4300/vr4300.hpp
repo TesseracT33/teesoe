@@ -1,22 +1,14 @@
 #pragma once
 
+#include "mips/gpr.hpp"
 #include "types.hpp"
 
 #include <string>
 #include <string_view>
 
+#define EXEC_VR4300(impl /* Interpreter/JIT */, instr /* mnemonic */, ... /* args */)
+
 namespace n64::vr4300 {
-
-enum class CpuInstruction;
-enum class Cop0Instruction;
-enum class Cop1Instruction;
-enum class Cop2Instruction;
-
-enum class OperatingMode {
-    User,
-    Supervisor,
-    Kernel
-} inline operating_mode;
 
 enum class ExternalInterruptSource {
     MI = 1 << 2, /* ip2; MIPS Interface interrupt. Set to 1 when (MI_INTR_REG & MI_INTR_MASK_REG) != 0  */
@@ -26,6 +18,17 @@ enum class ExternalInterruptSource {
     IndyRead = 1 << 5, /* ip5; Connected to the Indy dev kit’s RDB port. Set to 1 when a value is read. */
     IndyWrite = 1 << 6 /* ip6; Connected to the Indy dev kit’s RDB port. Set to 1 when a value is written. */
 };
+
+enum class Impl {
+    Interpreter,
+    JIT
+};
+
+enum class OperatingMode {
+    User,
+    Supervisor,
+    Kernel
+} inline operating_mode;
 
 void AddInitialEvents();
 void CheckInterrupts();
@@ -39,32 +42,23 @@ void SetInterruptPending(ExternalInterruptSource);
 void SignalInterruptFalse();
 
 void AdvancePipeline(u64 cycles);
-void DecodeExecuteCop0Instruction();
-void DecodeExecuteCop1Instruction();
-void DecodeExecuteCop2Instruction();
-void DecodeExecuteCop3Instruction();
-void DecodeExecuteInstruction(u32 instr_code);
-void DecodeExecuteRegimmInstruction();
-void DecodeExecuteSpecialInstruction();
-template<CpuInstruction> void ExecuteCpuInstruction();
-template<Cop0Instruction> void ExecuteCop0Instruction();
-template<Cop1Instruction> void ExecuteCop1Instruction();
-template<Cop2Instruction> void ExecuteCop2Instruction();
 void FetchDecodeExecuteInstruction();
 void InitializeRegisters();
+void Jump(u64 target_address);
+void Link(u32 reg);
 void NotifyIllegalInstrCode(u32 instr_code);
-void PrepareJump(u64 target_address);
 
 inline bool in_branch_delay_slot;
 inline bool ll_bit; /* Read from / written to by load linked and store conditional instructions. */
 inline bool jump_is_pending = false;
 inline bool last_instr_was_load = false;
 inline uint instructions_until_jump = 0;
-inline u64 addr_to_jump_to;
+inline u64 jump_addr;
 inline u64 pc;
 inline u64 hi_reg, lo_reg; /* Contain the result of a double-word multiplication or division. */
 inline u64 p_cycle_counter;
-inline u8* rdram_ptr;
+
+inline ::mips::Gpr<s64> gpr;
 
 /* Debugging */
 inline std::string_view current_instr_name;

@@ -33,10 +33,10 @@ Int ReadVirtual(u64 virtual_address);
 void SetActiveVirtualToPhysicalFunctions();
 template<size_t access_size, Alignment alignment = Alignment::Aligned> void WriteVirtual(u64 virtual_address, s64 data);
 
-void TLBR();
-void TLBWI();
-void TLBWR();
-void TLBP();
+void tlbr();
+void tlbwi();
+void tlbwr();
+void tlbp();
 
 inline VirtualToPhysicalAddressFun active_virtual_to_physical_fun_read;
 inline VirtualToPhysicalAddressFun active_virtual_to_physical_fun_write;

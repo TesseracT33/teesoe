@@ -1,6 +1,5 @@
 #include "exceptions.hpp"
 #include "cop0.hpp"
-#include "cpu.hpp"
 #include "log.hpp"
 #include "mmu.hpp"
 #include "n64_build_options.hpp"
@@ -154,7 +153,7 @@ void HandleException()
         log(std::format("EXCEPTION: {}", ExceptionToString(occurred_exception)));
     }
 
-    exception_has_occurred = false;
+    exception_occurred = false;
 
     if (cop0.status.exl == 0) {
         cop0.cause.bd =
@@ -182,15 +181,18 @@ void SignalCoprocessorUnusableException(int co)
 
 template<Exception exception, MemOp mem_op> void SignalException()
 {
+    if constexpr (exception == Exception::FloatingPoint) {
+        int a = 3;
+    }
     static constexpr auto new_exception_priority = GetExceptionPriority<exception, mem_op>();
-    if (exception_has_occurred) {
+    if (exception_occurred) {
         /* Compare exception priorities; return if the new exception has a lower priority than an already occured one.
          */
         if (new_exception_priority < occurred_exception_priority) {
             return;
         }
     }
-    exception_has_occurred = true;
+    exception_occurred = true;
     occurred_exception = exception;
     occurred_exception_priority = new_exception_priority;
     /* The below two assignments incur a run-time cost of two stores and one branch if a new exception occurs with a
@@ -200,7 +202,6 @@ template<Exception exception, MemOp mem_op> void SignalException()
        would have to be taken over this argument. */
     exception_vector = GetExceptionVector<exception>();
     exception_handler = GetExceptionHandler<exception, mem_op>();
-    if constexpr (recompile_cpu) {}
 }
 
 template<MemOp mem_op> void SignalAddressErrorException(u64 bad_virt_addr)

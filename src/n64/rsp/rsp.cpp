@@ -1,7 +1,9 @@
 #include "rsp.hpp"
+#include "disassembler.hpp"
 #include "interface.hpp"
 #include "log.hpp"
 #include "n64_build_options.hpp"
+#include "rdp/rdp.hpp"
 
 #include <bit>
 #include <cstring>
@@ -19,16 +21,34 @@ void FetchDecodeExecuteInstruction()
     if constexpr (log_rsp_instructions) {
         current_instr_pc = pc;
     }
-    u32 instr_code;
-    std::memcpy(&instr_code, &imem[pc], 4); /* TODO: can pc be misaligned? */
-    instr_code = std::byteswap(instr_code);
+    u32 instr;
+    std::memcpy(&instr, &imem[pc], 4); /* TODO: can pc be misaligned? */
+    instr = std::byteswap(instr);
     pc = (pc + 4) & 0xFFF;
-    DecodeExecuteInstruction(instr_code);
+    disassembler::exec_rsp<CpuImpl::Interpreter>(instr);
+    AdvancePipeline(1);
 }
 
 u8* GetPointerToMemory(u32 addr)
 {
     return mem.data() + (addr & 0x1FFF);
+}
+
+void Jump(u32 target_address)
+{
+    jump_is_pending = true;
+    instructions_until_jump = 1;
+    jump_addr = target_address & 0xFFC;
+}
+
+void Link(u32 reg)
+{
+    gpr.set(reg, 0xFFF & (4 + (in_branch_delay_slot ? jump_addr : pc)));
+}
+
+void NotifyIllegalInstr(std::string_view instr)
+{
+    log_error(std::format("Illegal RSP instruction {} encountered.\n", instr));
 }
 
 void NotifyIllegalInstrCode(u32 instr_code)
@@ -43,13 +63,6 @@ void PowerOn()
     mem.fill(0);
     std::memset(&sp, 0, sizeof(sp));
     sp.status.halted = true;
-}
-
-void PrepareJump(u32 target_address)
-{
-    jump_is_pending = true;
-    instructions_until_jump = 1;
-    addr_to_jump_to = target_address;
 }
 
 template<std::signed_integral Int> Int ReadDMEM(u32 addr)
@@ -106,7 +119,7 @@ u64 Run(u64 rsp_cycles_to_run)
     while (p_cycle_counter < rsp_cycles_to_run) {
         if (jump_is_pending) {
             if (instructions_until_jump-- == 0) {
-                pc = addr_to_jump_to;
+                pc = jump_addr;
                 jump_is_pending = false;
                 in_branch_delay_slot = false;
             } else {
@@ -146,6 +159,18 @@ template<size_t access_size> void WriteMemoryCpu(u32 addr, s64 data)
     } else {
         WriteReg(addr, to_write);
     }
+}
+
+void mfc0(u32 rt, u32 rd)
+{
+    u32 reg_addr = (rd & 7) << 2;
+    rd & 8 ? gpr.set(rt, rdp::ReadReg(reg_addr)) : gpr.set(rt, rsp::ReadReg(reg_addr));
+}
+
+void mtc0(u32 rt, u32 rd)
+{
+    u32 reg_addr = (rd & 7) << 2;
+    rd & 8 ? rdp::WriteReg(reg_addr, gpr[rt]) : rsp::WriteReg(reg_addr, gpr[rt]);
 }
 
 template s8 ReadDMEM<s8>(u32);
