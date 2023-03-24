@@ -13,3 +13,6 @@
 [submodule "ext/yaml-cpp"]
 	path = ext/yaml-cpp
 	url = https://github.com/jbeder/yaml-cpp
+[submodule "ext/asmjit"]
+	path = ext/asmjit
+	url = https://github.com/asmjit/asmjit

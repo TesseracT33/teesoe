@@ -93,3 +93,11 @@ target_link_libraries(teesoe nfd)
 #### yaml-cpp #########################
 add_subdirectory(yaml-cpp)
 target_link_libraries(teesoe yaml-cpp)
+
+##### asmjit ####################
+set(ASMJIT_BUILD_TEST OFF)
+set(ASMJIT_STATIC ON)
+set(ASMJIT_BUILD_X86 X64)
+set(ASMJIT_BUILD_ARM ARM64)
+add_subdirectory(asmjit)
+target_link_libraries(teesoe asmjit)
