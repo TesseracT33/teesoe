@@ -36,7 +36,7 @@ enum class Cpu {
 
 enum class CpuImpl {
     Interpreter,
-    JIT
+    Recompiler
 };
 
 inline constexpr uint cpu_cycles_per_second = 93'750'000;

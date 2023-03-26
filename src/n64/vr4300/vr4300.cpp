@@ -8,7 +8,6 @@
 #include "memory/rdram.hpp"
 #include "mmu.hpp"
 #include "n64_build_options.hpp"
-#include "recompiler.hpp"
 
 #include <bit>
 #include <cstring>
@@ -19,6 +18,9 @@ namespace n64::vr4300 {
 
 static bool interrupt;
 
+template<CpuImpl cpu_impl> static void FetchDecodeExecuteInstruction();
+static void InitializeRegisters();
+
 void AddInitialEvents()
 {
     ReloadCountCompareEvent<true>();
@@ -28,9 +30,6 @@ void AdvancePipeline(u64 cycles)
 {
     p_cycle_counter += cycles;
     cop0.count += cycles;
-    // if constexpr (recompile_cpu) {
-    //     recompiler::current_block_cycle_counter += cycles;
-    // }
 }
 
 void CheckInterrupts()
@@ -52,11 +51,11 @@ void ClearInterruptPending(ExternalInterruptSource interrupt)
     cop0.cause.ip &= ~std::to_underlying(interrupt);
 }
 
-void FetchDecodeExecuteInstruction()
+template<CpuImpl cpu_impl> void FetchDecodeExecuteInstruction()
 {
     u32 instr = FetchInstruction(pc);
     pc += 4;
-    disassembler::exec_cpu<CpuImpl::Interpreter>(instr);
+    disassembler::exec_cpu<cpu_impl>(instr);
     AdvancePipeline(1);
 }
 
@@ -131,10 +130,6 @@ void PowerOn()
     InitCop1();
     InitializeMMU();
     InitCache();
-
-    if constexpr (recompile_cpu) {
-        recompiler::Initialize();
-    }
 }
 
 void Reset()
@@ -145,10 +140,10 @@ void Reset()
     HandleException();
 }
 
-u64 Run(u64 cpu_cycles_to_run)
+u64 RunInterpreter(u64 cpu_cycles)
 {
     p_cycle_counter = 0;
-    while (p_cycle_counter < cpu_cycles_to_run) {
+    while (p_cycle_counter < cpu_cycles) {
         if (jump_is_pending) {
             if (instructions_until_jump-- == 0) {
                 pc = jump_addr;
@@ -158,12 +153,38 @@ u64 Run(u64 cpu_cycles_to_run)
                 in_branch_delay_slot = true;
             }
         }
-        FetchDecodeExecuteInstruction();
+        FetchDecodeExecuteInstruction<CpuImpl::Interpreter>();
         if (exception_occurred) {
             HandleException();
         }
     }
-    return p_cycle_counter - cpu_cycles_to_run;
+    return p_cycle_counter - cpu_cycles;
+}
+
+u64 RunRecompiler(u64 cpu_cycles)
+{
+    p_cycle_counter = 0;
+    while (p_cycle_counter < cpu_cycles) {
+        u32 physical_pc = GetPhysicalPC();
+        Jit::Block* block = jit.get_block(physical_pc);
+        if (block) {
+            block->fun();
+            p_cycle_counter += block->cycles;
+            pc = block->end_virt_pc;
+        } else {
+            block = jit.init_block();
+            u16 cycles = p_cycle_counter;
+            do {
+                FetchDecodeExecuteInstruction<CpuImpl::Recompiler>();
+            } while (!jit.stop_block && (pc & 255));
+            block->cycles = p_cycle_counter - cycles;
+            block->end_virt_pc = pc;
+            jit.finalize_block();
+            block->fun();
+            pc = block->end_virt_pc;
+        }
+    }
+    return p_cycle_counter - cpu_cycles;
 }
 
 void SetInterruptPending(ExternalInterruptSource interrupt)

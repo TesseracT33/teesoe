@@ -7,6 +7,7 @@
 #include "vr4300/cop1.hpp"
 #include "vr4300/cop2.hpp"
 #include "vr4300/cpu_interpreter.hpp"
+#include "vr4300/cpu_recompiler.hpp"
 #include "vr4300/exceptions.hpp"
 
 #include <utility>
@@ -52,16 +53,34 @@
         else rsp::NotifyIllegalInstr(#instr);                         \
     }
 
-#define CPU(instr, ...)                                                               \
-    {                                                                                 \
-        if constexpr (cpu == Cpu::VR4300) vr4300::cpu_interpreter.instr(__VA_ARGS__); \
-        else rsp::cpu_interpreter.instr(__VA_ARGS__);                                 \
+#define CPU(instr, ...)                                       \
+    {                                                         \
+        if constexpr (cpu == Cpu::VR4300) {                   \
+            if constexpr (cpu_impl == CpuImpl::Interpreter) { \
+                vr4300::cpu_interpreter.instr(__VA_ARGS__);   \
+            } else {                                          \
+                vr4300::cpu_recompiler.instr(__VA_ARGS__);    \
+            }                                                 \
+        } else {                                              \
+            if constexpr (cpu_impl == CpuImpl::Interpreter) { \
+                rsp::cpu_interpreter.instr(__VA_ARGS__);      \
+            } else {                                          \
+                /* rsp::cpu_recompiler.instr(__VA_ARGS__); */ \
+            }                                                 \
+        }                                                     \
     }
 
-#define CPU_VR4300(instr, ...)                                                        \
-    {                                                                                 \
-        if constexpr (cpu == Cpu::VR4300) vr4300::cpu_interpreter.instr(__VA_ARGS__); \
-        else rsp::NotifyIllegalInstr(#instr);                                         \
+#define CPU_VR4300(instr, ...)                                \
+    {                                                         \
+        if constexpr (cpu == Cpu::VR4300) {                   \
+            if constexpr (cpu_impl == CpuImpl::Interpreter) { \
+                vr4300::cpu_interpreter.instr(__VA_ARGS__);   \
+            } else {                                          \
+                vr4300::cpu_recompiler.instr(__VA_ARGS__);    \
+            }                                                 \
+        } else {                                              \
+            rsp::NotifyIllegalInstr(#instr);                  \
+        }                                                     \
     }
 
 namespace n64::disassembler {
@@ -475,7 +494,7 @@ u32 vt_e_bug(u32 vt_e, u32 vd_e)
 }
 
 template void exec_cpu<CpuImpl::Interpreter>(u32);
-// template void disassemble_cpu<CpuImpl::JIT>(u32);
+template void exec_cpu<CpuImpl::Recompiler>(u32);
 template void exec_rsp<CpuImpl::Interpreter>(u32);
 // template void disassemble_rsp<CpuImpl::JIT>(u32);
 

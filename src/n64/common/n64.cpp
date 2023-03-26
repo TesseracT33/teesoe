@@ -96,7 +96,7 @@ void N64::run()
         vr4300::InitRun(hle_pif);
         running = true;
     }
-    scheduler::Run();
+    scheduler::Run<CpuImpl::Interpreter, CpuImpl::Interpreter>(); // TODO: make toggleable
 }
 
 void N64::stop()

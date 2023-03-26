@@ -88,7 +88,7 @@ void RemoveEvent(EventType event_type)
     }
 }
 
-void Run()
+template<CpuImpl vr4300_impl, CpuImpl rsp_impl> void Run()
 {
     Initialize();
 
@@ -96,7 +96,11 @@ void Run()
     while (!quit) {
         s64 cpu_step_dur = cpu_cycles_per_update - cpu_cycle_overrun;
         s64 rsp_step_dur = cpu_cycles_per_update - rsp_cycle_overrun;
-        cpu_cycle_overrun = vr4300::Run(cpu_step_dur);
+        if constexpr (vr4300_impl == CpuImpl::Interpreter) {
+            cpu_cycle_overrun = vr4300::RunInterpreter(cpu_step_dur);
+        } else {
+            cpu_cycle_overrun = vr4300::RunRecompiler(cpu_step_dur);
+        }
         rsp_cycle_overrun = rsp::Run(rsp_step_dur);
         ai::Step(cpu_step_dur);
         CheckEvents(cpu_step_dur);
@@ -107,5 +111,8 @@ void Stop()
 {
     quit = true;
 }
+
+template void Run<CpuImpl::Interpreter, CpuImpl::Interpreter>();
+template void Run<CpuImpl::Recompiler, CpuImpl::Interpreter>();
 
 } // namespace n64::scheduler

@@ -31,9 +31,9 @@ target_sources(teesoe PRIVATE
 	vr4300/cop1.cpp
 	vr4300/cop2.cpp
 	vr4300/cpu_interpreter.cpp
+	vr4300/cpu_recompiler.cpp
 	vr4300/exceptions.cpp
 	vr4300/mmu.cpp
-	vr4300/recompiler.cpp
 	vr4300/vr4300.cpp
  )
 

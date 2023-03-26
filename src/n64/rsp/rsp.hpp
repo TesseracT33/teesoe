@@ -10,27 +10,21 @@
 
 namespace n64::rsp {
 
-enum class Impl {
-    Interpreter,
-    JIT
-};
-
-u8* GetPointerToMemory(u32 addr);
-void PowerOn();
-u32 RdpReadCommand(u32 addr);
-u64 RdpReadCommandByteswapped(u32 addr);
-template<std::signed_integral Int> Int ReadMemoryCpu(u32 addr);
-u64 Run(u64 rsp_cycles_to_run);
-template<size_t access_size> void WriteMemoryCpu(u32 addr, s64 data);
-
 void AdvancePipeline(u64 cycles);
 void FetchDecodeExecuteInstruction();
+u8* GetPointerToMemory(u32 addr);
 void Jump(u32 target_address);
 void Link(u32 reg);
 void NotifyIllegalInstr(std::string_view instr);
 void NotifyIllegalInstrCode(u32 instr_code);
 template<std::signed_integral Int> Int ReadDMEM(u32 addr);
+void PowerOn();
+u32 RdpReadCommand(u32 addr);
+u64 RdpReadCommandByteswapped(u32 addr);
+template<std::signed_integral Int> Int ReadMemoryCpu(u32 addr);
+u64 Run(u64 rsp_cycles_to_run);
 template<std::signed_integral Int> void WriteDMEM(u32 addr, Int data);
+template<size_t access_size> void WriteMemoryCpu(u32 addr, s64 data);
 
 void mfc0(u32 rt, u32 rd);
 void mtc0(u32 rt, u32 rd);
