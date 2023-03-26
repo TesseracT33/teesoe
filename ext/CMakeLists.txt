@@ -32,7 +32,6 @@ target_include_directories(imgui PUBLIC
 	SDL/include
 )
 target_compile_definitions(imgui PUBLIC VK_NO_PROTOTYPES)
-target_link_libraries(imgui SDL3-static)
 target_link_libraries(teesoe imgui)
 
 ##### parallel-rdp-standalone #########################
