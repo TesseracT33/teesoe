@@ -12,9 +12,6 @@ target_sources(teesoe PRIVATE
 	frontend/loader.cpp
 	frontend/message.cpp
 	frontend/vulkan.cpp
-
-	jit/jit.cpp	
-	jit/x86.cpp
 )
 
 target_include_directories(teesoe PRIVATE

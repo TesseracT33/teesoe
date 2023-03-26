@@ -12,7 +12,9 @@
 
 class Jit {
     struct Block;
+
     using Func = void (*)();
+
     struct Pool {
         std::array<Block*, 64> blocks;
     };
@@ -42,7 +44,7 @@ public:
         Pool*& pool = pools[pc >> 8]; // each pool 6 bits, each instruction 2 bits
         if (!pool) pool = reinterpret_cast<Pool*>(allocator.acquire(sizeof(Pool)));
         Block* block = pool->blocks[pc >> 2 & 63];
-        if (!block) block = (Block*)emit(pc);
+        // if (!block) block = (Block*)emit(pc);
         return block;
     }
 
@@ -84,7 +86,7 @@ private:
     private:
         std::vector<u8> memory;
         size_t index;
-    } allocator;
+    } allocator{ 4 * 1024 * 1024 };
 
     asmjit::CodeHolder code; // Holds code and relocation information.
     asmjit::JitRuntime runtime;
