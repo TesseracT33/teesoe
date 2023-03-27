@@ -5,6 +5,7 @@
 #include "jit/jit.hpp"
 
 #include <bit>
+#include <cassert>
 
 namespace mips {
 
@@ -72,7 +73,11 @@ struct Recompiler : public Cpu<GprInt, LoHiInt, PcInt, GprBaseInt> {
         return v;
     }
 
-    void set_gpr(u32 idx, asmjit::x86::Gp vreg) const { c.mov(gpr_ptr(idx), vreg); }
+    void set_gpr(u32 idx, asmjit::x86::Gp vreg) const
+    {
+        assert(idx);
+        c.mov(gpr_ptr(idx), vreg);
+    }
 
     void add(u32 rs, u32 rt, u32 rd) const {}
 
@@ -82,6 +87,7 @@ struct Recompiler : public Cpu<GprInt, LoHiInt, PcInt, GprBaseInt> {
 
     void addu(u32 rs, u32 rt, u32 rd) const
     {
+        if (!rd) return; // TODO: this versus setting gpr[0] after every instruction?
         asmjit::x86::Gp v0 = get_gpr32(rs);
         asmjit::x86::Gp v1 = get_gpr32(rt);
         c.add(v0, v1);
@@ -96,6 +102,7 @@ struct Recompiler : public Cpu<GprInt, LoHiInt, PcInt, GprBaseInt> {
 
     void and_(u32 rs, u32 rt, u32 rd) const
     {
+        if (!rd) return;
         asmjit::x86::Gp v0 = get_gpr(rs);
         asmjit::x86::Gp v1 = get_gpr(rt);
         c.and_(v0, v1);
@@ -104,7 +111,16 @@ struct Recompiler : public Cpu<GprInt, LoHiInt, PcInt, GprBaseInt> {
 
     void andi(u32 rs, u32 rt, u16 imm) const {}
 
-    void beq(u32 rs, u32 rt, s16 imm) const {}
+    void beq(u32 rs, u32 rt, s16 imm) const
+    {
+        asmjit::x86::Gp v0 = get_gpr(rs);
+        asmjit::x86::Gp v1 = get_gpr(rt);
+        asmjit::Label l_branch = c.newLabel();
+        c.cmp(v0, v1);
+        c.je(l_branch);
+        c.bind(l_branch);
+        jit.branch_hit = 1;
+    }
 
     void beql(u32 rs, u32 rt, s16 imm) const {}
 

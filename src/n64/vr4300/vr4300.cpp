@@ -10,6 +10,7 @@
 #include "n64_build_options.hpp"
 
 #include <bit>
+#include <cassert>
 #include <cstring>
 #include <format>
 #include <utility>
@@ -18,8 +19,8 @@ namespace n64::vr4300 {
 
 static bool interrupt;
 
-template<CpuImpl cpu_impl> static void FetchDecodeExecuteInstruction();
 static void InitializeRegisters();
+static void JitInstructionEpilogue();
 
 void AddInitialEvents()
 {
@@ -49,14 +50,6 @@ void CheckInterrupts()
 void ClearInterruptPending(ExternalInterruptSource interrupt)
 {
     cop0.cause.ip &= ~std::to_underlying(interrupt);
-}
-
-template<CpuImpl cpu_impl> void FetchDecodeExecuteInstruction()
-{
-    u32 instr = FetchInstruction(pc);
-    pc += 4;
-    disassembler::exec_cpu<cpu_impl>(instr);
-    AdvancePipeline(1);
 }
 
 u64 GetElapsedCycles()
@@ -101,6 +94,20 @@ void InitRun(bool hle_pif)
     } else {
         SignalException<Exception::ColdReset>();
         HandleException();
+    }
+}
+
+void JitInstructionEpilogue()
+{
+    pc += 4;
+    if (jump_is_pending) {
+        if (instructions_until_jump-- == 0) {
+            pc = jump_addr;
+            jump_is_pending = false;
+            in_branch_delay_slot = false;
+        } else {
+            in_branch_delay_slot = true;
+        }
     }
 }
 
@@ -153,7 +160,10 @@ u64 RunInterpreter(u64 cpu_cycles)
                 in_branch_delay_slot = true;
             }
         }
-        FetchDecodeExecuteInstruction<CpuImpl::Interpreter>();
+        u32 instr = FetchInstruction(pc);
+        pc += 4;
+        disassembler::exec_cpu<CpuImpl::Interpreter>(instr);
+        AdvancePipeline(1);
         if (exception_occurred) {
             HandleException();
         }
@@ -163,25 +173,30 @@ u64 RunInterpreter(u64 cpu_cycles)
 
 u64 RunRecompiler(u64 cpu_cycles)
 {
+    auto exec_block = [](Jit::Block* block) {
+        block->func();
+        AdvancePipeline(block->cycles);
+    };
+
     p_cycle_counter = 0;
     while (p_cycle_counter < cpu_cycles) {
         u32 physical_pc = GetPhysicalPC();
-        Jit::Block* block = jit.get_block(physical_pc);
-        if (block) {
-            block->fun();
-            p_cycle_counter += block->cycles;
-            pc = block->end_virt_pc;
+        auto [block, compiled] = jit.get_block(physical_pc);
+        assert(block);
+        if (compiled) {
+            exec_block(block);
         } else {
-            block = jit.init_block();
-            u16 cycles = p_cycle_counter;
+            u32 addr = pc;
             do {
-                FetchDecodeExecuteInstruction<CpuImpl::Recompiler>();
-            } while (!jit.stop_block && (pc & 255));
-            block->cycles = p_cycle_counter - cycles;
-            block->end_virt_pc = pc;
-            jit.finalize_block();
-            block->fun();
-            pc = block->end_virt_pc;
+                u32 instr = FetchInstruction(addr);
+                addr += 4;
+                disassembler::exec_cpu<CpuImpl::Recompiler>(instr);
+                jit.compiler.call(JitInstructionEpilogue);
+                jit.cycles++;
+            } while (!jit.branched && (pc & 255));
+            block->cycles = jit.cycles;
+            jit.finalize_block(block);
+            exec_block(block);
         }
     }
     return p_cycle_counter - cpu_cycles;
