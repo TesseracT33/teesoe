@@ -3,6 +3,7 @@
 #include "asmjit/core/codeholder.h"
 #include "asmjit/core/jitruntime.h"
 #include "asmjit/x86/x86compiler.h"
+#include "bump_allocator.hpp"
 #include "types.hpp"
 
 #include <array>
@@ -29,20 +30,11 @@ public:
     u64 cycles;
 
 private:
-    struct Allocator {
-        Allocator(size_t size);
-        u8* acquire(size_t size);
-
-    private:
-        std::vector<u8> memory;
-        size_t index;
-    };
-
     struct Pool {
         std::array<Block*, 64> blocks;
     };
 
-    Allocator allocator;
+    BumpAllocator allocator;
     asmjit::CodeHolder code; // Holds code and relocation information.
     asmjit::JitRuntime runtime;
     std::vector<Pool*> pools;

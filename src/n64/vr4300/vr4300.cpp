@@ -99,7 +99,7 @@ void InitRun(bool hle_pif)
 
 void JitInstructionEpilogue()
 {
-    pc += 4;
+    jit.compiler.add(asmjit::x86::Mem(pc), 4);
     if (jump_is_pending) {
         if (instructions_until_jump-- == 0) {
             pc = jump_addr;
@@ -191,7 +191,7 @@ u64 RunRecompiler(u64 cpu_cycles)
                 u32 instr = FetchInstruction(addr);
                 addr += 4;
                 disassembler::exec_cpu<CpuImpl::Recompiler>(instr);
-                jit.compiler.call(JitInstructionEpilogue);
+                JitInstructionEpilogue();
                 jit.cycles++;
             } while (!jit.branched && (pc & 255));
             block->cycles = jit.cycles;

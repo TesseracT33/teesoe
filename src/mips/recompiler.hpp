@@ -57,11 +57,7 @@ struct Recompiler : public Cpu<GprInt, LoHiInt, PcInt, GprBaseInt> {
 
     asmjit::x86::Mem gpr_ptr(u32 idx) const
     {
-        if constexpr (mips32) {
-            return asmjit::x86::dword_ptr(std::bit_cast<u64>(gpr.ptr(idx)));
-        } else {
-            return asmjit::x86::qword_ptr(std::bit_cast<u64>(gpr.ptr(idx)));
-        }
+        return asmjit::x86::ptr(std::bit_cast<u64>(gpr.ptr(idx)), sizeof(GprBaseInt));
     }
 
     asmjit::x86::Gp get_gpr32(u32 idx) const { return c.newGpd(); }
@@ -72,6 +68,8 @@ struct Recompiler : public Cpu<GprInt, LoHiInt, PcInt, GprBaseInt> {
         c.mov(v, gpr_ptr(idx));
         return v;
     }
+
+    asmjit::x86::Mem pc_ptr() const { return asmjit::x86::ptr(std::bit_cast<u64>(&pc), sizeof(PcInt)); }
 
     void set_gpr(u32 idx, asmjit::x86::Gp vreg) const
     {
@@ -88,8 +86,7 @@ struct Recompiler : public Cpu<GprInt, LoHiInt, PcInt, GprBaseInt> {
     void addu(u32 rs, u32 rt, u32 rd) const
     {
         if (!rd) return; // TODO: this versus setting gpr[0] after every instruction?
-        asmjit::x86::Gp v0 = get_gpr32(rs);
-        asmjit::x86::Gp v1 = get_gpr32(rt);
+        asmjit::x86::Gp v0 = get_gpr32(rs), v1 = get_gpr(rt);
         c.add(v0, v1);
         if constexpr (mips32) {
             set_gpr(rd, v0);
@@ -103,8 +100,7 @@ struct Recompiler : public Cpu<GprInt, LoHiInt, PcInt, GprBaseInt> {
     void and_(u32 rs, u32 rt, u32 rd) const
     {
         if (!rd) return;
-        asmjit::x86::Gp v0 = get_gpr(rs);
-        asmjit::x86::Gp v1 = get_gpr(rt);
+        asmjit::x86::Gp v0 = get_gpr(rs), v1 = get_gpr(rt);
         c.and_(v0, v1);
         set_gpr(rd, v0);
     }
@@ -113,16 +109,35 @@ struct Recompiler : public Cpu<GprInt, LoHiInt, PcInt, GprBaseInt> {
 
     void beq(u32 rs, u32 rt, s16 imm) const
     {
-        asmjit::x86::Gp v0 = get_gpr(rs);
-        asmjit::x86::Gp v1 = get_gpr(rt);
-        asmjit::Label l_branch = c.newLabel();
+        asmjit::x86::Gp v0 = get_gpr(rs), v1 = get_gpr(rt);
+        asmjit::Label l_nobranch = c.newLabel();
         c.cmp(v0, v1);
-        c.je(l_branch);
-        c.bind(l_branch);
+        c.jne(l_nobranch);
+        c.mov(v0, imm); // TODO: does it sign-extend?
+        c.shl(v0, 2);
+        c.add(v0, pc_ptr());
+        // TODO: branch
+        c.bind(l_nobranch);
         jit.branch_hit = 1;
     }
 
-    void beql(u32 rs, u32 rt, s16 imm) const {}
+    void beql(u32 rs, u32 rt, s16 imm) const
+    {
+        asmjit::x86::Gp v0 = get_gpr(rs), v1 = get_gpr(rt);
+        asmjit::Label l_nobranch = c.newLabel(), l_exit = c.newLabel();
+        c.cmp(v0, v1);
+        c.jne(l_nobranch);
+        c.mov(v0, imm); // TODO: does it sign-extend?
+        c.shl(v0, 2);
+        c.add(v0, pc_ptr());
+        // TODO: branch
+        c.jmp(l_exit);
+        c.bind(l_nobranch);
+        c.add(pc_ptr(), 4);
+        c.ret();
+        c.bind(l_exit);
+        jit.branch_hit = 1;
+    }
 
     void bgez(u32 rs, s16 imm) const {}
 
