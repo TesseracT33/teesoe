@@ -99,16 +99,23 @@ void InitRun(bool hle_pif)
 
 void JitInstructionEpilogue()
 {
+    // TODO: optimize to only be done right before branch instruction or at the end of a block?
     jit.compiler.add(asmjit::x86::Mem(pc), 4);
-    if (jump_is_pending) {
-        if (instructions_until_jump-- == 0) {
-            pc = jump_addr;
-            jump_is_pending = false;
-            in_branch_delay_slot = false;
-        } else {
-            in_branch_delay_slot = true;
-        }
-    }
+}
+
+void JitInstructionEpilogueFirstBlockInstruction()
+{
+    asmjit::x86::Gp v0 = jit.compiler.newGpw();
+    asmjit::Label l_exit = jit.compiler.newLabel();
+    jit.compiler.cmp(asmjit::x86::Mem(std::bit_cast<u64>(&in_branch_delay_slot)), 0);
+    jit.compiler.je(l_exit);
+    asmjit::x86::Gp v1 = jit.compiler.newGpq();
+    jit.compiler.mov(asmjit::x86::Mem(std::bit_cast<u64>(&in_branch_delay_slot)), 0);
+    jit.compiler.mov(v1, asmjit::x86::Mem(std::bit_cast<u64>(&jump_addr)));
+    jit.compiler.mov(asmjit::x86::Mem(std::bit_cast<u64>(&pc)), v1);
+    jit.compiler.ret();
+    jit.compiler.bind(l_exit);
+    jit.compiler.add(asmjit::x86::Mem(pc), 4);
 }
 
 void Jump(u64 target_address)
@@ -186,14 +193,20 @@ u64 RunRecompiler(u64 cpu_cycles)
         if (compiled) {
             exec_block(block);
         } else {
-            u32 addr = pc;
-            do {
+            auto one_instr = [addr = pc]() mutable {
                 u32 instr = FetchInstruction(addr);
                 addr += 4;
                 disassembler::exec_cpu<CpuImpl::Recompiler>(instr);
-                JitInstructionEpilogue();
                 jit.cycles++;
-            } while (!jit.branched && (pc & 255));
+            };
+            one_instr();
+            JitInstructionEpilogueFirstBlockInstruction();
+            while (!jit.branched && (pc & 255)) {
+                // If the branch delay slot instruction fits within the block boundary, include it before stopping
+                jit.branched = jit.branch_hit;
+                one_instr();
+                JitInstructionEpilogue();
+            }
             block->cycles = jit.cycles;
             jit.finalize_block(block);
             exec_block(block);

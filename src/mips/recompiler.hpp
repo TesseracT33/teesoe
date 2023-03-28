@@ -5,7 +5,6 @@
 #include "jit/jit.hpp"
 
 #include <bit>
-#include <cassert>
 
 namespace mips {
 
@@ -55,29 +54,24 @@ struct Recompiler : public Cpu<GprInt, LoHiInt, PcInt, GprBaseInt> {
     Jit& jit;
     asmjit::x86::Compiler& c;
 
-    asmjit::x86::Mem gpr_ptr(u32 idx) const
+    void add(u32 rs, u32 rt, u32 rd) const
     {
-        return asmjit::x86::ptr(std::bit_cast<u64>(gpr.ptr(idx)), sizeof(GprBaseInt));
+        asmjit::x86::Gp v0 = get_gpr32(rs), v1 = get_gpr32(rt);
+        asmjit::Label l_noexception = c.newLabel();
+        c.add(v0, v1);
+        c.jno(l_noexception);
+        c.call(integer_overflow_exception);
+        if (rd) {
+            asmjit::Label l_end = c.newLabel();
+            c.jmp(l_end);
+            c.bind(l_noexception);
+            set_gpr32(rd, v0);
+            c.bind(l_end);
+        } else {
+            c.bind(l_noexception);
+        }
+        jit.branch_hit = 1;
     }
-
-    asmjit::x86::Gp get_gpr32(u32 idx) const { return c.newGpd(); }
-
-    asmjit::x86::Gp get_gpr(u32 idx) const
-    {
-        asmjit::x86::Gp v = mips32 ? c.newGpd() : c.newGpq();
-        c.mov(v, gpr_ptr(idx));
-        return v;
-    }
-
-    asmjit::x86::Mem pc_ptr() const { return asmjit::x86::ptr(std::bit_cast<u64>(&pc), sizeof(PcInt)); }
-
-    void set_gpr(u32 idx, asmjit::x86::Gp vreg) const
-    {
-        assert(idx);
-        c.mov(gpr_ptr(idx), vreg);
-    }
-
-    void add(u32 rs, u32 rt, u32 rd) const {}
 
     void addi(u32 rs, u32 rt, s16 imm) const {}
 
@@ -86,15 +80,9 @@ struct Recompiler : public Cpu<GprInt, LoHiInt, PcInt, GprBaseInt> {
     void addu(u32 rs, u32 rt, u32 rd) const
     {
         if (!rd) return; // TODO: this versus setting gpr[0] after every instruction?
-        asmjit::x86::Gp v0 = get_gpr32(rs), v1 = get_gpr(rt);
+        asmjit::x86::Gp v0 = get_gpr32(rs), v1 = get_gpr32(rt);
         c.add(v0, v1);
-        if constexpr (mips32) {
-            set_gpr(rd, v0);
-        } else {
-            asmjit::x86::Gp v2 = c.newGpq();
-            c.movsxd(v2, v0);
-            set_gpr(rd, v2);
-        }
+        set_gpr32(rd, v0);
     }
 
     void and_(u32 rs, u32 rt, u32 rd) const
@@ -105,7 +93,13 @@ struct Recompiler : public Cpu<GprInt, LoHiInt, PcInt, GprBaseInt> {
         set_gpr(rd, v0);
     }
 
-    void andi(u32 rs, u32 rt, u16 imm) const {}
+    void andi(u32 rs, u32 rt, u16 imm) const
+    {
+        if (!rt) return;
+        asmjit::x86::Gp v0 = get_gpr(rs);
+        c.and_(v0, imm);
+        set_gpr(rt, v0);
+    }
 
     void beq(u32 rs, u32 rt, s16 imm) const
     {
@@ -113,10 +107,10 @@ struct Recompiler : public Cpu<GprInt, LoHiInt, PcInt, GprBaseInt> {
         asmjit::Label l_nobranch = c.newLabel();
         c.cmp(v0, v1);
         c.jne(l_nobranch);
-        c.mov(v0, imm); // TODO: does it sign-extend?
+        c.mov(v0, imm);
         c.shl(v0, 2);
         c.add(v0, pc_ptr());
-        // TODO: branch
+        c.call(jump);
         c.bind(l_nobranch);
         jit.branch_hit = 1;
     }
@@ -124,18 +118,18 @@ struct Recompiler : public Cpu<GprInt, LoHiInt, PcInt, GprBaseInt> {
     void beql(u32 rs, u32 rt, s16 imm) const
     {
         asmjit::x86::Gp v0 = get_gpr(rs), v1 = get_gpr(rt);
-        asmjit::Label l_nobranch = c.newLabel(), l_exit = c.newLabel();
+        asmjit::Label l_nobranch = c.newLabel(), l_end = c.newLabel();
         c.cmp(v0, v1);
         c.jne(l_nobranch);
-        c.mov(v0, imm); // TODO: does it sign-extend?
+        c.mov(v0, imm);
         c.shl(v0, 2);
         c.add(v0, pc_ptr());
-        // TODO: branch
-        c.jmp(l_exit);
+        c.call(jump);
+        c.jmp(l_end);
         c.bind(l_nobranch);
         c.add(pc_ptr(), 4);
         c.ret();
-        c.bind(l_exit);
+        c.bind(l_end);
         jit.branch_hit = 1;
     }
 
@@ -284,6 +278,36 @@ struct Recompiler : public Cpu<GprInt, LoHiInt, PcInt, GprBaseInt> {
     void xor_(u32 rs, u32 rt, u32 rd) const {}
 
     void xori(u32 rs, u32 rt, u16 imm) const {}
+
+private:
+    asmjit::x86::Mem gpr_ptr(u32 idx) const
+    {
+        return asmjit::x86::ptr(std::bit_cast<u64>(gpr.ptr(idx)), sizeof(GprBaseInt));
+    }
+
+    asmjit::x86::Gp get_gpr32(u32 idx) const { return c.newGpd(); }
+
+    asmjit::x86::Gp get_gpr(u32 idx) const
+    {
+        asmjit::x86::Gp v = mips32 ? c.newGpd() : c.newGpq();
+        c.mov(v, gpr_ptr(idx));
+        return v;
+    }
+
+    asmjit::x86::Mem pc_ptr() const { return asmjit::x86::ptr(std::bit_cast<u64>(&pc), sizeof(PcInt)); }
+
+    void set_gpr(u32 idx, asmjit::x86::Gp vreg) const { c.mov(gpr_ptr(idx), vreg); }
+
+    void set_gpr32(u32 idx, asmjit::x86::Gp vreg) const
+    {
+        if constexpr (mips32) {
+            set_gpr(idx, vreg);
+        } else {
+            asmjit::x86::Gp v0 = c.newGpq();
+            c.movsxd(v0, vreg);
+            set_gpr(idx, v0);
+        }
+    }
 };
 
 } // namespace mips
