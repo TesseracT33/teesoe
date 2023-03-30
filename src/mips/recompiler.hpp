@@ -79,7 +79,7 @@ struct Recompiler : public Cpu<GprInt, LoHiInt, PcInt, GprBaseInt> {
 
     void addu(u32 rs, u32 rt, u32 rd) const
     {
-        if (!rd) return; // TODO: this versus setting gpr[0] after every instruction?
+        if (!rd) return;
         asmjit::x86::Gp v0 = get_gpr32(rs), v1 = get_gpr32(rt);
         c.add(v0, v1);
         set_gpr32(rd, v0);
@@ -88,9 +88,13 @@ struct Recompiler : public Cpu<GprInt, LoHiInt, PcInt, GprBaseInt> {
     void and_(u32 rs, u32 rt, u32 rd) const
     {
         if (!rd) return;
-        asmjit::x86::Gp v0 = get_gpr(rs), v1 = get_gpr(rt);
-        c.and_(v0, v1);
-        set_gpr(rd, v0);
+        if (!rs || !rt) {
+            // c.mov(rd, 0);
+        } else {
+            asmjit::x86::Gp v0 = get_gpr(rs), v1 = get_gpr(rt);
+            c.and_(v0, v1);
+            set_gpr(rd, v0);
+        }
     }
 
     void andi(u32 rs, u32 rt, u16 imm) const
@@ -167,29 +171,114 @@ struct Recompiler : public Cpu<GprInt, LoHiInt, PcInt, GprBaseInt> {
 
     void daddiu(u32 rs, u32 rt, s16 imm) const {}
 
-    void daddu(u32 rs, u32 rt, u32 rd) const {}
+    void daddu(u32 rs, u32 rt, u32 rd) const
+    {
+        if (!rd) return;
+        asmjit::x86::Gp v0 = get_gpr(rs), v1 = get_gpr(rt);
+        c.add(v0, v1);
+        set_gpr(rd, v0);
+    }
 
     void div(u32 rs, u32 rt) const {}
 
-    void divu(u32 rs, u32 rt) const {}
+    void divu(u32 rs, u32 rt) const
+    {
+        // asmjit::Label l_div = c.newLabel(), l_end = c.newLabel();
+        // c.mov(asmjit::x86::eax, gpr_ptr32(rs));
+        // c.mov(asmjit::x86::edx, gpr_ptr32(rt));
+        // c.cmp(asmjit::x86::edx, 0);
+        // c.jne(l_div);
+        // c.mov(lo_ptr(), -1);
+        // c.mov(hi_ptr(), asmjit::x86::eax);
+        // c.jmp(l_end);
+        // c.bind(l_div);
+        // c.div(asmjit::x86::edx);
+        // if constexpr (mips32) {
+        //     c.mov(lo_ptr(), asmjit::x86::eax);
+        //     c.mov(hi_ptr(), asmjit::x86::edx);
+        // } else {
+        //     c.cdqe(asmjit::x86::rax);
+        //     c.movsxd(asmjit::x86::rdx, asmjit::x86::edx);
+        //     c.mov(lo_ptr(), asmjit::x86::eax);
+        //     c.mov(hi_ptr(), asmjit::x86::edx);
+        // }
+        // c.bind(l_end);
+    }
 
-    void dsll(u32 rt, u32 rd, u32 sa) const {}
+    void dsll(u32 rt, u32 rd, u32 sa) const
+    {
+        if (!rd) return;
+        asmjit::x86::Gp vrt = get_gpr(rt);
+        c.shl(vrt, sa);
+        set_gpr(rd, vrt);
+    }
 
-    void dsll32(u32 rt, u32 rd, u32 sa) const {}
+    void dsll32(u32 rt, u32 rd, u32 sa) const
+    {
+        if (!rd) return;
+        asmjit::x86::Gp vrt = get_gpr(rt);
+        c.shl(vrt, sa + 32);
+        set_gpr(rd, vrt);
+    }
 
-    void dsllv(u32 rs, u32 rt, u32 rd) const {}
+    void dsllv(u32 rs, u32 rt, u32 rd) const
+    {
+        if (!rd) return;
+        asmjit::x86::Gp vrt = get_gpr(rt);
+        // c.mov(asmjit::x86::ecx, gpr_ptr32(rs));
+        c.shl(vrt, asmjit::x86::ecx);
+        set_gpr(rd, vrt);
+    }
 
-    void dsra(u32 rt, u32 rd, u32 sa) const {}
+    void dsra(u32 rt, u32 rd, u32 sa) const
+    {
+        if (!rd) return;
+        asmjit::x86::Gp vrt = get_gpr(rt);
+        c.sar(vrt, sa);
+        set_gpr(rd, vrt);
+    }
 
-    void dsra32(u32 rt, u32 rd, u32 sa) const {}
+    void dsra32(u32 rt, u32 rd, u32 sa) const
+    {
+        if (!rd) return;
+        asmjit::x86::Gp vrt = get_gpr(rt);
+        c.sar(vrt, sa + 32);
+        set_gpr(rd, vrt);
+    }
 
-    void dsrav(u32 rs, u32 rt, u32 rd) const {}
+    void dsrav(u32 rs, u32 rt, u32 rd) const
+    {
+        if (!rd) return;
+        asmjit::x86::Gp vrt = get_gpr(rt);
+        // c.mov(asmjit::x86::ecx, gpr_ptr32(rs));
+        c.sar(vrt, asmjit::x86::ecx);
+        set_gpr(rd, vrt);
+    }
 
-    void dsrl(u32 rt, u32 rd, u32 sa) const {}
+    void dsrl(u32 rt, u32 rd, u32 sa) const
+    {
+        if (!rd) return;
+        asmjit::x86::Gp vrt = get_gpr(rt);
+        c.shr(vrt, sa);
+        set_gpr(rd, vrt);
+    }
 
-    void dsrl32(u32 rt, u32 rd, u32 sa) const {}
+    void dsrl32(u32 rt, u32 rd, u32 sa) const
+    {
+        if (!rd) return;
+        asmjit::x86::Gp vrt = get_gpr(rt);
+        c.shr(vrt, sa + 32);
+        set_gpr(rd, vrt);
+    }
 
-    void dsrlv(u32 rs, u32 rt, u32 rd) const {}
+    void dsrlv(u32 rs, u32 rt, u32 rd) const
+    {
+        if (!rd) return;
+        asmjit::x86::Gp vrt = get_gpr(rt);
+        // c.mov(asmjit::x86::ecx, gpr_ptr32(rs));
+        c.shr(vrt, asmjit::x86::ecx);
+        set_gpr(rd, vrt);
+    }
 
     void dsub(u32 rs, u32 rt, u32 rd) const {}
 
@@ -203,7 +292,10 @@ struct Recompiler : public Cpu<GprInt, LoHiInt, PcInt, GprBaseInt> {
 
     void jr(u32 rs) const {}
 
-    void lui(u32 rt, s16 imm) const {}
+    void lui(u32 rt, s16 imm) const
+    {
+        if (!rt) return;
+    }
 
     void mfhi(u32 rd) const {}
 
@@ -221,9 +313,22 @@ struct Recompiler : public Cpu<GprInt, LoHiInt, PcInt, GprBaseInt> {
 
     void multu(u32 rs, u32 rt) const {}
 
-    void nor(u32 rs, u32 rt, u32 rd) const {}
+    void nor(u32 rs, u32 rt, u32 rd) const
+    {
+        if (!rd) return;
+        asmjit::x86::Gp v0 = get_gpr(rs), v1 = get_gpr(rt);
+        c.or_(v0, v1);
+        c.not_(v0);
+        set_gpr(rd, v0);
+    }
 
-    void or_(u32 rs, u32 rt, u32 rd) const {}
+    void or_(u32 rs, u32 rt, u32 rd) const
+    {
+        if (!rd) return;
+        asmjit::x86::Gp v0 = get_gpr(rs), v1 = get_gpr(rt);
+        c.or_(v0, v1);
+        set_gpr(rd, v0);
+    }
 
     void ori(u32 rs, u32 rt, u16 imm) const {}
 
@@ -275,7 +380,13 @@ struct Recompiler : public Cpu<GprInt, LoHiInt, PcInt, GprBaseInt> {
 
     void tnei(u32 rs, s16 imm) const {}
 
-    void xor_(u32 rs, u32 rt, u32 rd) const {}
+    void xor_(u32 rs, u32 rt, u32 rd) const
+    {
+        if (!rd) return;
+        asmjit::x86::Gp v0 = get_gpr(rs), v1 = get_gpr(rt);
+        c.xor_(v0, v1);
+        set_gpr(rd, v0);
+    }
 
     void xori(u32 rs, u32 rt, u16 imm) const {}
 
@@ -293,6 +404,10 @@ private:
         c.mov(v, gpr_ptr(idx));
         return v;
     }
+
+    asmjit::x86::Mem lo_ptr() const { return asmjit::x86::ptr(std::bit_cast<u64>(&lo), sizeof(LoHiInt)); }
+
+    asmjit::x86::Mem hi_ptr() const { return asmjit::x86::ptr(std::bit_cast<u64>(&hi), sizeof(LoHiInt)); }
 
     asmjit::x86::Mem pc_ptr() const { return asmjit::x86::ptr(std::bit_cast<u64>(&pc), sizeof(PcInt)); }
 
