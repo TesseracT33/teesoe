@@ -294,7 +294,7 @@ template<std::integral Int> void Recompiler::store(u32 rs, u32 rt, s16 imm) cons
 {
     c.mov(r[0], gpr_ptr(rs));
     c.add(r[0], imm);
-    c.mov(r[1], gpr_ptr(rt));
+    c.mov(r[1], gpr_ptr(rt)); // TODO: is it enough?
     c.call(WriteVirtual<sizeof(Int)>);
 }
 
@@ -307,7 +307,7 @@ template<std::integral Int> void Recompiler::store_conditional(u32 rs, u32 rt, s
     c.bind(l_end);
     if (rt) {
         c.movzx(eax, mem(&ll_bit));
-        c.mov(gpr_ptr(rt), rax);
+        set_gpr(rt, rax);
     }
 }
 

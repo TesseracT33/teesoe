@@ -1,5 +1,6 @@
 #pragma once
 
+#include "jit/jit.hpp"
 #include "mips/gpr.hpp"
 #include "types.hpp"
 
@@ -43,6 +44,9 @@ inline constinit std::array<u8, 0x2000> mem{}; /* 0 - $FFF: data memory; $1000 -
 
 inline constinit u8* const dmem = mem.data();
 inline constinit u8* const imem = mem.data() + 0x1000;
+
+// recompiler
+inline Jit jit;
 
 /* Debugging */
 inline u32 current_instr_pc;
