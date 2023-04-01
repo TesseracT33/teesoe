@@ -23,6 +23,8 @@ struct Interpreter : public mips::Interpreter<s32, u32, u32> {
     void ll(u32 rs, u32 rt, s16 imm) const;
     void lw(u32 rs, u32 rt, s16 imm) const;
     void lwu(u32 rs, u32 rt, s16 imm) const;
+    void mfc0(u32 rt, u32 rd) const;
+    void mtc0(u32 rt, u32 rd) const;
     void sb(u32 rs, u32 rt, s16 imm) const;
     void sc(u32 rs, u32 rt, s16 imm) const;
     void sh(u32 rs, u32 rt, s16 imm) const;

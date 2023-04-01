@@ -27,9 +27,6 @@ u64 Run(u64 rsp_cycles_to_run);
 template<std::signed_integral Int> void WriteDMEM(u32 addr, Int data);
 template<size_t access_size> void WriteMemoryCpu(u32 addr, s64 data);
 
-void mfc0(u32 rt, u32 rd);
-void mtc0(u32 rt, u32 rd);
-
 inline bool in_branch_delay_slot;
 inline bool jump_is_pending;
 inline bool ll_bit;

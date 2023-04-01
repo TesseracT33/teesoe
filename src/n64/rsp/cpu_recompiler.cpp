@@ -1,6 +1,7 @@
 #include "cpu_recompiler.hpp"
 #include "interface.hpp"
 #include "interface/mi.hpp"
+#include "rdp/rdp.hpp"
 #include "rsp.hpp"
 
 namespace n64::rsp {
@@ -92,6 +93,20 @@ void Recompiler::lw(u32 rs, u32 rt, s16 imm) const
 void Recompiler::lwu(u32 rs, u32 rt, s16 imm) const
 {
     load<u32>(rs, rt, imm);
+}
+
+void Recompiler::mfc0(u32 rt, u32 rd) const
+{
+    c.mov(r[0], (rd & 7) << 2);
+    c.call(rd & 8 ? rdp::ReadReg : rsp::ReadReg); // read regardless of rt, since read can have side-effects
+    if (rt) set_gpr(rt, eax);
+}
+
+void Recompiler::mtc0(u32 rt, u32 rd) const
+{
+    c.mov(r[0], (rd & 7) << 2);
+    c.mov(r[1], gpr_ptr(rt));
+    c.call(rd & 8 ? rdp::WriteReg : rsp::WriteReg);
 }
 
 void Recompiler::sb(u32 rs, u32 rt, s16 imm) const

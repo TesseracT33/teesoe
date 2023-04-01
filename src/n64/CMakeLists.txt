@@ -25,7 +25,8 @@ target_sources(teesoe PRIVATE
 	rsp/cpu_recompiler.cpp
 	rsp/interface.cpp
 	rsp/rsp.cpp
-	rsp/vu.cpp
+	rsp/vu_interpreter.cpp
+	rsp/vu_recompiler.cpp
 
 	vr4300/cache.cpp
 	vr4300/cop0.cpp

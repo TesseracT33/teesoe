@@ -1,6 +1,7 @@
 #include "cpu_interpreter.hpp"
 #include "interface.hpp"
 #include "interface/mi.hpp"
+#include "rdp/rdp.hpp"
 #include "rsp.hpp"
 
 namespace n64::rsp {
@@ -72,6 +73,18 @@ void Interpreter::lw(u32 rs, u32 rt, s16 imm) const
 void Interpreter::lwu(u32 rs, u32 rt, s16 imm) const
 {
     gpr.set(rt, ReadDMEM<s32>(gpr[rs] + imm));
+}
+
+void Interpreter::mfc0(u32 rt, u32 rd) const
+{
+    u32 reg_addr = (rd & 7) << 2;
+    rd & 8 ? gpr.set(rt, rdp::ReadReg(reg_addr)) : gpr.set(rt, rsp::ReadReg(reg_addr));
+}
+
+void Interpreter::mtc0(u32 rt, u32 rd) const
+{
+    u32 reg_addr = (rd & 7) << 2;
+    rd & 8 ? rdp::WriteReg(reg_addr, gpr[rt]) : rsp::WriteReg(reg_addr, gpr[rt]);
 }
 
 void Interpreter::sb(u32 rs, u32 rt, s16 imm) const

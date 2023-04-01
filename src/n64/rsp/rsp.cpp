@@ -161,18 +161,6 @@ template<size_t access_size> void WriteMemoryCpu(u32 addr, s64 data)
     }
 }
 
-void mfc0(u32 rt, u32 rd)
-{
-    u32 reg_addr = (rd & 7) << 2;
-    rd & 8 ? gpr.set(rt, rdp::ReadReg(reg_addr)) : gpr.set(rt, rsp::ReadReg(reg_addr));
-}
-
-void mtc0(u32 rt, u32 rd)
-{
-    u32 reg_addr = (rd & 7) << 2;
-    rd & 8 ? rdp::WriteReg(reg_addr, gpr[rt]) : rsp::WriteReg(reg_addr, gpr[rt]);
-}
-
 template s8 ReadDMEM<s8>(u32);
 template s16 ReadDMEM<s16>(u32);
 template s32 ReadDMEM<s32>(u32);

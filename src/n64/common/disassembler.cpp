@@ -52,14 +52,7 @@
         break;                                                                                                 \
     }
 
-#define COP_RSP(instr, ...)                               \
-    {                                                     \
-        if constexpr (cpu_impl == CpuImpl::Interpreter) { \
-            rsp::instr(__VA_ARGS__);                      \
-        } else {                                          \
-            /* TODO */                                    \
-        }                                                 \
-    }
+#define COP_RSP(instr, ...) rsp::instr<cpu_impl>(__VA_ARGS__)
 
 #define COP_VR4300(instr, ...)                                                          \
     {                                                                                   \
@@ -85,6 +78,15 @@
                 rsp::cpu_recompiler.instr(__VA_ARGS__);       \
             }                                                 \
         }                                                     \
+    }
+
+#define CPU_RSP(instr, ...)                               \
+    {                                                     \
+        if constexpr (cpu_impl == CpuImpl::Interpreter) { \
+            rsp::cpu_interpreter.instr(__VA_ARGS__);      \
+        } else {                                          \
+            rsp::cpu_recompiler.instr(__VA_ARGS__);       \
+        }                                                 \
     }
 
 #define CPU_VR4300(instr, ...)                                \
@@ -175,8 +177,8 @@ template<Cpu cpu, CpuImpl cpu_impl, bool make_string> void cop0(u32 instr)
         }
     } else {
         switch (instr >> 21 & 31) {
-        case 0: COP_RSP(mfc0, RT, RD); break;
-        case 4: COP_RSP(mtc0, RT, RD); break;
+        case 0: CPU_RSP(mfc0, RT, RD); break;
+        case 4: CPU_RSP(mtc0, RT, RD); break;
         default: rsp::NotifyIllegalInstrCode(instr);
         }
     }
