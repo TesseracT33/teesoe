@@ -99,7 +99,7 @@ template<CpuImpl vr4300_impl, CpuImpl rsp_impl> void Run()
         if constexpr (vr4300_impl == CpuImpl::Interpreter) {
             cpu_cycle_overrun = vr4300::RunInterpreter(cpu_step_dur);
         } else {
-            cpu_cycle_overrun = vr4300::RunRecompiler(cpu_step_dur);
+            cpu_cycle_overrun = vr4300::RunInterpreter(cpu_step_dur);
         }
         rsp_cycle_overrun = rsp::Run(rsp_step_dur);
         ai::Step(cpu_step_dur);
