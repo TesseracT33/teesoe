@@ -33,6 +33,9 @@ template<typename GprInt, typename LoHiInt, std::integral PcInt, typename GprBas
     {
     }
 
+    static constexpr bool mips32 = sizeof(GprBaseInt) == 4;
+    static constexpr bool mips64 = sizeof(GprBaseInt) == 8;
+
     Gpr<GprInt>& gpr;
     LoHiInt& lo;
     LoHiInt& hi;
