@@ -12,7 +12,6 @@
 
 #if X64
 #include "sse_util.hpp"
-#include <immintrin.h>
 #endif
 
 #define vco ctrl_reg[0]

@@ -9,16 +9,60 @@ namespace n64::rsp {
 using enum CpuImpl;
 Compiler& c = jit.compiler;
 
+static asmjit::x86::Mem acc_lo_mem();
+static asmjit::x86::Mem acc_mi_mem();
+static asmjit::x86::Mem acc_hi_mem();
+static asmjit::x86::Ymm get_vpr(u32 idx);
+template<typename T> static asmjit::x86::Mem ptr(T* ptr);
+static void set_vpr(u32 idx, asmjit::x86::Ymm r);
+static asmjit::x86::Mem vpr_ptr(u32 idx);
+
+asmjit::x86::Mem acc_lo_mem()
+{
+    return asmjit::x86::ymmword_ptr(std::bit_cast<u64>(&acc.low));
+}
+
+asmjit::x86::Mem acc_mi_mem()
+{
+    return asmjit::x86::ymmword_ptr(std::bit_cast<u64>(&acc.low));
+}
+
+asmjit::x86::Mem acc_hi_mem()
+{
+    return asmjit::x86::ymmword_ptr(std::bit_cast<u64>(&acc.low));
+}
+asmjit::x86::Ymm get_vpr(u32 idx)
+{
+    asmjit::x86::Ymm v = c.newYmm();
+    c.vmovdqa(v, vpr_ptr(idx));
+    return v;
+}
+
+template<typename T> asmjit::x86::Mem ptr(T* ptr)
+{
+    return asmjit::x86::ptr(std::bit_cast<u64>(ptr), sizeof(T));
+}
+
+void set_vpr(u32 idx, asmjit::x86::Ymm r)
+{
+    c.vmovdqa(vpr_ptr(idx), r);
+}
+
+asmjit::x86::Mem vpr_ptr(u32 idx)
+{
+    return asmjit::x86::ymmword_ptr(std::bit_cast<u64>(&vpr[idx]));
+}
+
 template<> void cfc2<Recompiler>(u32 rt, u32 vs)
 {
-    // vs = std::min(vs & 3, 2u);
-    // c.vpxor(ymm0, ymm0, ymm0);
-    // c.vmovdqa(ymm1, mem(&ctrl_reg[vs].low));
-    // c.vpacksswb(ymm1, ymm1, ymm0);
-    // c.vpmovmskb(eax, ymm1);
-    // c.vmovdqa(ymm1, mem(&ctrl_reg[vs].high));
-    // c.vpacksswb(ymm1, ymm1, ymm0);
-    // c.vpmovmskb(ecx, ymm1);
+    vs = std::min(vs & 3, 2u);
+    c.vpxor(ymm0, ymm0, ymm0);
+    c.vmovdqa(ymm1, ptr(&ctrl_reg[vs].low));
+    c.vpacksswb(ymm1, ymm1, ymm0);
+    c.vpmovmskb(eax, ymm1);
+    c.vmovdqa(ymm1, ptr(&ctrl_reg[vs].high));
+    c.vpacksswb(ymm1, ymm1, ymm0);
+    c.vpmovmskb(ecx, ymm1);
 }
 
 template<> void ctc2<Recompiler>(u32 rt, u32 vs)
