@@ -3,6 +3,8 @@
 #include "types.hpp"
 #include "vr4300.hpp"
 
+#include <concepts>
+
 namespace n64::vr4300 {
 
 struct Recompiler : public mips::Recompiler<s64, u64, u64> {
@@ -38,6 +40,19 @@ struct Recompiler : public mips::Recompiler<s64, u64, u64> {
     void sw(u32 rs, u32 rt, s16 imm) const;
     void swl(u32 rs, u32 rt, s16 imm) const;
     void swr(u32 rs, u32 rt, s16 imm) const;
+
+private:
+    template<std::integral> void load(u32 rs, u32 rt, s16 imm) const;
+    template<std::integral> void load_left(u32 rs, u32 rt, s16 imm) const;
+    template<std::integral> void load_linked(u32 rs, u32 rt, s16 imm) const;
+    template<std::integral> void load_right(u32 rs, u32 rt, s16 imm) const;
+    template<std::integral> void store(u32 rs, u32 rt, s16 imm) const;
+    template<std::integral> void store_conditional(u32 rs, u32 rt, s16 imm) const;
+    template<std::integral> void store_left(u32 rs, u32 rt, s16 imm) const;
+    template<std::integral> void store_right(u32 rs, u32 rt, s16 imm) const;
+
+    template<bool unsig> void multiply64(u32 rs, u32 rt) const;
+
 } inline constexpr cpu_recompiler{
     jit,
     gpr,

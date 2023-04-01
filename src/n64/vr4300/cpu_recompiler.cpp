@@ -5,9 +5,11 @@
 #include "mmu.hpp"
 
 #include <array>
-#include <limits>
 
 namespace n64::vr4300 {
+
+using namespace asmjit;
+using namespace asmjit::x86;
 
 // TODO: compute these at runtime instead, should be faster
 constexpr std::array right_load_mask = {
@@ -23,235 +25,141 @@ constexpr std::array right_load_mask = {
 
 void Recompiler::break_() const
 {
-    SignalException<Exception::Breakpoint>();
+    c.call(SignalException<Exception::Breakpoint>);
+    jit.branched = 1;
 }
 
 void Recompiler::ddiv(u32 rs, u32 rt) const
 {
-    s64 op1 = gpr[rs];
-    s64 op2 = gpr[rt];
-    if (op2 == 0) { /* Peter Lemon N64 CPUTest>CPU>DDIV */
-        lo_reg = op1 >= 0 ? -1 : 1;
-        hi_reg = op1;
-    } else if (op1 == std::numeric_limits<s64>::min() && op2 == -1) {
-        lo_reg = op1;
-        hi_reg = 0;
-    } else {
-        lo_reg = op1 / op2;
-        hi_reg = op1 % op2;
-    }
+    // TODO
 }
 
 void Recompiler::ddivu(u32 rs, u32 rt) const
 {
-    u64 op1 = u64(gpr[rs]);
-    u64 op2 = u64(gpr[rt]);
-    if (op2 == 0) {
-        lo_reg = -1;
-        hi_reg = op1;
-    } else {
-        lo_reg = op1 / op2;
-        hi_reg = op1 % op2;
-    }
+    Label l_div = c.newLabel(), l_end = c.newLabel();
+    c.mov(rax, gpr_ptr(rs));
+    c.mov(rcx, gpr_ptr(rt));
+    c.test(rcx, rcx);
+    c.jne(l_div);
+    c.mov(lo_mem(), -1);
+    c.mov(hi_mem(), rax);
+    c.jmp(l_end);
+    c.bind(l_div);
+    c.xor_(edx, edx);
+    c.div(rax, rcx);
+    c.mov(lo_mem(), rax);
+    c.mov(hi_mem(), rdx);
+    c.bind(l_end);
 }
 
 void Recompiler::dmult(u32 rs, u32 rt) const
 {
-#if INT128_AVAILABLE
-    s128 prod = s128(gpr[rs]) * s128(gpr[rt]);
-    lo_reg = prod & s64(-1);
-    hi_reg = prod >> 64;
-#elif defined _MSC_VER
-    s64 hi;
-    s64 lo = _mul128(gpr[rs], gpr[rt], &hi);
-    lo_reg = lo;
-    hi_reg = hi;
-#else
-#error DMULT unimplemented on targets where INT128 or MSVC _mul128 is unavailable
-#endif
+    multiply64<false>(rs, rt);
 }
 
 void Recompiler::dmultu(u32 rs, u32 rt) const
 {
-#if INT128_AVAILABLE
-    u128 prod = u128(gpr[rs]) * u128(gpr[rt]);
-    lo_reg = prod & u64(-1);
-    hi_reg = prod >> 64;
-#elif defined _MSC_VER
-    u64 hi;
-    u64 lo = _umul128(gpr[rs], gpr[rt], &hi);
-    lo_reg = lo;
-    hi_reg = hi;
-#else
-#error DMULTU unimplemented on targets where UINT128 or MSVC _umul128 is unavailable
-#endif
+    multiply64<true>(rt, rt);
 }
 
 void Recompiler::lb(u32 rs, u32 rt, s16 imm) const
 {
-    s8 val = ReadVirtual<s8>(gpr[rs] + imm);
-    if (!exception_occurred) {
-        gpr.set(rt, val);
-    }
+    load<s8>(rs, rt, imm);
 }
 
 void Recompiler::lbu(u32 rs, u32 rt, s16 imm) const
 {
-    u8 val = ReadVirtual<s8>(gpr[rs] + imm);
-    if (!exception_occurred) {
-        gpr.set(rt, val);
-    }
+    load<u8>(rs, rt, imm);
 }
 
 void Recompiler::ld(u32 rs, u32 rt, s16 imm) const
 {
-    s64 val = ReadVirtual<s64>(gpr[rs] + imm);
-    if (!exception_occurred) {
-        gpr.set(rt, val);
-    }
+    load<s64>(rs, rt, imm);
 }
 
 void Recompiler::ldl(u32 rs, u32 rt, s16 imm) const
 {
-    s64 addr = gpr[rs] + imm;
-    s64 val = ReadVirtual<s64, Alignment::UnalignedLeft>(addr);
-    if (!exception_occurred) {
-        u32 bits_from_last_boundary = (addr & 7) << 3;
-        val <<= bits_from_last_boundary;
-        s64 untouched_gpr = gpr[rt] & ((1ll << bits_from_last_boundary) - 1);
-        gpr.set(rt, val | untouched_gpr);
-    }
+    load_left<s64>(rs, rt, imm);
 }
 
 void Recompiler::ldr(u32 rs, u32 rt, s16 imm) const
 {
-    s64 addr = gpr[rs] + imm;
-    s64 val = ReadVirtual<s64, Alignment::UnalignedRight>(addr);
-    if (!exception_occurred) {
-        u32 bytes_from_last_boundary = addr & 7;
-        val >>= 8 * (7 - bytes_from_last_boundary);
-        s64 untouched_gpr = gpr[rt] & right_load_mask[bytes_from_last_boundary];
-        gpr.set(rt, val | untouched_gpr);
-    }
+    load_right<s64>(rs, rt, imm);
 }
 
 void Recompiler::lh(u32 rs, u32 rt, s16 imm) const
 {
-    s16 val = ReadVirtual<s16>(gpr[rs] + imm);
-    if (!exception_occurred) {
-        gpr.set(rt, val);
-    }
+    load<s16>(rs, rt, imm);
 }
 
 void Recompiler::lhu(u32 rs, u32 rt, s16 imm) const
 {
-    u16 val = ReadVirtual<s16>(gpr[rs] + imm);
-    if (!exception_occurred) {
-        gpr.set(rt, val);
-    }
+    load<u16>(rs, rt, imm);
 }
 
 void Recompiler::ll(u32 rs, u32 rt, s16 imm) const
 {
-    s32 val = ReadVirtual<s32>(gpr[rs] + imm);
-    cop0.ll_addr = last_physical_address_on_load >> 4;
-    ll_bit = 1;
-    if (!exception_occurred) {
-        gpr.set(rt, val);
-    }
+    load_linked<s32>(rs, rt, imm);
 }
 
 void Recompiler::lld(u32 rs, u32 rt, s16 imm) const
 {
-    s64 val = ReadVirtual<s64>(gpr[rs] + imm);
-    cop0.ll_addr = last_physical_address_on_load >> 4;
-    ll_bit = 1;
-    if (!exception_occurred) {
-        gpr.set(rt, val);
-    }
+    load_linked<s64>(rs, rt, imm);
 }
 
 void Recompiler::lw(u32 rs, u32 rt, s16 imm) const
 {
-    s32 val = ReadVirtual<s32>(gpr[rs] + imm);
-    if (!exception_occurred) {
-        gpr.set(rt, val);
-    }
+    load<s32>(rs, rt, imm);
 }
 
 void Recompiler::lwl(u32 rs, u32 rt, s16 imm) const
 {
-    s64 addr = gpr[rs] + imm;
-    s32 val = ReadVirtual<s32, Alignment::UnalignedLeft>(addr);
-    if (!exception_occurred) {
-        u32 bits_from_last_boundary = (addr & 3) << 3;
-        val <<= bits_from_last_boundary;
-        s32 untouched_gpr = s32(gpr[rt] & ((1 << bits_from_last_boundary) - 1));
-        gpr.set(rt, val | untouched_gpr);
-    }
+    load_left<s32>(rs, rt, imm);
 }
 
 void Recompiler::lwr(u32 rs, u32 rt, s16 imm) const
 {
-    s64 addr = gpr[rs] + imm;
-    s32 val = ReadVirtual<s32, Alignment::UnalignedRight>(addr);
-    if (!exception_occurred) {
-        u32 bytes_from_last_boundary = addr & 3;
-        val >>= 8 * (3 - bytes_from_last_boundary);
-        s32 untouched_gpr = s32(gpr[rt] & right_load_mask[bytes_from_last_boundary]);
-        gpr.set(rt, val | untouched_gpr);
-    }
+    load_right<s32>(rs, rt, imm);
 }
 
 void Recompiler::lwu(u32 rs, u32 rt, s16 imm) const
 {
-    u32 val = ReadVirtual<s32>(gpr[rs] + imm);
-    if (!exception_occurred) {
-        gpr.set(rt, val);
-    }
+    load<u32>(rs, rt, imm);
 }
 
 void Recompiler::sb(u32 rs, u32 rt, s16 imm) const
 {
-    WriteVirtual<1>(gpr[rs] + imm, s8(gpr[rt]));
+    store<s8>(rs, rt, imm);
 }
 
 void Recompiler::sc(u32 rs, u32 rt, s16 imm) const
 {
-    if (ll_bit) {
-        WriteVirtual<4>(gpr[rs] + imm, s32(gpr[rt]));
-    }
-    gpr.set(rt, ll_bit);
+    store_conditional<s32>(rs, rt, imm);
 }
 
 void Recompiler::scd(u32 rs, u32 rt, s16 imm) const
 {
-    if (ll_bit) {
-        WriteVirtual<8>(gpr[rs] + imm, gpr[rt]);
-    }
-    gpr.set(rt, ll_bit);
+    store_conditional<s64>(rs, rt, imm);
 }
 
 void Recompiler::sd(u32 rs, u32 rt, s16 imm) const
 {
-    WriteVirtual<8>(gpr[rs] + imm, gpr[rt]);
+    store<s64>(rs, rt, imm);
 }
 
 void Recompiler::sdl(u32 rs, u32 rt, s16 imm) const
 {
-    s64 addr = gpr[rs] + imm;
-    WriteVirtual<8, Alignment::UnalignedLeft>(addr, gpr[rt] >> (8 * (addr & 7)));
+    store_left<s64>(rs, rt, imm);
 }
 
 void Recompiler::sdr(u32 rs, u32 rt, s16 imm) const
 {
-    s64 addr = gpr[rs] + imm;
-    WriteVirtual<8, Alignment::UnalignedRight>(addr, gpr[rt] << (8 * (7 - (addr & 7))));
+    store_right<s64>(rs, rt, imm);
 }
 
 void Recompiler::sh(u32 rs, u32 rt, s16 imm) const
 {
-    WriteVirtual<2>(gpr[rs] + imm, s16(gpr[rt]));
+    store<s16>(rs, rt, imm);
 }
 
 void Recompiler::sync() const
@@ -262,24 +170,203 @@ void Recompiler::sync() const
 
 void Recompiler::syscall() const
 {
-    SignalException<Exception::Syscall>();
+    c.call(SignalException<Exception::Syscall>);
+    jit.branched = 1;
 }
 
 void Recompiler::sw(u32 rs, u32 rt, s16 imm) const
 {
-    WriteVirtual<4>(gpr[rs] + imm, s32(gpr[rt]));
+    store<s32>(rs, rt, imm);
 }
 
 void Recompiler::swl(u32 rs, u32 rt, s16 imm) const
 {
-    s64 addr = gpr[rs] + imm;
-    WriteVirtual<4, Alignment::UnalignedLeft>(addr, u32(gpr[rt]) >> (8 * (addr & 3)));
+    store_left<s32>(rs, rt, imm);
 }
 
 void Recompiler::swr(u32 rs, u32 rt, s16 imm) const
 {
-    s64 addr = gpr[rs] + imm;
-    WriteVirtual<4, Alignment::UnalignedRight>(addr, gpr[rt] << (8 * (3 - (addr & 3))));
+    store_right<s32>(rs, rt, imm);
+}
+
+template<std::integral Int> void Recompiler::load(u32 rs, u32 rt, s16 imm) const
+{
+    c.mov(r[0], gpr_ptr(rs));
+    c.add(r[0], imm);
+    c.call(ReadVirtual<s8>);
+    if (rt) {
+        Label l_end = c.newLabel();
+        c.cmp(mem(&exception_occurred), 0);
+        c.jne(l_end);
+        if constexpr (std::same_as<Int, s32>) {
+            c.cdqe(rax);
+            c.mov(gpr_ptr(rt), rax);
+        } else if constexpr (sizeof(Int) == 8) {
+            c.mov(gpr_ptr(rt), rax);
+        } else {
+            if constexpr (std::same_as<Int, s8>) c.movsx(r[0], al);
+            if constexpr (std::same_as<Int, u8>) c.movzx(r[0], al);
+            if constexpr (std::same_as<Int, s16>) c.movsx(r[0], ax);
+            if constexpr (std::same_as<Int, u16>) c.movzx(r[0], ax);
+            if constexpr (std::same_as<Int, u32>) c.mov(r[0].r32(), eax);
+            c.mov(gpr_ptr(rt), r[0]);
+        }
+        c.bind(l_end);
+    }
+}
+
+template<std::integral Int> void Recompiler::load_left(u32 rs, u32 rt, s16 imm) const
+{
+    if (rt) {
+        Label l_end = c.newLabel();
+        c.mov(r[0], gpr_ptr(rs));
+        c.add(r[0], imm);
+        c.push(rbx);
+        c.mov(rbx, r[0]);
+        c.call(ReadVirtual<Int, Alignment::UnalignedLeft>);
+        c.cmp(mem(&exception_occurred), 0);
+        c.jne(l_end);
+        c.mov(ecx, ebx);
+        c.and_(ecx, sizeof(Int) - 1);
+        c.shl(ecx, 3);
+        c.shl(rax, cl);
+        c.mov(r8d, 1);
+        c.shl(r8, cl);
+        c.dec(r8);
+        c.and_(r8, gpr_ptr(rt));
+        c.or_(rax, r8);
+        c.mov(gpr_ptr(rt), rax);
+        c.bind(l_end);
+        c.pop(rbx);
+    } else {
+        c.mov(r[0], gpr_ptr(rs));
+        c.add(r[0], imm);
+        c.call(ReadVirtual<Int, Alignment::UnalignedLeft>);
+    }
+}
+
+template<std::integral Int> void Recompiler::load_linked(u32 rs, u32 rt, s16 imm) const
+{
+    load<Int>(rs, rt, imm);
+    cop0.ll_addr = last_physical_address_on_load >> 4; // TODO
+    c.mov(mem(&ll_bit), 1);
+}
+
+template<std::integral Int> void Recompiler::load_right(u32 rs, u32 rt, s16 imm) const
+{
+    if (rt) {
+        Label l_end = c.newLabel();
+        c.mov(r[0], gpr_ptr(rs));
+        c.add(r[0], imm);
+        c.push(rbx);
+        c.mov(rbx, r[0]);
+        c.call(ReadVirtual<Int, Alignment::UnalignedRight>);
+        c.cmp(mem(&exception_occurred), 0);
+        c.jne(l_end);
+        c.mov(ecx, ebx);
+        c.not_(ecx);
+        c.and_(ecx, sizeof(Int) - 1);
+        c.shl(ecx, 3);
+        if constexpr (sizeof(Int) == 4) {
+            c.sar(eax, cl);
+            c.mov(ebx, 0xFFFF'FF00);
+        } else {
+            c.sar(rax, cl);
+        }
+
+        // TODO
+        // c.mov(r8d, 1);
+        // c.shl(r8, cl);
+        // c.dec(r8);
+        // c.and_(r8, gpr_ptr(rt));
+        // c.or_(rax, r8);
+        // c.mov(gpr_ptr(rt), rax);
+        // c.bind(l_end);
+        // c.pop(rbx);
+    } else {
+        c.mov(r[0], gpr_ptr(rs));
+        c.add(r[0], imm);
+        c.call(ReadVirtual<Int, Alignment::UnalignedRight>);
+    }
+}
+
+template<std::integral Int> void Recompiler::store(u32 rs, u32 rt, s16 imm) const
+{
+    c.mov(r[0], gpr_ptr(rs));
+    c.add(r[0], imm);
+    c.mov(r[1], gpr_ptr(rt));
+    c.call(WriteVirtual<sizeof(Int)>);
+}
+
+template<std::integral Int> void Recompiler::store_conditional(u32 rs, u32 rt, s16 imm) const
+{
+    Label l_end = c.newLabel();
+    c.cmp(mem(&ll_bit), 0);
+    c.je(l_end);
+    store<Int>(rs, rt, imm);
+    c.bind(l_end);
+    if (rt) {
+        c.movzx(eax, mem(&ll_bit));
+        c.mov(gpr_ptr(rt), rax);
+    }
+}
+
+template<std::integral Int> void Recompiler::store_left(u32 rs, u32 rt, s16 imm) const
+{
+#ifdef _WIN32
+    c.mov(eax, gpr_ptr(rs));
+    c.add(eax, imm);
+    c.mov(ecx, eax);
+    c.and_(ecx, sizeof(Int) - 1);
+    c.shl(ecx, 3);
+    c.mov(r[1], gpr_ptr(rt));
+    c.shr(r[1], cl);
+    c.mov(r[0], eax);
+#else
+    c.mov(r[0], gpr_ptr(rs));
+    c.add(r[0], imm);
+    c.mov(ecx, r[0]);
+    c.and_(ecx, sizeof(Int) - 1);
+    c.shl(ecx, 3);
+    c.mov(r[1], gpr_ptr(rt));
+    c.shr(r[1], cl);
+#endif
+    c.call(WriteVirtual<sizeof(Int), Alignment::UnalignedLeft>);
+}
+
+template<std::integral Int> void Recompiler::store_right(u32 rs, u32 rt, s16 imm) const
+{
+#ifdef _WIN32
+    c.mov(eax, gpr_ptr(rs));
+    c.add(eax, imm);
+    c.mov(ecx, eax);
+    c.not_(ecx);
+    c.and_(ecx, sizeof(Int) - 1);
+    c.shl(ecx, 3);
+    c.mov(r[1], gpr_ptr(rt));
+    c.shl(r[1], cl);
+    c.mov(r[0], eax);
+#else
+    c.mov(r[0], gpr_ptr(rs));
+    c.add(r[0], imm);
+    c.mov(ecx, r[0]);
+    c.not_(ecx);
+    c.and_(ecx, sizeof(Int) - 1);
+    c.shl(ecx, 3);
+    c.mov(r[1], gpr_ptr(rt));
+    c.shl(r[1], cl);
+#endif
+    c.call(WriteVirtual<sizeof(Int), Alignment::UnalignedRight>);
+}
+
+template<bool unsig> void Recompiler::multiply64(u32 rs, u32 rt) const
+{
+    Gp v = get_gpr(rt);
+    c.mov(rax, gpr_ptr(rs));
+    if constexpr (unsig) c.mul(rax, v);
+    else c.imul(rax, v);
+    c.mov(lo_mem(), rax);
+    c.mov(hi_mem(), rdx);
 }
 
 } // namespace n64::vr4300

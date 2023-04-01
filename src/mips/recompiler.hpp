@@ -665,7 +665,7 @@ struct Recompiler : public Cpu<GprInt, LoHiInt, PcInt, GprBaseInt> {
         set_gpr(rt, v);
     }
 
-private:
+protected:
     enum class Cond {
         Eq,
         Ge,
