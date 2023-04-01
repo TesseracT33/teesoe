@@ -22,7 +22,4 @@ inline constexpr bool log_rsp_instructions = enable_logging && 0;
 
 inline constexpr bool skip_boot_rom = 1;
 
-inline constexpr bool interpret_cpu = 1;
-inline constexpr bool recompile_cpu = !interpret_cpu;
-
 } // namespace n64

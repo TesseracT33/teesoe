@@ -3,7 +3,6 @@
 #include "log.hpp"
 #include "mmu.hpp"
 #include "n64_build_options.hpp"
-#include "recompiler.hpp"
 #include "util.hpp"
 #include "vr4300.hpp"
 

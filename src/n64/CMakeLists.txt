@@ -22,20 +22,22 @@ target_sources(teesoe PRIVATE
 	rdp/rdp.cpp
 
 	rsp/cpu_interpreter.cpp
+	rsp/cpu_recompiler.cpp
 	rsp/interface.cpp
 	rsp/rsp.cpp
-	rsp/vu.cpp
+	rsp/vu_interpreter.cpp
+	rsp/vu_recompiler.cpp
 
 	vr4300/cache.cpp
 	vr4300/cop0.cpp
 	vr4300/cop1.cpp
 	vr4300/cop2.cpp
 	vr4300/cpu_interpreter.cpp
+	vr4300/cpu_recompiler.cpp
 	vr4300/exceptions.cpp
 	vr4300/mmu.cpp
-	vr4300/recompiler.cpp
 	vr4300/vr4300.cpp
- )
+)
 
 target_include_directories(teesoe PRIVATE
 	.

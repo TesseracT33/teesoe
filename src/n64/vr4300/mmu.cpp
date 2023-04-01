@@ -354,7 +354,7 @@ template<size_t access_size, Alignment alignment> void WriteVirtual(u64 virtual_
     static_assert(std::has_single_bit(access_size) && access_size <= 8);
     u32 offset = virtual_address & (access_size - 1);
     if constexpr (access_size > 1 && alignment == Alignment::Aligned) {
-        if (offset != 0) {
+        if (offset) {
             SignalAddressErrorException<MemOp::Write>(virtual_address);
             return;
         }

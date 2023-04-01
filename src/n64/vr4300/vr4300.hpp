@@ -1,12 +1,12 @@
 #pragma once
 
+#include "jit/jit.hpp"
 #include "mips/gpr.hpp"
+#include "n64.hpp"
 #include "types.hpp"
 
 #include <string>
 #include <string_view>
-
-#define EXEC_VR4300(impl /* Interpreter/JIT */, instr /* mnemonic */, ... /* args */)
 
 namespace n64::vr4300 {
 
@@ -19,11 +19,6 @@ enum class ExternalInterruptSource {
     IndyWrite = 1 << 6 /* ip6; Connected to the Indy dev kit’s RDB port. Set to 1 when a value is written. */
 };
 
-enum class Impl {
-    Interpreter,
-    JIT
-};
-
 enum class OperatingMode {
     User,
     Supervisor,
@@ -31,22 +26,20 @@ enum class OperatingMode {
 } inline operating_mode;
 
 void AddInitialEvents();
+void AdvancePipeline(u64 cycles);
 void CheckInterrupts();
 void ClearInterruptPending(ExternalInterruptSource);
 u64 GetElapsedCycles();
 void InitRun(bool hle_pif);
-void Reset();
-u64 Run(u64 cpu_cycles_to_run);
-void PowerOn();
-void SetInterruptPending(ExternalInterruptSource);
-void SignalInterruptFalse();
-
-void AdvancePipeline(u64 cycles);
-void FetchDecodeExecuteInstruction();
-void InitializeRegisters();
 void Jump(u64 target_address);
 void Link(u32 reg);
 void NotifyIllegalInstrCode(u32 instr_code);
+void PowerOn();
+void Reset();
+u64 RunInterpreter(u64 cpu_cycles);
+u64 RunRecompiler(u64 cpu_cycles);
+void SetInterruptPending(ExternalInterruptSource);
+void SignalInterruptFalse();
 
 inline bool in_branch_delay_slot;
 inline bool ll_bit; /* Read from / written to by load linked and store conditional instructions. */
@@ -57,8 +50,10 @@ inline u64 jump_addr;
 inline u64 pc;
 inline u64 hi_reg, lo_reg; /* Contain the result of a double-word multiplication or division. */
 inline u64 p_cycle_counter;
-
 inline ::mips::Gpr<s64> gpr;
+
+// recompiler
+inline Jit jit;
 
 /* Debugging */
 inline std::string_view current_instr_name;

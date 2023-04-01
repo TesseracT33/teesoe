@@ -1,5 +1,6 @@
 #pragma once
 
+#include "jit/jit.hpp"
 #include "mips/gpr.hpp"
 #include "types.hpp"
 
@@ -10,30 +11,21 @@
 
 namespace n64::rsp {
 
-enum class Impl {
-    Interpreter,
-    JIT
-};
-
-u8* GetPointerToMemory(u32 addr);
-void PowerOn();
-u32 RdpReadCommand(u32 addr);
-u64 RdpReadCommandByteswapped(u32 addr);
-template<std::signed_integral Int> Int ReadMemoryCpu(u32 addr);
-u64 Run(u64 rsp_cycles_to_run);
-template<size_t access_size> void WriteMemoryCpu(u32 addr, s64 data);
-
 void AdvancePipeline(u64 cycles);
 void FetchDecodeExecuteInstruction();
+u8* GetPointerToMemory(u32 addr);
 void Jump(u32 target_address);
 void Link(u32 reg);
 void NotifyIllegalInstr(std::string_view instr);
 void NotifyIllegalInstrCode(u32 instr_code);
 template<std::signed_integral Int> Int ReadDMEM(u32 addr);
+void PowerOn();
+u32 RdpReadCommand(u32 addr);
+u64 RdpReadCommandByteswapped(u32 addr);
+template<std::signed_integral Int> Int ReadMemoryCpu(u32 addr);
+u64 Run(u64 rsp_cycles_to_run);
 template<std::signed_integral Int> void WriteDMEM(u32 addr, Int data);
-
-void mfc0(u32 rt, u32 rd);
-void mtc0(u32 rt, u32 rd);
+template<size_t access_size> void WriteMemoryCpu(u32 addr, s64 data);
 
 inline bool in_branch_delay_slot;
 inline bool jump_is_pending;
@@ -49,6 +41,9 @@ inline constinit std::array<u8, 0x2000> mem{}; /* 0 - $FFF: data memory; $1000 -
 
 inline constinit u8* const dmem = mem.data();
 inline constinit u8* const imem = mem.data() + 0x1000;
+
+// recompiler
+inline Jit jit;
 
 /* Debugging */
 inline u32 current_instr_pc;

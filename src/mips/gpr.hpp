@@ -9,6 +9,7 @@ namespace mips {
 
 template<typename Int> struct Gpr {
     Int get(u32 idx) const { return gpr[idx]; }
+    Int* ptr(u32 idx) { return &gpr[idx]; }
     void set(u32 idx, auto data)
     {
         gpr[idx] = data;

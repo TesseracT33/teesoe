@@ -8,9 +8,9 @@
 #include "memory/rdram.hpp"
 #include "mmu.hpp"
 #include "n64_build_options.hpp"
-#include "recompiler.hpp"
 
 #include <bit>
+#include <cassert>
 #include <cstring>
 #include <format>
 #include <utility>
@@ -18,6 +18,9 @@
 namespace n64::vr4300 {
 
 static bool interrupt;
+
+static void InitializeRegisters();
+static void JitInstructionEpilogue();
 
 void AddInitialEvents()
 {
@@ -28,9 +31,6 @@ void AdvancePipeline(u64 cycles)
 {
     p_cycle_counter += cycles;
     cop0.count += cycles;
-    // if constexpr (recompile_cpu) {
-    //     recompiler::current_block_cycle_counter += cycles;
-    // }
 }
 
 void CheckInterrupts()
@@ -50,14 +50,6 @@ void CheckInterrupts()
 void ClearInterruptPending(ExternalInterruptSource interrupt)
 {
     cop0.cause.ip &= ~std::to_underlying(interrupt);
-}
-
-void FetchDecodeExecuteInstruction()
-{
-    u32 instr = FetchInstruction(pc);
-    pc += 4;
-    disassembler::exec_cpu<CpuImpl::Interpreter>(instr);
-    AdvancePipeline(1);
 }
 
 u64 GetElapsedCycles()
@@ -105,6 +97,27 @@ void InitRun(bool hle_pif)
     }
 }
 
+void JitInstructionEpilogue()
+{
+    // TODO: optimize to only be done right before branch instruction or at the end of a block?
+    jit.compiler.add(asmjit::x86::Mem(pc), 4);
+}
+
+void JitInstructionEpilogueFirstBlockInstruction()
+{
+    asmjit::x86::Gp v0 = jit.compiler.newGpw();
+    asmjit::Label l_exit = jit.compiler.newLabel();
+    jit.compiler.cmp(asmjit::x86::Mem(std::bit_cast<u64>(&in_branch_delay_slot)), 0);
+    jit.compiler.je(l_exit);
+    asmjit::x86::Gp v1 = jit.compiler.newGpq();
+    jit.compiler.mov(asmjit::x86::Mem(std::bit_cast<u64>(&in_branch_delay_slot)), 0);
+    jit.compiler.mov(v1, asmjit::x86::Mem(std::bit_cast<u64>(&jump_addr)));
+    jit.compiler.mov(asmjit::x86::Mem(std::bit_cast<u64>(&pc)), v1);
+    jit.compiler.ret();
+    jit.compiler.bind(l_exit);
+    jit.compiler.add(asmjit::x86::Mem(pc), 4);
+}
+
 void Jump(u64 target_address)
 {
     jump_is_pending = true;
@@ -131,10 +144,6 @@ void PowerOn()
     InitCop1();
     InitializeMMU();
     InitCache();
-
-    if constexpr (recompile_cpu) {
-        recompiler::Initialize();
-    }
 }
 
 void Reset()
@@ -145,10 +154,10 @@ void Reset()
     HandleException();
 }
 
-u64 Run(u64 cpu_cycles_to_run)
+u64 RunInterpreter(u64 cpu_cycles)
 {
     p_cycle_counter = 0;
-    while (p_cycle_counter < cpu_cycles_to_run) {
+    while (p_cycle_counter < cpu_cycles) {
         if (jump_is_pending) {
             if (instructions_until_jump-- == 0) {
                 pc = jump_addr;
@@ -158,12 +167,52 @@ u64 Run(u64 cpu_cycles_to_run)
                 in_branch_delay_slot = true;
             }
         }
-        FetchDecodeExecuteInstruction();
+        u32 instr = FetchInstruction(pc);
+        pc += 4;
+        disassembler::exec_cpu<CpuImpl::Interpreter>(instr);
+        AdvancePipeline(1);
         if (exception_occurred) {
             HandleException();
         }
     }
-    return p_cycle_counter - cpu_cycles_to_run;
+    return p_cycle_counter - cpu_cycles;
+}
+
+u64 RunRecompiler(u64 cpu_cycles)
+{
+    auto exec_block = [](Jit::Block* block) {
+        block->func();
+        AdvancePipeline(block->cycles);
+    };
+
+    p_cycle_counter = 0;
+    while (p_cycle_counter < cpu_cycles) {
+        u32 physical_pc = GetPhysicalPC();
+        auto [block, compiled] = jit.get_block(physical_pc);
+        assert(block);
+        if (compiled) {
+            exec_block(block);
+        } else {
+            auto one_instr = [addr = pc]() mutable {
+                u32 instr = FetchInstruction(addr);
+                addr += 4;
+                disassembler::exec_cpu<CpuImpl::Recompiler>(instr);
+                jit.cycles++;
+            };
+            one_instr();
+            JitInstructionEpilogueFirstBlockInstruction();
+            while (!jit.branched && (pc & 255)) {
+                // If the branch delay slot instruction fits within the block boundary, include it before stopping
+                jit.branched = jit.branch_hit;
+                one_instr();
+                JitInstructionEpilogue();
+            }
+            block->cycles = jit.cycles;
+            jit.finalize_block(block);
+            exec_block(block);
+        }
+    }
+    return p_cycle_counter - cpu_cycles;
 }
 
 void SetInterruptPending(ExternalInterruptSource interrupt)
