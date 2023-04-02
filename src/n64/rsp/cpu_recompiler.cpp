@@ -28,8 +28,8 @@ void Recompiler::addi(u32 rs, u32 rt, s16 imm) const
 void Recompiler::break_() const
 {
     Label l_end = c.newLabel();
-    c.or_(mem(&sp.status), 3); // set halted, broke
-    c.bt(mem(&sp.status), 7); // intbreak
+    c.or_(ptr(sp.status), 3); // set halted, broke
+    c.bt(ptr(sp.status), 7); // intbreak
     c.jnb(l_end);
     c.mov(r[0], std::to_underlying(mi::InterruptType::SP));
     c.call(mi::RaiseInterrupt);
@@ -39,7 +39,7 @@ void Recompiler::break_() const
 void Recompiler::j(u32 instr) const
 {
     Label l_end = c.newLabel();
-    c.cmp(mem(&in_branch_delay_slot), 0);
+    c.cmp(ptr(in_branch_delay_slot), 0);
     c.jne(l_end);
     c.mov(r[0], instr << 2);
     c.call(jump);
@@ -50,7 +50,7 @@ void Recompiler::j(u32 instr) const
 void Recompiler::jal(u32 instr) const
 {
     Label l_end = c.newLabel();
-    c.cmp(mem(&in_branch_delay_slot), 0);
+    c.cmp(ptr(in_branch_delay_slot), 0);
     c.jne(l_end);
     c.mov(r[0], instr << 2);
     c.bind(l_end);
@@ -82,7 +82,7 @@ void Recompiler::lhu(u32 rs, u32 rt, s16 imm) const
 void Recompiler::ll(u32 rs, u32 rt, s16 imm) const
 {
     load<s16>(rs, rt, imm);
-    c.mov(mem(&ll_bit), 1);
+    c.mov(ptr(ll_bit), 1);
 }
 
 void Recompiler::lw(u32 rs, u32 rt, s16 imm) const
@@ -117,12 +117,12 @@ void Recompiler::sb(u32 rs, u32 rt, s16 imm) const
 void Recompiler::sc(u32 rs, u32 rt, s16 imm) const
 {
     Label l_end = c.newLabel();
-    c.cmp(mem(&ll_bit), 0);
+    c.cmp(ptr(ll_bit), 0);
     c.je(l_end);
     store<s32>(rs, rt, imm);
     c.bind(l_end);
     if (rt) {
-        c.movzx(eax, mem(&ll_bit));
+        c.movzx(eax, ptr(ll_bit));
         set_gpr(rt, eax);
     }
 }

@@ -105,17 +105,19 @@ void JitInstructionEpilogue()
 
 void JitInstructionEpilogueFirstBlockInstruction()
 {
-    asmjit::x86::Gp v0 = jit.compiler.newGpw();
-    asmjit::Label l_exit = jit.compiler.newLabel();
-    jit.compiler.cmp(asmjit::x86::Mem(std::bit_cast<u64>(&in_branch_delay_slot)), 0);
-    jit.compiler.je(l_exit);
-    asmjit::x86::Gp v1 = jit.compiler.newGpq();
-    jit.compiler.mov(asmjit::x86::Mem(std::bit_cast<u64>(&in_branch_delay_slot)), 0);
-    jit.compiler.mov(v1, asmjit::x86::Mem(std::bit_cast<u64>(&jump_addr)));
-    jit.compiler.mov(asmjit::x86::Mem(std::bit_cast<u64>(&pc)), v1);
-    jit.compiler.ret();
-    jit.compiler.bind(l_exit);
-    jit.compiler.add(asmjit::x86::Mem(pc), 4);
+    using namespace asmjit::x86;
+    Compiler& c = jit.compiler;
+    Gp v0 = c.newGpw();
+    asmjit::Label l_exit = c.newLabel();
+    c.cmp(Mem(std::bit_cast<u64>(&in_branch_delay_slot)), 0);
+    c.je(l_exit);
+    Gp v1 = c.newGpq();
+    c.mov(Mem(std::bit_cast<u64>(&in_branch_delay_slot)), 0);
+    c.mov(v1, Mem(std::bit_cast<u64>(&jump_addr)));
+    c.mov(Mem(std::bit_cast<u64>(&pc)), v1);
+    c.ret();
+    c.bind(l_exit);
+    c.add(Mem(pc), 4);
 }
 
 void Jump(u64 target_address)
@@ -125,9 +127,29 @@ void Jump(u64 target_address)
     jump_addr = target_address & ~u64(3);
 }
 
+void JumpRecompiler()
+{ // Assumption: target_address is in rax
+  // TODO
+  // using namespace asmjit::x86;
+  // Compiler& c = jit.compiler;
+  // c.mov(mem(jump_is_pending), 1);
+  // c.
+}
+
 void Link(u32 reg)
 {
     gpr.set(reg, 4 + (in_branch_delay_slot ? jump_addr : pc));
+}
+
+void LinkRecompiler(u32 reg)
+{
+    // using namespace asmjit::x86;
+    // Compiler& c = jit.compiler;
+    // c.cmp(mem(&in_branch_delay_slot), 0);
+    // c.mov(rax, mem(&pc));
+    // c.cmovne(rax, mem(&jump_addr));
+    // c.add(rax, 4);
+    // set_gpr(reg, rax);
 }
 
 void NotifyIllegalInstrCode(u32 instr_code)

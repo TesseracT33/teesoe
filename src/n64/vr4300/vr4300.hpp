@@ -33,6 +33,7 @@ u64 GetElapsedCycles();
 void InitRun(bool hle_pif);
 void Jump(u64 target_address);
 void Link(u32 reg);
+void LinkRecompiler(u32 reg);
 void NotifyIllegalInstrCode(u32 instr_code);
 void PowerOn();
 void Reset();

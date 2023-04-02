@@ -1,3 +1,4 @@
+#include "jit/util.hpp"
 #include "rsp.hpp"
 #include "vu.hpp"
 
@@ -9,38 +10,32 @@ namespace n64::rsp {
 using enum CpuImpl;
 Compiler& c = jit.compiler;
 
-static asmjit::x86::Mem acc_lo_mem();
-static asmjit::x86::Mem acc_mi_mem();
-static asmjit::x86::Mem acc_hi_mem();
+static asmjit::x86::Mem acc_lo_ptr();
+static asmjit::x86::Mem acc_mi_ptr();
+static asmjit::x86::Mem acc_hi_ptr();
 static asmjit::x86::Ymm get_vpr(u32 idx);
-template<typename T> static asmjit::x86::Mem ptr(T* ptr);
 static void set_vpr(u32 idx, asmjit::x86::Ymm r);
 static asmjit::x86::Mem vpr_ptr(u32 idx);
 
-asmjit::x86::Mem acc_lo_mem()
+asmjit::x86::Mem acc_lo_ptr()
 {
-    return asmjit::x86::ymmword_ptr(std::bit_cast<u64>(&acc.low));
+    return ptr(acc.low);
 }
 
-asmjit::x86::Mem acc_mi_mem()
+asmjit::x86::Mem acc_mi_ptr()
 {
-    return asmjit::x86::ymmword_ptr(std::bit_cast<u64>(&acc.low));
+    return ptr(acc.mid);
 }
 
-asmjit::x86::Mem acc_hi_mem()
+asmjit::x86::Mem acc_hi_ptr()
 {
-    return asmjit::x86::ymmword_ptr(std::bit_cast<u64>(&acc.low));
+    return ptr(acc.high);
 }
 asmjit::x86::Ymm get_vpr(u32 idx)
 {
     asmjit::x86::Ymm v = c.newYmm();
     c.vmovdqa(v, vpr_ptr(idx));
     return v;
-}
-
-template<typename T> asmjit::x86::Mem ptr(T* ptr)
-{
-    return asmjit::x86::ptr(std::bit_cast<u64>(ptr), sizeof(T));
 }
 
 void set_vpr(u32 idx, asmjit::x86::Ymm r)
@@ -50,7 +45,7 @@ void set_vpr(u32 idx, asmjit::x86::Ymm r)
 
 asmjit::x86::Mem vpr_ptr(u32 idx)
 {
-    return asmjit::x86::ymmword_ptr(std::bit_cast<u64>(&vpr[idx]));
+    return ptr(vpr[idx]);
 }
 
 template<> void cfc2<Recompiler>(u32 rt, u32 vs)

@@ -31,7 +31,33 @@ void Recompiler::break_() const
 
 void Recompiler::ddiv(u32 rs, u32 rt) const
 {
-    // TODO
+    Label l_div = c.newLabel(), l_divzero = c.newLabel(), l_end = c.newLabel();
+    c.mov(rax, gpr_ptr(rs));
+    c.mov(rcx, gpr_ptr(rt));
+    c.test(rcx, rcx);
+    c.je(l_divzero);
+    c.mov(r8, rax);
+    c.mov(r9, rcx);
+    c.xor_(r8, 1LL << 63);
+    c.not_(r9);
+    c.or_(r8, r9);
+    c.jne(l_div);
+    c.mov(lo_ptr(), 1LL << 63);
+    c.mov(hi_ptr(), 0);
+    c.jmp(l_end);
+    c.bind(l_divzero);
+    c.mov(hi_ptr(), rax);
+    c.not_(rax);
+    c.sar(rax, 63);
+    c.or_(rax, 1);
+    c.mov(lo_ptr(), rax);
+    c.jmp(l_end);
+    c.bind(l_div);
+    c.xor_(edx, edx);
+    c.idiv(rax, rcx);
+    c.mov(lo_ptr(), rax);
+    c.mov(hi_ptr(), rdx);
+    c.bind(l_end);
 }
 
 void Recompiler::ddivu(u32 rs, u32 rt) const
@@ -41,14 +67,14 @@ void Recompiler::ddivu(u32 rs, u32 rt) const
     c.mov(rcx, gpr_ptr(rt));
     c.test(rcx, rcx);
     c.jne(l_div);
-    c.mov(lo_mem(), -1);
-    c.mov(hi_mem(), rax);
+    c.mov(lo_ptr(), -1);
+    c.mov(hi_ptr(), rax);
     c.jmp(l_end);
     c.bind(l_div);
     c.xor_(edx, edx);
     c.div(rax, rcx);
-    c.mov(lo_mem(), rax);
-    c.mov(hi_mem(), rdx);
+    c.mov(lo_ptr(), rax);
+    c.mov(hi_ptr(), rdx);
     c.bind(l_end);
 }
 
@@ -196,7 +222,7 @@ template<std::integral Int> void Recompiler::load(u32 rs, u32 rt, s16 imm) const
     c.call(ReadVirtual<s8>);
     if (rt) {
         Label l_end = c.newLabel();
-        c.cmp(mem(&exception_occurred), 0);
+        c.cmp(ptr(exception_occurred), 0);
         c.jne(l_end);
         if constexpr (std::same_as<Int, s32>) {
             c.cdqe(rax);
@@ -204,12 +230,12 @@ template<std::integral Int> void Recompiler::load(u32 rs, u32 rt, s16 imm) const
         } else if constexpr (sizeof(Int) == 8) {
             c.mov(gpr_ptr(rt), rax);
         } else {
-            if constexpr (std::same_as<Int, s8>) c.movsx(r[0], al);
-            if constexpr (std::same_as<Int, u8>) c.movzx(r[0], al);
-            if constexpr (std::same_as<Int, s16>) c.movsx(r[0], ax);
-            if constexpr (std::same_as<Int, u16>) c.movzx(r[0], ax);
-            if constexpr (std::same_as<Int, u32>) c.mov(r[0].r32(), eax);
-            c.mov(gpr_ptr(rt), r[0]);
+            if constexpr (std::same_as<Int, s8>) c.movsx(rax, al);
+            if constexpr (std::same_as<Int, u8>) c.movzx(rax, al);
+            if constexpr (std::same_as<Int, s16>) c.movsx(rax, ax);
+            if constexpr (std::same_as<Int, u16>) c.movzx(rax, ax);
+            if constexpr (std::same_as<Int, u32>) c.mov(eax, eax);
+            c.mov(gpr_ptr(rt), rax);
         }
         c.bind(l_end);
     }
@@ -224,7 +250,7 @@ template<std::integral Int> void Recompiler::load_left(u32 rs, u32 rt, s16 imm) 
         c.push(rbx);
         c.mov(rbx, r[0]);
         c.call(ReadVirtual<Int, Alignment::UnalignedLeft>);
-        c.cmp(mem(&exception_occurred), 0);
+        c.cmp(ptr(exception_occurred), 0);
         c.jne(l_end);
         c.mov(ecx, ebx);
         c.and_(ecx, sizeof(Int) - 1);
@@ -249,7 +275,7 @@ template<std::integral Int> void Recompiler::load_linked(u32 rs, u32 rt, s16 imm
 {
     load<Int>(rs, rt, imm);
     cop0.ll_addr = last_physical_address_on_load >> 4; // TODO
-    c.mov(mem(&ll_bit), 1);
+    c.mov(ptr(ll_bit), 1);
 }
 
 template<std::integral Int> void Recompiler::load_right(u32 rs, u32 rt, s16 imm) const
@@ -261,7 +287,7 @@ template<std::integral Int> void Recompiler::load_right(u32 rs, u32 rt, s16 imm)
         c.push(rbx);
         c.mov(rbx, r[0]);
         c.call(ReadVirtual<Int, Alignment::UnalignedRight>);
-        c.cmp(mem(&exception_occurred), 0);
+        c.cmp(ptr(exception_occurred), 0);
         c.jne(l_end);
         c.mov(ecx, ebx);
         c.not_(ecx);
@@ -290,6 +316,16 @@ template<std::integral Int> void Recompiler::load_right(u32 rs, u32 rt, s16 imm)
     }
 }
 
+template<bool unsig> void Recompiler::multiply64(u32 rs, u32 rt) const
+{
+    Gp v = get_gpr(rt);
+    c.mov(rax, gpr_ptr(rs));
+    if constexpr (unsig) c.mul(rax, v);
+    else c.imul(rax, v);
+    c.mov(lo_ptr(), rax);
+    c.mov(hi_ptr(), rdx);
+}
+
 template<std::integral Int> void Recompiler::store(u32 rs, u32 rt, s16 imm) const
 {
     c.mov(r[0], gpr_ptr(rs));
@@ -301,12 +337,12 @@ template<std::integral Int> void Recompiler::store(u32 rs, u32 rt, s16 imm) cons
 template<std::integral Int> void Recompiler::store_conditional(u32 rs, u32 rt, s16 imm) const
 {
     Label l_end = c.newLabel();
-    c.cmp(mem(&ll_bit), 0);
+    c.cmp(ptr(ll_bit), 0);
     c.je(l_end);
     store<Int>(rs, rt, imm);
     c.bind(l_end);
     if (rt) {
-        c.movzx(eax, mem(&ll_bit));
+        c.movzx(eax, ptr(ll_bit));
         set_gpr(rt, rax);
     }
 }
@@ -357,16 +393,6 @@ template<std::integral Int> void Recompiler::store_right(u32 rs, u32 rt, s16 imm
     c.shl(r[1], cl);
 #endif
     c.call(WriteVirtual<sizeof(Int), Alignment::UnalignedRight>);
-}
-
-template<bool unsig> void Recompiler::multiply64(u32 rs, u32 rt) const
-{
-    Gp v = get_gpr(rt);
-    c.mov(rax, gpr_ptr(rs));
-    if constexpr (unsig) c.mul(rax, v);
-    else c.imul(rax, v);
-    c.mov(lo_mem(), rax);
-    c.mov(hi_mem(), rdx);
 }
 
 } // namespace n64::vr4300

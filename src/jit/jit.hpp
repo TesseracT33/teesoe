@@ -39,25 +39,3 @@ private:
     asmjit::JitRuntime runtime;
     std::vector<Pool*> pools;
 };
-
-constexpr std::array gp = {
-#ifdef _WIN32
-    asmjit::x86::rcx,
-    asmjit::x86::rdx,
-    asmjit::x86::r8,
-    asmjit::x86::r9,
-    asmjit::x86::r10,
-    asmjit::x86::r11,
-    asmjit::x86::rax,
-#else
-    asmjit::x86::rdi,
-    asmjit::x86::rsi,
-    asmjit::x86::rdx,
-    asmjit::x86::rcx,
-    asmjit::x86::r8,
-    asmjit::x86::r9,
-    asmjit::x86::r10,
-    asmjit::x86::r11,
-    asmjit::x86::rax,
-#endif
-};
