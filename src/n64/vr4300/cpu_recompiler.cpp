@@ -25,7 +25,7 @@ constexpr std::array right_load_mask = {
 
 void Recompiler::break_() const
 {
-    c.call(SignalException<Exception::Breakpoint>);
+    call(c, SignalException<Exception::Breakpoint>);
     jit.branched = 1;
 }
 
@@ -196,7 +196,7 @@ void Recompiler::sync() const
 
 void Recompiler::syscall() const
 {
-    c.call(SignalException<Exception::Syscall>);
+    call(c, SignalException<Exception::Syscall>);
     jit.branched = 1;
 }
 
@@ -219,7 +219,7 @@ template<std::integral Int> void Recompiler::load(u32 rs, u32 rt, s16 imm) const
 {
     c.mov(r[0], gpr_ptr(rs));
     c.add(r[0], imm);
-    c.call(ReadVirtual<s8>);
+    call(c, ReadVirtual<std::make_signed_t<Int>>);
     if (rt) {
         Label l_end = c.newLabel();
         c.cmp(ptr(exception_occurred), 0);
@@ -243,13 +243,13 @@ template<std::integral Int> void Recompiler::load(u32 rs, u32 rt, s16 imm) const
 
 template<std::integral Int> void Recompiler::load_left(u32 rs, u32 rt, s16 imm) const
 {
+    c.mov(r[0], gpr_ptr(rs));
+    c.add(r[0], imm);
     if (rt) {
         Label l_end = c.newLabel();
-        c.mov(r[0], gpr_ptr(rs));
-        c.add(r[0], imm);
         c.push(rbx);
         c.mov(rbx, r[0]);
-        c.call(ReadVirtual<Int, Alignment::UnalignedLeft>);
+        call<1>(c, ReadVirtual<std::make_signed_t<Int>, Alignment::UnalignedLeft>);
         c.cmp(ptr(exception_occurred), 0);
         c.jne(l_end);
         c.mov(ecx, ebx);
@@ -265,28 +265,28 @@ template<std::integral Int> void Recompiler::load_left(u32 rs, u32 rt, s16 imm) 
         c.bind(l_end);
         c.pop(rbx);
     } else {
-        c.mov(r[0], gpr_ptr(rs));
-        c.add(r[0], imm);
-        c.call(ReadVirtual<Int, Alignment::UnalignedLeft>);
+        call(c, ReadVirtual<std::make_signed_t<Int>, Alignment::UnalignedLeft>);
     }
 }
 
 template<std::integral Int> void Recompiler::load_linked(u32 rs, u32 rt, s16 imm) const
 {
     load<Int>(rs, rt, imm);
-    cop0.ll_addr = last_physical_address_on_load >> 4; // TODO
+    c.mov(eax, ptr(last_physical_address_on_load));
+    c.shl(eax, 4);
+    c.mov(ptr(cop0.ll_addr), eax);
     c.mov(ptr(ll_bit), 1);
 }
 
 template<std::integral Int> void Recompiler::load_right(u32 rs, u32 rt, s16 imm) const
 {
+    c.mov(r[0], gpr_ptr(rs));
+    c.add(r[0], imm);
     if (rt) {
         Label l_end = c.newLabel();
-        c.mov(r[0], gpr_ptr(rs));
-        c.add(r[0], imm);
         c.push(rbx);
         c.mov(rbx, r[0]);
-        c.call(ReadVirtual<Int, Alignment::UnalignedRight>);
+        call<1>(c, ReadVirtual<std::make_signed_t<Int>, Alignment::UnalignedRight>);
         c.cmp(ptr(exception_occurred), 0);
         c.jne(l_end);
         c.mov(ecx, ebx);
@@ -310,9 +310,7 @@ template<std::integral Int> void Recompiler::load_right(u32 rs, u32 rt, s16 imm)
         // c.bind(l_end);
         // c.pop(rbx);
     } else {
-        c.mov(r[0], gpr_ptr(rs));
-        c.add(r[0], imm);
-        c.call(ReadVirtual<Int, Alignment::UnalignedRight>);
+        call(c, ReadVirtual<std::make_signed_t<Int>, Alignment::UnalignedRight>);
     }
 }
 
@@ -330,8 +328,8 @@ template<std::integral Int> void Recompiler::store(u32 rs, u32 rt, s16 imm) cons
 {
     c.mov(r[0], gpr_ptr(rs));
     c.add(r[0], imm);
-    c.mov(r[1], gpr_ptr(rt)); // TODO: is it enough?
-    c.call(WriteVirtual<sizeof(Int)>);
+    c.mov(r[1], gpr_ptr(rt));
+    call(c, WriteVirtual<sizeof(Int)>);
 }
 
 template<std::integral Int> void Recompiler::store_conditional(u32 rs, u32 rt, s16 imm) const
@@ -367,7 +365,7 @@ template<std::integral Int> void Recompiler::store_left(u32 rs, u32 rt, s16 imm)
     c.mov(r[1], gpr_ptr(rt));
     c.shr(r[1], cl);
 #endif
-    c.call(WriteVirtual<sizeof(Int), Alignment::UnalignedLeft>);
+    call(c, WriteVirtual<sizeof(Int), Alignment::UnalignedLeft>);
 }
 
 template<std::integral Int> void Recompiler::store_right(u32 rs, u32 rt, s16 imm) const
@@ -392,7 +390,7 @@ template<std::integral Int> void Recompiler::store_right(u32 rs, u32 rt, s16 imm
     c.mov(r[1], gpr_ptr(rt));
     c.shl(r[1], cl);
 #endif
-    c.call(WriteVirtual<sizeof(Int), Alignment::UnalignedRight>);
+    call(c, WriteVirtual<sizeof(Int), Alignment::UnalignedRight>);
 }
 
 } // namespace n64::vr4300

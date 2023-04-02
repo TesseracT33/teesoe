@@ -1,6 +1,7 @@
 #pragma once
 
 #include "asmjit/x86.h"
+#include "asmjit/x86/x86compiler.h"
 #include "host.hpp"
 #include "types.hpp"
 
@@ -30,6 +31,25 @@ inline constexpr std::array gp = {
 };
 
 #if X64
+
+template<uint qwords_pushed = 0> inline void call(asmjit::x86::Compiler& c, auto func)
+{
+    using namespace asmjit::x86;
+#ifdef _WIN32
+    static constexpr uint bytes = qwords_pushed % 2 ? 32 : 40; // stack alignment + shadow space
+    c.sub(rsp, bytes);
+    c.call(func);
+    c.add(rsp, bytes);
+#else
+    if constexpr (qwords_pushed % 2) {
+        c.call(func);
+    } else {
+        c.push(rax);
+        c.call(func);
+        c.pop(rcx);
+    }
+#endif
+}
 
 template<typename T> constexpr asmjit::x86::Mem ptr(T const& t)
 {

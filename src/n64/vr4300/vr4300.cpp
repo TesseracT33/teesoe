@@ -4,6 +4,7 @@
 #include "cop1.hpp"
 #include "disassembler.hpp"
 #include "exceptions.hpp"
+#include "jit/util.hpp"
 #include "log.hpp"
 #include "memory/rdram.hpp"
 #include "mmu.hpp"
@@ -100,7 +101,7 @@ void InitRun(bool hle_pif)
 void JitInstructionEpilogue()
 {
     // TODO: optimize to only be done right before branch instruction or at the end of a block?
-    jit.compiler.add(asmjit::x86::Mem(pc), 4);
+    jit.compiler.add(ptr(pc), 4);
 }
 
 void JitInstructionEpilogueFirstBlockInstruction()

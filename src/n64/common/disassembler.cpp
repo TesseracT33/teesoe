@@ -125,9 +125,9 @@ template<Cpu cpu, CpuImpl cpu_impl, auto func, typename... Args> void interpr_ji
 template<Cpu cpu, auto impl> void jit_call_interpreter_impl()
 {
     if constexpr (cpu == Cpu::VR4300) {
-        vr4300::jit.compiler.call(impl);
+        call(vr4300::jit.compiler, impl);
     } else {
-        rsp::jit.compiler.call(impl);
+        call(rsp::jit.compiler, impl);
     }
 }
 
@@ -148,7 +148,7 @@ void jit_call_interpreter_impl(Arg first_arg, Args... remaining_args)
         jit_call_interpreter_impl<cpu, impl>(remaining_args...);
     } else {
         r_idx = 0;
-        compiler->call(impl);
+        call(*compiler, impl);
     }
 }
 

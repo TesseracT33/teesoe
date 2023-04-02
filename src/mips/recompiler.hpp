@@ -60,7 +60,7 @@ struct Recompiler : public Cpu<GprInt, LoHiInt, PcInt, GprBaseInt> {
         asmjit::Label l_noexception = c.newLabel();
         c.add(v0, v1);
         c.jno(l_noexception);
-        c.call(integer_overflow_exception);
+        call(c, integer_overflow_exception);
         if (rd) {
             asmjit::Label l_end = c.newLabel();
             c.jmp(l_end);
@@ -79,7 +79,7 @@ struct Recompiler : public Cpu<GprInt, LoHiInt, PcInt, GprBaseInt> {
         asmjit::Label l_noexception = c.newLabel();
         c.add(v, imm);
         c.jno(l_noexception);
-        c.call(integer_overflow_exception);
+        call(c, integer_overflow_exception);
         if (rt) {
             asmjit::Label l_end = c.newLabel();
             c.jmp(l_end);
@@ -166,7 +166,7 @@ struct Recompiler : public Cpu<GprInt, LoHiInt, PcInt, GprBaseInt> {
         asmjit::Label l_noexception = c.newLabel();
         c.add(v0, v1);
         c.jno(l_noexception);
-        c.call(integer_overflow_exception);
+        call(c, integer_overflow_exception);
         if (rd) {
             asmjit::Label l_end = c.newLabel();
             c.jmp(l_end);
@@ -185,7 +185,7 @@ struct Recompiler : public Cpu<GprInt, LoHiInt, PcInt, GprBaseInt> {
         asmjit::Label l_noexception = c.newLabel();
         c.add(v, imm);
         c.jno(l_noexception);
-        c.call(integer_overflow_exception);
+        call(c, integer_overflow_exception);
         if (rt) {
             asmjit::Label l_end = c.newLabel();
             c.jmp(l_end);
@@ -344,7 +344,7 @@ struct Recompiler : public Cpu<GprInt, LoHiInt, PcInt, GprBaseInt> {
         asmjit::Label l_noexception = c.newLabel();
         c.sub(v0, v1);
         c.jno(l_noexception);
-        c.call(integer_overflow_exception);
+        call(c, integer_overflow_exception);
         if (rd) {
             asmjit::Label l_end = c.newLabel();
             c.jmp(l_end);
@@ -373,7 +373,7 @@ struct Recompiler : public Cpu<GprInt, LoHiInt, PcInt, GprBaseInt> {
         c.mov(r[0], pc_ptr());
         c.and_(r[0], s32(0xF000'0000));
         c.or_(r[0], instr << 2 & 0xFFF'FFFF);
-        c.call(jump);
+        call(c, jump);
         c.bind(l_nojump);
         jit.branch_hit = 1;
     }
@@ -386,10 +386,10 @@ struct Recompiler : public Cpu<GprInt, LoHiInt, PcInt, GprBaseInt> {
         c.mov(r[0], pc_ptr());
         c.and_(r[0], s32(0xF000'0000));
         c.or_(r[0], instr << 2 & 0xFFF'FFFF);
-        c.call(jump);
+        call(c, jump);
         c.bind(l_nojump);
         c.mov(r[0].r32(), 31);
-        c.call(link);
+        call(c, link);
         jit.branch_hit = 1;
     }
 
@@ -399,10 +399,10 @@ struct Recompiler : public Cpu<GprInt, LoHiInt, PcInt, GprBaseInt> {
         c.cmp(ptr(in_branch_delay_slot), 0);
         c.jne(l_nojump);
         c.mov(r[0], gpr_ptr(rs));
-        c.call(jump);
+        call(c, jump);
         c.bind(l_nojump);
         c.mov(r[0].r32(), rd);
-        c.call(link);
+        call(c, link);
         jit.branch_hit = 1;
     }
 
@@ -412,7 +412,7 @@ struct Recompiler : public Cpu<GprInt, LoHiInt, PcInt, GprBaseInt> {
         c.cmp(ptr(in_branch_delay_slot), 0);
         c.jne(l_nojump);
         c.mov(r[0], gpr_ptr(rs));
-        c.call(jump);
+        call(c, jump);
         c.bind(l_nojump);
         jit.branch_hit = 1;
     }
@@ -601,7 +601,7 @@ struct Recompiler : public Cpu<GprInt, LoHiInt, PcInt, GprBaseInt> {
         asmjit::Label l_noexception = c.newLabel();
         c.sub(v0, v1);
         c.jno(l_noexception);
-        c.call(integer_overflow_exception);
+        call(c, integer_overflow_exception);
         if (rd) {
             asmjit::Label l_end = c.newLabel();
             c.jmp(l_end);
@@ -744,7 +744,7 @@ protected:
         c.mov(v0, imm);
         c.shl(v0, 2);
         c.add(v0, pc_ptr());
-        c.call(jump);
+        call(c, jump);
         c.bind(l_nobranch);
         jit.branch_hit = 1;
     }
@@ -761,7 +761,7 @@ protected:
         c.mov(v, imm);
         c.shl(v, 2);
         c.add(v, pc_ptr());
-        c.call(jump);
+        call(c, jump);
         c.bind(l_nobranch);
         jit.branch_hit = 1;
     }
@@ -776,7 +776,7 @@ protected:
         c.mov(v0, imm);
         c.shl(v0, 2);
         c.add(v0, pc_ptr());
-        c.call(jump);
+        call(c, jump);
         c.jmp(l_end);
         c.bind(l_nobranch);
         c.add(pc_ptr(), 4);
@@ -797,7 +797,7 @@ protected:
         c.mov(v, imm);
         c.shl(v, 2);
         c.add(v, pc_ptr());
-        c.call(jump);
+        call(c, jump);
         c.jmp(l_end);
         c.bind(l_nobranch);
         c.add(pc_ptr(), 4);
@@ -809,14 +809,14 @@ protected:
     template<Cond cc> void branch_and_link(u32 rs, s16 imm) const
     {
         c.mov(r[0].r32(), 31);
-        c.call(link);
+        call(c, link);
         branch<cc>(rs, imm);
     }
 
     template<Cond cc> void branch_and_link_likely(u32 rs, s16 imm) const
     {
         c.mov(r[0].r32(), 31);
-        c.call(link);
+        call(c, link);
         branch_likely<cc>(rs, imm);
     }
 
@@ -869,7 +869,7 @@ protected:
         if constexpr (cc == Cond::Lt) c.jge(l_end);
         if constexpr (cc == Cond::Ltu) c.jae(l_end);
         if constexpr (cc == Cond::Ne) c.je(l_end);
-        c.call(trap_exception);
+        call(c, trap_exception);
         c.bind(l_end);
         jit.branched = 1;
     }
@@ -885,7 +885,7 @@ protected:
         if constexpr (cc == Cond::Lt) c.jge(l_end);
         if constexpr (cc == Cond::Ltu) c.jae(l_end);
         if constexpr (cc == Cond::Ne) c.je(l_end);
-        c.call(trap_exception);
+        call(c, trap_exception);
         c.bind(l_end);
         jit.branched = 1;
     }
