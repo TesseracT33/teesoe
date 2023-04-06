@@ -4,7 +4,6 @@
 #include "n64.hpp"
 
 #include <algorithm>
-#include <map>
 
 namespace fs = std::filesystem;
 

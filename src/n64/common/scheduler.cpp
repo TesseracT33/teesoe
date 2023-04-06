@@ -99,9 +99,13 @@ template<CpuImpl vr4300_impl, CpuImpl rsp_impl> void Run()
         if constexpr (vr4300_impl == CpuImpl::Interpreter) {
             cpu_cycle_overrun = vr4300::RunInterpreter(cpu_step_dur);
         } else {
-            cpu_cycle_overrun = vr4300::RunInterpreter(cpu_step_dur);
+            cpu_cycle_overrun = vr4300::RunRecompiler(cpu_step_dur);
         }
-        rsp_cycle_overrun = rsp::Run(rsp_step_dur);
+        if constexpr (rsp_impl == CpuImpl::Interpreter) {
+            rsp_cycle_overrun = rsp::Run(rsp_step_dur);
+        } else {
+            rsp_cycle_overrun = rsp::Run(rsp_step_dur); // TODO
+        }
         ai::Step(cpu_step_dur);
         CheckEvents(cpu_step_dur);
     }
@@ -113,6 +117,8 @@ void Stop()
 }
 
 template void Run<CpuImpl::Interpreter, CpuImpl::Interpreter>();
+template void Run<CpuImpl::Interpreter, CpuImpl::Recompiler>();
 template void Run<CpuImpl::Recompiler, CpuImpl::Interpreter>();
+template void Run<CpuImpl::Recompiler, CpuImpl::Recompiler>();
 
 } // namespace n64::scheduler

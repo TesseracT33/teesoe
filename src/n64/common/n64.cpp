@@ -18,6 +18,18 @@
 
 using namespace n64;
 
+void N64::apply_configuration(CoreConfiguration config)
+{
+    CpuImpl prev_cpu_impl =
+      std::exchange(cpu_impl, config.n64.cpu_recompiler ? CpuImpl::Recompiler : CpuImpl::Interpreter);
+    CpuImpl prev_rsp_impl =
+      std::exchange(rsp_impl, config.n64.rsp_recompiler ? CpuImpl::Recompiler : CpuImpl::Interpreter);
+    if (running && (cpu_impl != prev_cpu_impl || rsp_impl != prev_rsp_impl)) {
+        stop();
+        run();
+    }
+}
+
 Status N64::enable_audio(bool enable)
 {
     return status_unimplemented();
@@ -96,7 +108,13 @@ void N64::run()
         vr4300::InitRun(hle_pif);
         running = true;
     }
-    scheduler::Run<CpuImpl::Recompiler, CpuImpl::Interpreter>(); // TODO: make toggleable
+    if (cpu_impl == n64::CpuImpl::Interpreter) {
+        rsp_impl == n64::CpuImpl::Interpreter ? scheduler::Run<CpuImpl::Interpreter, CpuImpl::Interpreter>()
+                                              : scheduler::Run<CpuImpl::Interpreter, CpuImpl::Recompiler>();
+    } else {
+        rsp_impl == n64::CpuImpl::Interpreter ? scheduler::Run<CpuImpl::Recompiler, CpuImpl::Interpreter>()
+                                              : scheduler::Run<CpuImpl::Recompiler, CpuImpl::Recompiler>();
+    }
 }
 
 void N64::stop()

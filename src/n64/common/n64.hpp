@@ -1,9 +1,31 @@
 #pragma once
 
 #include "core.hpp"
+#include "core_configuration.hpp"
+
+namespace n64 {
+
+enum class Cpu {
+    RSP,
+    VR4300
+};
+
+enum class CpuImpl {
+    Interpreter,
+    Recompiler
+};
+
+inline constexpr uint cpu_cycles_per_second = 93'750'000;
+inline constexpr uint rsp_cycles_per_second = 62'500'500;
+inline constexpr uint cpu_cycles_per_frame = cpu_cycles_per_second / 60; /* 1,562,500 */
+inline constexpr uint rsp_cycles_per_frame = rsp_cycles_per_second / 60; /* 1,041,675 */
+inline constexpr s64 cpu_cycles_per_update = 90;
+
+} // namespace n64
 
 class N64 : public Core {
 public:
+    void apply_configuration(CoreConfiguration config) override;
     Status enable_audio(bool enable) override;
     std::span<const std::string_view> get_input_names() const override;
     Status init() override;
@@ -25,24 +47,5 @@ private:
     bool bios_loaded{};
     bool game_loaded{};
     bool running{};
+    n64::CpuImpl cpu_impl{}, rsp_impl{};
 };
-
-namespace n64 {
-
-enum class Cpu {
-    RSP,
-    VR4300
-};
-
-enum class CpuImpl {
-    Interpreter,
-    Recompiler
-};
-
-inline constexpr uint cpu_cycles_per_second = 93'750'000;
-inline constexpr uint rsp_cycles_per_second = 62'500'500;
-inline constexpr uint cpu_cycles_per_frame = cpu_cycles_per_second / 60; /* 1,562,500 */
-inline constexpr uint rsp_cycles_per_frame = rsp_cycles_per_second / 60; /* 1,041,675 */
-inline constexpr s64 cpu_cycles_per_update = 90;
-
-} // namespace n64

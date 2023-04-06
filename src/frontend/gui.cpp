@@ -1,17 +1,17 @@
 #include "gui.hpp"
 #include "audio.hpp"
+#include "core_configuration.hpp"
 #include "frontend/message.hpp"
-#include "input.hpp"
-#include "loader.hpp"
-#include "log.hpp"
-#include "serializer.hpp"
-#include "vulkan.hpp"
-
 #include "imgui.h"
 #include "imgui_impl_sdl3.h"
 #include "imgui_impl_vulkan.h"
+#include "input.hpp"
+#include "loader.hpp"
+#include "log.hpp"
 #include "nfd.h"
 #include "parallel-rdp-standalone/volk/volk.h"
+#include "serializer.hpp"
+#include "vulkan.hpp"
 
 #include <algorithm>
 #include <array>
@@ -31,7 +31,13 @@ namespace rng = std::ranges;
 
 namespace frontend::gui {
 
+struct GameListEntry {
+    fs::path path;
+    std::string name; // store file name with char value type so that ImGui::gui can display it
+};
+
 static void Draw();
+static void DrawCoreSettingsWindow();
 static void DrawGameSelectionWindow();
 static void DrawInputBindingsWindow();
 static void DrawMenu();
@@ -49,6 +55,7 @@ static void OnInputBindingsWindowSave();
 static void OnInputBindingsWindowUseControllerDefaults();
 static void OnInputBindingsWindowUseKeyboardDefaults();
 static void OnMenuConfigureBindings();
+static void OnMenuCoreSettings();
 static void OnMenuEnableAudio();
 static void OnMenuFullscreen();
 static void OnMenuLoadState();
@@ -80,6 +87,7 @@ static bool menu_pause_emulation;
 static bool quit;
 static bool show_game_selection_window;
 static bool show_input_bindings_window;
+static bool show_core_settings_window;
 static bool show_menu;
 static bool start_game;
 
@@ -91,14 +99,11 @@ static float fps;
 static std::string current_game_title;
 static fs::path game_list_directory;
 
-struct GameListEntry {
-    fs::path path;
-    std::string name; // store file name with char value type so that ImGui::gui can display it
-};
-
 static std::vector<GameListEntry> game_list;
 
 static SDL_Window* sdl_window;
+
+static CoreConfiguration n64_configuration;
 
 void Draw()
 {
@@ -110,6 +115,54 @@ void Draw()
     }
     if (show_input_bindings_window) {
         DrawInputBindingsWindow();
+    }
+    if (show_core_settings_window) {
+        DrawCoreSettingsWindow();
+    }
+}
+
+void DrawCoreSettingsWindow()
+{
+    if (ImGui::Begin("Core settings", &show_core_settings_window)) {
+        static int tab{};
+        if (ImGui::Button("N64", ImVec2(100.0f, 0.0f))) tab = 0;
+        // ImGui::SameLine(0.0, 2.0f);
+        // if (ImGui::Button("Test", ImVec2(100.0f, 0.0f))) tab = 1;
+
+        auto DrawN64 = [] {
+            static int cpu_impl_sel{};
+            ImGui::Text("CPU implementation");
+            if (ImGui::RadioButton("Interpreter", &cpu_impl_sel, 0)) {
+                n64_configuration.n64.cpu_recompiler = false;
+            }
+            if (ImGui::RadioButton("Recompiler", &cpu_impl_sel, 1)) {
+                n64_configuration.n64.cpu_recompiler = true;
+            }
+
+            static int rsp_impl_sel{};
+            ImGui::Text("RSP implementation");
+            if (ImGui::RadioButton("Interpreter", &rsp_impl_sel, 0)) {
+                n64_configuration.n64.rsp_recompiler = false;
+            }
+            if (ImGui::RadioButton("Recompiler", &rsp_impl_sel, 1)) {
+                n64_configuration.n64.rsp_recompiler = true;
+            }
+        };
+
+        switch (tab) {
+        case 0: DrawN64(); break;
+        }
+
+        if (ImGui::Button("Apply and save")) {
+            if (game_is_running && get_system() == System::N64) {
+                get_core()->apply_configuration(n64_configuration);
+                // TODO: save to file
+                n64_configuration = {};
+            }
+            show_core_settings_window = !show_core_settings_window;
+        }
+
+        ImGui::End();
     }
 }
 
@@ -276,6 +329,9 @@ void DrawMenu()
             }
             if (ImGui::MenuItem("Stop", "Ctrl+X")) {
                 OnMenuStop();
+            }
+            if (ImGui::MenuItem("Core settings")) {
+                OnMenuCoreSettings();
             }
             ImGui::EndMenu();
         }
@@ -505,6 +561,12 @@ Status InitSdl()
 
 Status LoadGame(std::filesystem::path const& path)
 {
+    std::unique_ptr<Core> const& core = get_core();
+    assert(core);
+    switch (get_system()) {
+    case System::N64: core->apply_configuration(n64_configuration); break;
+    default: assert(false);
+    }
     Status status = get_core()->load_rom(path);
     if (status.ok()) {
         if (game_is_running) {
@@ -620,6 +682,11 @@ void OnInputBindingsWindowUseKeyboardDefaults()
 void OnMenuConfigureBindings()
 {
     show_input_bindings_window = !show_input_bindings_window;
+}
+
+void OnMenuCoreSettings()
+{
+    show_core_settings_window = !show_core_settings_window;
 }
 
 void OnMenuEnableAudio()

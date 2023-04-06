@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core_configuration.hpp"
 #include "serializer.hpp"
 #include "status.hpp"
 #include "types.hpp"
@@ -15,6 +16,7 @@ class Serializer;
 class Core {
 public:
     virtual ~Core() = default;
+    virtual void apply_configuration(CoreConfiguration config) = 0;
     virtual Status enable_audio(bool enable) = 0;
     virtual std::span<const std::string_view> get_input_names() const = 0;
     virtual Status init() = 0;
