@@ -232,47 +232,45 @@ void DrawInputBindingsWindow()
     static constexpr std::string_view waiting_for_input_label = "...";
 
     struct Button {
-        std::string_view const text_label;
-        std::string_view button_label =
+        std::string_view label =
           unbound_label; // can be non-owning thanks to SDL's SDL_GameControllerGetStringForButton etc
-        std::string_view prev_button_label = button_label;
+        std::string_view prev_label = label;
         bool waiting_for_input = false;
-    };
 
-    static constinit std::array control_buttons = {
-        Button{ "A" },
-        Button{ "B" },
-        Button{ "START" },
-        Button{ "Z" },
-        Button{ "Shoulder L" },
-        Button{ "Shoulder R" },
-        Button{ "D-pad up" },
-        Button{ "D-pad down" },
-        Button{ "D-pad left" },
-        Button{ "D-pad right" },
-        Button{ "C up" },
-        Button{ "C down" },
-        Button{ "C left" },
-        Button{ "C right" },
-        Button{ "Joy X" },
-        Button{ "Joy Y" },
-    };
-
-    static constinit std::array hotkey_buttons = { Button{ "Load state" },
-        Button{ "Save state" },
-        Button{ "Toggle fullscreen" } };
-
-    auto OnButtonPressed = [](Button& button) {
-        if (button.waiting_for_input) {
-            button.button_label = button.prev_button_label;
-        } else {
-            button.prev_button_label = button.button_label;
-            button.button_label = waiting_for_input_label;
+        void OnPressed()
+        {
+            if (waiting_for_input) {
+                label = prev_label;
+            } else {
+                prev_label = label;
+                label = waiting_for_input_label;
+            }
+            waiting_for_input = !waiting_for_input;
         }
-        button.waiting_for_input = !button.waiting_for_input;
+    };
+
+    static constinit std::array hotkey_buttons = {
+        Button{ "Load state" },
+        Button{ "Save state" },
+        Button{ "Toggle fullscreen" },
     };
 
     if (ImGui::Begin("Input configuration", &show_input_bindings_window)) {
+        if (!core_loaded()) {
+            ImGui::Text("Load a core before configuring inputs.");
+            return;
+        }
+
+        // TODO: buffer this somewhere so it doesn't have to be computed on every draw
+        std::unique_ptr<Core> const& core = get_core();
+        std::span<const std::string_view> control_button_labels = core->get_input_names();
+
+        static std::vector<Button> control_buttons;
+        control_buttons.reserve(control_button_labels.size());
+        for (size_t i = 0; i < control_button_labels.size(); ++i) {
+            control_buttons.emplace_back(Button{ control_button_labels[i] });
+        }
+
         if (ImGui::Button("Reset all")) {
             OnInputBindingsWindowResetAll();
         }
@@ -290,23 +288,23 @@ void DrawInputBindingsWindow()
 
         ImGui::Separator();
 
-        static constexpr size_t num_horizontal_elements = std::max(control_buttons.size(), hotkey_buttons.size());
+        size_t num_horizontal_elements = std::max(control_button_labels.size(), hotkey_buttons.size());
         for (size_t i = 0; i < num_horizontal_elements; ++i) {
-            if (i < control_buttons.size()) {
+            if (i < control_button_labels.size()) {
                 Button& button = control_buttons[i];
-                ImGui::Text(button.text_label.data());
+                ImGui::Text(control_buttons[i].label.data());
                 ImGui::SameLine(100);
-                if (ImGui::Button(button.button_label.data())) {
-                    OnButtonPressed(button);
+                if (ImGui::Button(button.label.data())) {
+                    button.OnPressed();
                 }
             }
             if (i < hotkey_buttons.size()) {
-                Button& button = control_buttons[i];
+                Button& button = hotkey_buttons[i];
                 ImGui::SameLine();
-                ImGui::Text(button.text_label.data());
+                ImGui::Text(hotkey_buttons[i].label.data());
                 ImGui::SameLine(250);
-                if (ImGui::Button(button.button_label.data())) {
-                    OnButtonPressed(button);
+                if (ImGui::Button(button.label.data())) {
+                    button.OnPressed();
                 }
             }
         }

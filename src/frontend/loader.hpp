@@ -3,10 +3,10 @@
 #include "core.hpp"
 #include "status.hpp"
 
+#include <algorithm>
 #include <filesystem>
 #include <map>
 #include <memory>
-#include <optional>
 #include <string_view>
 
 namespace frontend {
@@ -46,11 +46,10 @@ inline const std::map<fs::path, System> rom_ext_to_system = [] {
     for (auto const& [system, exts] : system_to_rom_exts) {
         for (auto const& ext : exts) {
             if (rng::contains(colliding_exts, ext)) continue;
-            auto it = ext_to_system.find(ext);
-            if (it == ext_to_system.end()) {
+            if (auto it = ext_to_system.find(ext); it == ext_to_system.end()) {
                 ext_to_system[ext] = system;
             } else {
-                ext_to_system.erase(ext);
+                ext_to_system.erase(it);
                 colliding_exts.push_back(ext);
             }
         }
