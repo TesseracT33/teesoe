@@ -36,6 +36,12 @@ struct GameListEntry {
     std::string name; // store file name with char value type so that ImGui::gui can display it
 };
 
+struct GameList {
+    std::vector<GameListEntry> games;
+    fs::path directory;
+    bool apply_filter;
+};
+
 static void Draw();
 static void DrawCoreSettingsWindow();
 static void DrawGameSelectionWindow();
@@ -49,7 +55,7 @@ static Status InitImgui();
 static Status InitSdl();
 static bool NeedsDraw();
 static void OnExit();
-static void OnGameSelected(size_t list_index);
+static void OnGameSelected(System system, size_t list_index);
 static void OnInputBindingsWindowResetAll();
 static void OnInputBindingsWindowSave();
 static void OnInputBindingsWindowUseControllerDefaults();
@@ -70,16 +76,14 @@ static void OnMenuShowGameList();
 static void OnMenuStop();
 static void OnMenuWindowScale();
 static void OnSdlQuit();
-static void OnSetGameDirectory();
 static void OnWindowResizeEvent(SDL_Event const& event);
 static Status ReadConfigFile();
-static void RefreshGameList();
+static void RefreshGameList(System system);
 static void StartGame();
 static void StopGame();
 static void UpdateWindowTitle();
 static void UseDefaultConfig();
 
-static bool filter_game_list_to_n64_files;
 static bool game_is_running;
 static bool menu_enable_audio;
 static bool menu_fullscreen;
@@ -97,9 +101,8 @@ static int window_height, window_width;
 static float fps;
 
 static std::string current_game_title;
-static fs::path game_list_directory;
 
-static std::vector<GameListEntry> game_list;
+static std::unordered_map<System, GameList> game_lists;
 
 static SDL_Window* sdl_window;
 
@@ -168,29 +171,36 @@ void DrawCoreSettingsWindow()
 
 void DrawGameSelectionWindow()
 {
-    if (ImGui::Begin("Game selection", &show_game_selection_window)) {
+    auto DrawCoreList = [](System system) {
+        GameList& game_list = game_lists[system];
         if (ImGui::Button("Set game directory")) {
-            OnSetGameDirectory();
+            std::optional<fs::path> dir = FolderDialog();
+            if (dir) {
+                game_list.directory = std::move(dir.value());
+                RefreshGameList(system);
+            }
         }
         ImGui::SameLine();
-        if (ImGui::Checkbox("Filter to common n64 file types", &filter_game_list_to_n64_files)) {
-            RefreshGameList();
+        if (ImGui::Checkbox("Filter to common file types", &game_list.apply_filter)) {
+            RefreshGameList(system);
         }
-        if (game_list_directory.empty()) {
+        if (game_list.directory.empty()) {
             ImGui::Text("No directory set!");
         } else {
             // TODO: see if conversion to char* which ImGui::Gui requires can be done in a better way.
             // On Windows: directories containing non-ASCII characters display incorrectly
-            ImGui::Text(game_list_directory.string().c_str());
+            ImGui::Text(game_list.directory.string().c_str());
         }
         if (ImGui::BeginListBox("Game selection")) {
             static size_t item_current_idx = 0; // Here we store our selection data as an index.
-            for (size_t n = 0; n < game_list.size(); ++n) {
+            for (size_t n = 0; n < game_list.games.size(); ++n) {
                 bool is_selected = item_current_idx == n;
-                if (ImGui::Selectable(game_list[n].name.c_str(), is_selected, ImGuiSelectableFlags_AllowDoubleClick)) {
+                if (ImGui::Selectable(game_lists[system].games[n].name.c_str(),
+                      is_selected,
+                      ImGuiSelectableFlags_AllowDoubleClick)) {
                     item_current_idx = n;
                     if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0)) {
-                        OnGameSelected(size_t(n));
+                        OnGameSelected(system, size_t(n));
                     }
                 }
                 // Set the initial focus when opening the combo (scrolling + keyboard navigation focus)
@@ -200,6 +210,18 @@ void DrawGameSelectionWindow()
             }
             ImGui::EndListBox();
         }
+    };
+
+    if (ImGui::Begin("Game selection", &show_game_selection_window)) {
+        static int tab{};
+        if (ImGui::Button("N64", ImVec2(100.0f, 0.0f))) tab = 0;
+        // ImGui::SameLine(0.0, 2.0f);
+        // if (ImGui::Button("Test", ImVec2(100.0f, 0.0f))) tab = 1;
+
+        switch (tab) {
+        case 0: DrawCoreList(System::N64); break;
+        }
+
         ImGui::End();
     }
 }
@@ -563,7 +585,8 @@ Status LoadGame(std::filesystem::path const& path)
 {
     std::unique_ptr<Core> const& core = get_core();
     assert(core);
-    switch (get_system()) {
+    System system = get_system();
+    switch (system) {
     case System::N64: core->apply_configuration(n64_configuration); break;
     default: assert(false);
     }
@@ -574,8 +597,11 @@ Status LoadGame(std::filesystem::path const& path)
         }
         start_game = true;
         current_game_title = path.filename().string();
-        game_list_directory = path.parent_path();
-        RefreshGameList();
+        GameList& game_list = game_lists[system];
+        if (game_list.directory.empty()) {
+            game_list.directory = path.parent_path();
+            RefreshGameList(system);
+        }
     }
     return status;
 }
@@ -637,9 +663,9 @@ void OnExit()
     SDL_Quit();
 }
 
-void OnGameSelected(size_t list_index)
+void OnGameSelected(System system, size_t list_index)
 {
-    GameListEntry const& entry = game_list[list_index];
+    GameListEntry const& entry = game_lists[system].games[list_index];
     Status status = [&entry] {
         if (core_loaded()) {
             StopGame();
@@ -721,7 +747,7 @@ void OnMenuOpen()
 void OnMenuOpenBios()
 {
     std::optional<fs::path> path = FileDialog();
-    if (path.has_value()) {
+    if (path) {
         fs::path path_val = std::move(path.value());
         // if (!N64::LoadBios(path_val)) {
         //     message::error(std::format("Could not load bios at path \"{}\"", path_val.string()));
@@ -780,15 +806,6 @@ void OnSdlQuit()
     }
 }
 
-void OnSetGameDirectory()
-{
-    std::optional<fs::path> dir = FolderDialog();
-    if (dir.has_value()) {
-        game_list_directory = std::move(dir.value());
-        RefreshGameList();
-    }
-}
-
 void OnWindowResizeEvent(SDL_Event const& event)
 {
 }
@@ -819,22 +836,20 @@ Status ReadConfigFile()
     return status_unimplemented(); // TODO
 }
 
-void RefreshGameList()
+void RefreshGameList(System system)
 {
-    game_list.clear();
-    if (fs::exists(game_list_directory)) {
-        for (fs::directory_entry const& entry : fs::directory_iterator(game_list_directory)) {
-            if (entry.is_regular_file()) {
-                auto IsKnownExt = [](fs::path const& ext) {
-                    static const std::array<fs::path, 8>
-                      n64_rom_exts = { ".n64", ".N64", ".v64", ".V64", ".z64", ".Z64", ".zip", ".7z" };
-                    return std::find_if(n64_rom_exts.begin(), n64_rom_exts.end(), [&ext](fs::path const& known_ext) {
-                        return ext.compare(known_ext) == 0;
-                    }) != n64_rom_exts.end();
-                };
-                if (!filter_game_list_to_n64_files || IsKnownExt(entry.path().filename().extension())) {
-                    game_list.push_back(GameListEntry{ entry.path(), entry.path().filename().string() });
-                }
+    GameList& game_list = game_lists[system];
+    game_list.games.clear();
+    std::vector<fs::path> const& known_exts = system_to_rom_exts.at(system);
+    auto IsKnownExt = [&known_exts](fs::path const& ext) {
+        return rng::find_if(known_exts, [&ext](fs::path const& known_ext) { return ext.compare(known_ext) == 0; })
+            != known_exts.end();
+    };
+    if (fs::exists(game_list.directory)) {
+        for (fs::directory_entry const& entry : fs::directory_iterator(game_list.directory)) {
+            if (entry.is_regular_file()
+                && (!game_list.apply_filter || IsKnownExt(entry.path().filename().extension()))) {
+                game_list.games.push_back(GameListEntry{ entry.path(), entry.path().filename().string() });
             }
         }
     }
