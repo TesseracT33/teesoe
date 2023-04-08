@@ -5,6 +5,8 @@
 #include <array>
 #include <string_view>
 
+using namespace std::literals;
+
 namespace n64 {
 
 // TODO: allow controlling C buttons with joystick
@@ -28,23 +30,23 @@ enum class Control : u32 {
     JY,
 };
 
-constexpr std::array<std::string_view, 18> control_names = {
-    "A",
-    "B",
-    "START",
-    "Z",
-    "L",
-    "R",
-    "D-pad up",
-    "D-pad down",
-    "D-pad left",
-    "D-pad right",
-    "C up",
-    "C down",
-    "C left",
-    "C right",
-    "Joy X",
-    "Joy Y",
+constexpr std::array control_names = {
+    "A"sv,
+    "B"sv,
+    "START"sv,
+    "Z"sv,
+    "L"sv,
+    "R"sv,
+    "D-pad up"sv,
+    "D-pad down"sv,
+    "D-pad left"sv,
+    "D-pad right"sv,
+    "C up"sv,
+    "C down"sv,
+    "C left"sv,
+    "C right"sv,
+    "Joy X"sv,
+    "Joy Y"sv,
 };
 
 } // namespace n64
