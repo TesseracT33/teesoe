@@ -2,7 +2,7 @@
 
 union CoreConfiguration {
     struct {
-        bool cpu_recompiler;
-        bool rsp_recompiler;
+        bool use_cpu_recompiler;
+        bool use_rsp_recompiler;
     } n64;
 };

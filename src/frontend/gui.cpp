@@ -137,19 +137,19 @@ void DrawCoreSettingsWindow()
             static int cpu_impl_sel{};
             ImGui::Text("CPU implementation");
             if (ImGui::RadioButton("Interpreter", &cpu_impl_sel, 0)) {
-                n64_configuration.n64.cpu_recompiler = false;
+                n64_configuration.n64.use_cpu_recompiler = false;
             }
             if (ImGui::RadioButton("Recompiler", &cpu_impl_sel, 1)) {
-                n64_configuration.n64.cpu_recompiler = true;
+                n64_configuration.n64.use_cpu_recompiler = true;
             }
 
             static int rsp_impl_sel{};
             ImGui::Text("RSP implementation");
             if (ImGui::RadioButton("Interpreter", &rsp_impl_sel, 0)) {
-                n64_configuration.n64.rsp_recompiler = false;
+                n64_configuration.n64.use_rsp_recompiler = false;
             }
             if (ImGui::RadioButton("Recompiler", &rsp_impl_sel, 1)) {
-                n64_configuration.n64.rsp_recompiler = true;
+                n64_configuration.n64.use_rsp_recompiler = true;
             }
         };
 
@@ -899,7 +899,8 @@ void StopGame()
 void UpdateWindowTitle()
 {
     if (game_is_running) {
-        std::string title = std::format("teesoe | {} | FPS: {}", current_game_title, fps); // TODO: current core
+        std::string title =
+          std::format("teesoe | {} | {} | FPS: {}", system_to_string(get_system()), current_game_title, fps);
         SDL_SetWindowTitle(sdl_window, title.c_str());
     } else {
         SDL_SetWindowTitle(sdl_window, "teesoe");

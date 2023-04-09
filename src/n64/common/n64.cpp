@@ -21,9 +21,9 @@ using namespace n64;
 void N64::apply_configuration(CoreConfiguration config)
 {
     CpuImpl prev_cpu_impl =
-      std::exchange(cpu_impl, config.n64.cpu_recompiler ? CpuImpl::Recompiler : CpuImpl::Interpreter);
+      std::exchange(cpu_impl, config.n64.use_cpu_recompiler ? CpuImpl::Recompiler : CpuImpl::Interpreter);
     CpuImpl prev_rsp_impl =
-      std::exchange(rsp_impl, config.n64.rsp_recompiler ? CpuImpl::Recompiler : CpuImpl::Interpreter);
+      std::exchange(rsp_impl, config.n64.use_rsp_recompiler ? CpuImpl::Recompiler : CpuImpl::Interpreter);
     if (running && (cpu_impl != prev_cpu_impl || rsp_impl != prev_rsp_impl)) {
         stop();
         run();
