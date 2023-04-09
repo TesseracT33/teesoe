@@ -1,5 +1,6 @@
 #include "gui.hpp"
 #include "audio.hpp"
+#include "config.hpp"
 #include "core_configuration.hpp"
 #include "frontend/message.hpp"
 #include "imgui.h"
@@ -460,7 +461,7 @@ void GetWindowSize(int* w, int* h)
     SDL_GetWindowSize(sdl_window, w, h);
 }
 
-Status Init()
+Status Init(fs::path work_path)
 {
     window_width = 640, window_height = 480;
 
@@ -500,6 +501,7 @@ Status Init()
         message::error(
           std::format("Failed to init nativefiledialog; NFD_Init returned {}", std::to_underlying(result)));
     }
+    config::Open(work_path);
     UpdateWindowTitle();
 
     return status_ok();

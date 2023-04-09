@@ -12,7 +12,7 @@ namespace frontend::gui {
 void FrameVulkan(VkCommandBuffer vk_command_buffer); // To be called by a core while game is running
 SDL_Window* GetSdlWindow();
 void GetWindowSize(int* w, int* h);
-Status Init();
+Status Init(std::filesystem::path work_path);
 Status LoadGame(std::filesystem::path const& path);
 void OnCtrlKeyPress(SDL_Keycode keycode);
 void PollEvents();

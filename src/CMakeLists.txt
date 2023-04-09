@@ -6,7 +6,8 @@ target_sources(teesoe PRIVATE
 	common/log.cpp
 	common/sse_util.cpp
 
-	frontend/audio.cpp 
+	frontend/audio.cpp
+	frontend/config.cpp
 	frontend/gui.cpp
 	frontend/input.cpp
 	frontend/loader.cpp

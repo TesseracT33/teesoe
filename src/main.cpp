@@ -5,15 +5,20 @@
 #include "status.hpp"
 
 #include <cstdlib>
+#include <filesystem>
 #include <string_view>
+
+namespace fs = std::filesystem;
 
 int main(int argc, char* argv[])
 {
+    fs::path work_path = fs::current_path();
+
     if (Status status = init_file_log(); !status.ok()) {
         log_warn(status.message());
     }
 
-    if (Status status = frontend::gui::Init(); !status.ok()) {
+    if (Status status = frontend::gui::Init(work_path); !status.ok()) {
         log_fatal(status.message());
         return EXIT_FAILURE;
     }
