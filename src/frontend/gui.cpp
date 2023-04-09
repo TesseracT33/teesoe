@@ -78,11 +78,11 @@ static void OnMenuStop();
 static void OnMenuWindowScale();
 static void OnSdlQuit();
 static void OnWindowResizeEvent(SDL_Event const& event);
-static Status ReadConfigFile();
+static Status ReadConfig();
 static void RefreshGameList(System system);
 static void StartGame();
 static void StopGame();
-static void UpdateWindowTitle();
+static void UpdateWindowTitle(float fps = 0.f);
 static void UseDefaultConfig();
 
 static bool game_is_running;
@@ -99,7 +99,7 @@ static bool start_game;
 static int frame_counter;
 static int window_height, window_width;
 
-static float fps;
+static fs::path exe_path;
 
 static std::string current_game_title;
 
@@ -179,11 +179,13 @@ void DrawGameSelectionWindow()
             if (dir) {
                 game_list.directory = std::move(dir.value());
                 RefreshGameList(system);
+                config::SetGamePath(system, game_list.directory);
             }
         }
         ImGui::SameLine();
         if (ImGui::Checkbox("Filter to common file types", &game_list.apply_filter)) {
             RefreshGameList(system);
+            config::SetFilterGameList(system, game_list.apply_filter);
         }
         if (game_list.directory.empty()) {
             ImGui::Text("No directory set!");
@@ -437,8 +439,8 @@ void FrameVulkan(VkCommandBuffer vk_command_buffer)
         static std::chrono::time_point time = std::chrono::steady_clock::now();
         auto microsecs_to_render_60_frames =
           std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - time).count();
-        fps = 60.0f * 1'000'000.0f / float(microsecs_to_render_60_frames);
-        UpdateWindowTitle();
+        float fps = 60.0f * 1'000'000.0f / float(microsecs_to_render_60_frames);
+        UpdateWindowTitle(fps);
         frame_counter = 0;
         time = std::chrono::steady_clock::now();
     }
@@ -463,6 +465,8 @@ void GetWindowSize(int* w, int* h)
 
 Status Init(fs::path work_path)
 {
+    exe_path = work_path;
+
     window_width = 640, window_height = 480;
 
     game_is_running = false;
@@ -477,7 +481,8 @@ Status Init(fs::path work_path)
     show_game_selection_window = !game_is_running;
 
     Status status{ Status::Code::Ok };
-    if (status = ReadConfigFile(); !status.ok()) {
+    config::Open(work_path);
+    if (status = ReadConfig(); !status.ok()) {
         log_error(status.message());
         log_info("Using default configuration.");
         UseDefaultConfig();
@@ -501,7 +506,6 @@ Status Init(fs::path work_path)
         message::error(
           std::format("Failed to init nativefiledialog; NFD_Init returned {}", std::to_underlying(result)));
     }
-    config::Open(work_path);
     UpdateWindowTitle();
 
     return status_ok();
@@ -831,9 +835,26 @@ void PollEvents()
     }
 }
 
-Status ReadConfigFile()
+Status ReadConfig()
 {
-    return status_unimplemented(); // TODO
+    for (System system : systems) {
+        GameList& game_list = game_lists[system];
+
+        if (std::optional<std::string> rom_path = config::GetGamePath(system); rom_path) {
+            game_list.directory = rom_path.value();
+        } else {
+            game_list.directory = exe_path;
+        }
+
+        if (std::optional<bool> apply_filter = config::GetFilterGameList(system); apply_filter) {
+            game_list.apply_filter = apply_filter.value();
+        } else {
+            game_list.apply_filter = false;
+        }
+
+        RefreshGameList(system);
+    }
+    return status_ok();
 }
 
 void RefreshGameList(System system)
@@ -896,7 +917,7 @@ void StopGame()
     // TODO: show nice n64 background on window
 }
 
-void UpdateWindowTitle()
+void UpdateWindowTitle(float fps)
 {
     if (game_is_running) {
         std::string title =

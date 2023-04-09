@@ -86,9 +86,14 @@ std::optional<bool> GetN64UseRspRecompiler()
 void Open(fs::path const& work_path)
 {
     config_path = (work_path / "config.yaml").generic_string(); // TODO: conv to generic std::string ok?
+    bool rebuild{};
     try {
         config = YAML::LoadFile(config_path);
+        rebuild = config.IsNull();
     } catch (YAML::BadFile const&) {
+        rebuild = true;
+    }
+    if (rebuild) {
         Rebuild();
     }
 }

@@ -4,6 +4,7 @@
 #include "status.hpp"
 
 #include <algorithm>
+#include <array>
 #include <filesystem>
 #include <map>
 #include <memory>
@@ -23,6 +24,8 @@ enum class System {
     NES,
     PS2
 };
+
+constexpr std::array systems = { System::CHIP8, System::GB, System::GBA, System::N64, System::NES, System::PS2 };
 
 inline const std::map<System, std::vector<fs::path>> system_to_rom_exts = [] {
     std::map<System, std::vector<fs::path>> system_exts{
