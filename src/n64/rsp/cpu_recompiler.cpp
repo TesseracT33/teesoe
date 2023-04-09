@@ -79,12 +79,6 @@ void Recompiler::lhu(u32 rs, u32 rt, s16 imm) const
     load<u16>(rs, rt, imm);
 }
 
-void Recompiler::ll(u32 rs, u32 rt, s16 imm) const
-{
-    load<s16>(rs, rt, imm);
-    c.mov(ptr(ll_bit), 1);
-}
-
 void Recompiler::lw(u32 rs, u32 rt, s16 imm) const
 {
     load<s32>(rs, rt, imm);
@@ -112,19 +106,6 @@ void Recompiler::mtc0(u32 rt, u32 rd) const
 void Recompiler::sb(u32 rs, u32 rt, s16 imm) const
 {
     store<s8>(rs, rt, imm);
-}
-
-void Recompiler::sc(u32 rs, u32 rt, s16 imm) const
-{
-    Label l_end = c.newLabel();
-    c.cmp(ptr(ll_bit), 0);
-    c.je(l_end);
-    store<s32>(rs, rt, imm);
-    c.bind(l_end);
-    if (rt) {
-        c.movzx(eax, ptr(ll_bit));
-        set_gpr(rt, eax);
-    }
 }
 
 void Recompiler::sh(u32 rs, u32 rt, s16 imm) const
