@@ -115,8 +115,7 @@ u64 Run(u64 rsp_cycles_to_run)
     if (sp.status.halted) {
         return 0;
     }
-    p_cycle_counter = 0;
-    while (p_cycle_counter < rsp_cycles_to_run) {
+    auto Instr = [rsp_cycles_to_run] {
         if (jump_is_pending) {
             if (instructions_until_jump-- == 0) {
                 pc = jump_addr;
@@ -127,14 +126,21 @@ u64 Run(u64 rsp_cycles_to_run)
             }
         }
         FetchDecodeExecuteInstruction();
-        if (sp.status.sstep || sp.status.halted) {
-            if (sp.status.sstep) {
-                sp.status.halted = true;
+    };
+    p_cycle_counter = 0;
+    if (sp.status.sstep) {
+        Instr();
+        sp.status.halted = true;
+        return p_cycle_counter <= rsp_cycles_to_run ? 0 : p_cycle_counter - rsp_cycles_to_run;
+    } else {
+        while (p_cycle_counter < rsp_cycles_to_run) {
+            Instr();
+            if (sp.status.halted) {
+                return p_cycle_counter <= rsp_cycles_to_run ? 0 : p_cycle_counter - rsp_cycles_to_run;
             }
-            return p_cycle_counter <= rsp_cycles_to_run ? 0 : p_cycle_counter - rsp_cycles_to_run;
         }
+        return p_cycle_counter - rsp_cycles_to_run;
     }
-    return p_cycle_counter - rsp_cycles_to_run;
 }
 
 template<std::signed_integral Int> void WriteDMEM(u32 addr, Int data)
