@@ -6,9 +6,6 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 add_executable(teesoe)
 
-add_subdirectory(ext)
-add_subdirectory(src)
-
 set_property(TARGET teesoe PROPERTY CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON)
 
 if (${CMAKE_SYSTEM_PROCESSOR} STREQUAL "AMD64" OR ${CMAKE_SYSTEM_PROCESSOR} STREQUAL "x86-64")
@@ -37,10 +34,6 @@ endif()
 
 if (${CMAKE_CXX_COMPILER_ID} STREQUAL "GNU")
 	set(GCC 1)
-endif()
-
-if (${CMAKE_CXX_COMPILER_ID} STREQUAL "MSVC")
-	set(MSVC 1)
 endif()
 
 list(APPEND clang_flags
@@ -187,3 +180,6 @@ elseif (GCC)
 elseif (MSVC)
 	target_compile_options(teesoe PUBLIC ${msvc_flags})
 endif()
+
+add_subdirectory(ext)
+add_subdirectory(src)

@@ -16,3 +16,6 @@
 [submodule "ext/asmjit"]
 	path = ext/asmjit
 	url = https://github.com/asmjit/asmjit
+[submodule "ext/bit7z"]
+	path = ext/bit7z
+	url = https://github.com/rikyoz/bit7z

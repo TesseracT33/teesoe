@@ -81,7 +81,7 @@ target_include_directories(parallel-rdp-standalone PUBLIC
 )
 target_compile_definitions(parallel-rdp-standalone PUBLIC VK_NO_PROTOTYPES)
 if(WIN32)
-target_compile_definitions(parallel-rdp-standalone PRIVATE VK_USE_PLATFORM_WIN32_KHR)
+	target_compile_definitions(parallel-rdp-standalone PRIVATE VK_USE_PLATFORM_WIN32_KHR)
 endif()
 target_link_libraries(teesoe parallel-rdp-standalone)
 
@@ -100,3 +100,11 @@ set(ASMJIT_BUILD_X86 X64)
 set(ASMJIT_BUILD_ARM ARM64)
 add_subdirectory(asmjit)
 target_link_libraries(teesoe asmjit)
+
+##### bit7z ####################
+add_subdirectory(bit7z)
+if(MSVC AND CLANG)
+	# prevent clang-cl "argument unused during compilation: /Zc:throwingNew, /Zc:referenceBinding" errors
+	target_compile_options(bit7z64 PRIVATE -Wno-error=unused-command-line-argument)
+endif()
+target_link_libraries(teesoe bit7z64)
