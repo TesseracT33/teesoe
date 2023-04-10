@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string_view>
 
 namespace frontend {
@@ -37,8 +38,10 @@ inline const std::map<System, std::vector<fs::path>> system_to_rom_exts = [] {
         { System::PS2, { ".bin", ".BIN", ".iso", ".ISO" } },
     };
     for (auto& [system, exts] : system_exts) {
-        exts.push_back(".zip");
         exts.push_back(".7z");
+        exts.push_back(".7Z");
+        exts.push_back(".zip");
+        exts.push_back(".ZIP");
     }
     return system_exts;
 }();
@@ -64,7 +67,7 @@ bool core_loaded();
 std::unique_ptr<Core> const& get_core();
 System get_system();
 Status load_core(System system);
-Status load_core_and_game(fs::path const& rom_path);
+Status load_core_and_game(fs::path rom_path);
 std::string_view system_to_string(System system);
 
 } // namespace frontend

@@ -12,7 +12,7 @@ namespace frontend::config {
 static void EmitN64(YAML::Emitter& emitter);
 static void Flush();
 static void Flush(YAML::Emitter& emitter);
-template<typename T> static std::optional<T> Get(YAML::Node const& n);
+template<typename T> static std::optional<T> Get(YAML::Node&& n);
 static void Rebuild();
 constexpr char const* SystemToNode(System system);
 
@@ -44,6 +44,7 @@ void EmitN64(YAML::Emitter& out)
         log_error(std::format("yaml emitter error: {}", out.GetLastError()));
     }
 }
+
 void Flush()
 {
     YAML::Emitter emitter;

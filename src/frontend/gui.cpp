@@ -252,10 +252,12 @@ void DrawInputBindingsWindow()
         }
     };
 
+    static constexpr std::array hotkey_labels = { "Load state", "Save state", "Toggle fullscreen" };
+
     static constinit std::array hotkey_buttons = {
-        Button{ "Load state" },
-        Button{ "Save state" },
-        Button{ "Toggle fullscreen" },
+        Button{},
+        Button{},
+        Button{},
     };
 
     if (ImGui::Begin("Input configuration", &show_input_bindings_window)) {
@@ -271,7 +273,7 @@ void DrawInputBindingsWindow()
         static std::vector<Button> control_buttons;
         control_buttons.reserve(control_button_labels.size());
         for (size_t i = 0; i < control_button_labels.size(); ++i) {
-            control_buttons.emplace_back(Button{ control_button_labels[i] });
+            control_buttons.emplace_back(Button{});
         }
 
         if (ImGui::Button("Reset all")) {
@@ -295,7 +297,7 @@ void DrawInputBindingsWindow()
         for (size_t i = 0; i < num_horizontal_elements; ++i) {
             if (i < control_button_labels.size()) {
                 Button& button = control_buttons[i];
-                ImGui::Text(control_buttons[i].label.data());
+                ImGui::Text(control_button_labels[i].data());
                 ImGui::SameLine(100);
                 if (ImGui::Button(button.label.data())) {
                     button.OnPressed();
@@ -304,7 +306,7 @@ void DrawInputBindingsWindow()
             if (i < hotkey_buttons.size()) {
                 Button& button = hotkey_buttons[i];
                 ImGui::SameLine();
-                ImGui::Text(hotkey_buttons[i].label.data());
+                ImGui::Text(hotkey_labels[i]);
                 ImGui::SameLine(250);
                 if (ImGui::Button(button.label.data())) {
                     button.OnPressed();
@@ -467,7 +469,7 @@ Status Init(fs::path work_path)
 {
     exe_path = work_path;
 
-    window_width = 640, window_height = 480;
+    window_width = 960, window_height = 720;
 
     game_is_running = false;
     menu_enable_audio = true;
@@ -585,7 +587,7 @@ Status InitSdl()
     return status_ok();
 }
 
-Status LoadGame(std::filesystem::path const& path)
+Status LoadGame(fs::path const& path)
 {
     std::unique_ptr<Core> const& core = get_core();
     assert(core);
@@ -670,14 +672,10 @@ void OnExit()
 void OnGameSelected(System system, size_t list_index)
 {
     GameListEntry const& entry = game_lists[system].games[list_index];
-    Status status = [&entry] {
-        if (core_loaded()) {
-            StopGame();
-            return get_core()->load_rom(entry.path);
-        } else {
-            return load_core_and_game(entry.path);
-        }
-    }();
+    if (core_loaded()) {
+        StopGame();
+    }
+    Status status = load_core_and_game(entry.path);
     if (status.ok()) {
         current_game_title = entry.name;
         start_game = true;
