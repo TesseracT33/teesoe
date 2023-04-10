@@ -70,7 +70,7 @@ template<DmaType type> void InitDma()
             std::memcpy(rdram_ptr + i, &val, 4);
         }
         if constexpr (log_dma) {
-            log(std::format("From PIF ${:X} to RDRAM ${:X}: ${:X} bytes", pif_addr, si.dram_addr, dma_len));
+            log(std::format("DMA: from PIF ${:X} to RDRAM ${:X}: ${:X} bytes", pif_addr, si.dram_addr, dma_len));
         }
     } else { /* RDRAM to PIF */
         size_t num_bytes_in_rom_area = pif::GetNumberOfBytesUntilRamStart(pif_addr);
@@ -84,7 +84,7 @@ template<DmaType type> void InitDma()
                 pif::WriteMemory<4>(pif_addr + i, val); // PIF BE, RDRAM LE, but val byteswapped in pif::WriteMemory
             }
             if constexpr (log_dma) {
-                log(std::format("From RDRAM ${:X} to PIF ${:X}: ${:X} bytes",
+                log(std::format("DMA: from RDRAM ${:X} to PIF ${:X}: ${:X} bytes",
                   si.dram_addr,
                   pif_addr,
                   dma_len - num_bytes_in_rom_area));

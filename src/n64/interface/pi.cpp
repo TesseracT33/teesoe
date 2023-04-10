@@ -96,7 +96,8 @@ template<DmaType type> void InitDma()
         //       dma_len - num_bytes_first_block);
         // }
         if constexpr (log_dma) {
-            log(std::format("From cart ROM ${:X} to RDRAM ${:X}: ${:X} bytes", pi.cart_addr, pi.dram_addr, dma_len));
+            log(
+              std::format("DMA: from cart ROM ${:X} to RDRAM ${:X}: ${:X} bytes", pi.cart_addr, pi.dram_addr, dma_len));
         }
     } else { /* RDRAM to cart */
         /* TODO: when I wrote this code, I forgot we can't write to ROM. But it seems we can write to SRAM/FLASH.
