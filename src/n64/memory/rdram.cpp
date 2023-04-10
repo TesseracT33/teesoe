@@ -70,23 +70,10 @@ u32 ReadReg(u32 addr)
     return ret;
 }
 
-u64 RdpReadCommandByteswapped(u32 addr)
-{
-    /* addr may be misaligned */
+u64 RdpReadCommand(u32 addr)
+{ // addr is aligned to 8 bytes
     u64 command;
-    for (int i = 0; i < 8; ++i) {
-        *((u8*)(&command) + i) = rdram[(addr + 7 - i) & (sizeof(rdram) - 1)];
-    }
-    return command;
-}
-
-u32 RdpReadCommand(u32 addr)
-{
-    /* addr may be misaligned */
-    u64 command;
-    for (int i = 0; i < 8; ++i) {
-        *((u8*)(&command) + i) = rdram[(addr + i) & (sizeof(rdram) - 1)];
-    }
+    std::memcpy(&command, &rdram[addr & (sizeof(rdram) - 1)], 8);
     return command;
 }
 

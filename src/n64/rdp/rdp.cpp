@@ -55,8 +55,7 @@ static u32 num_queued_words;
 static std::array<u32, 0x100000> cmd_buffer;
 constexpr u32 cmd_buffer_word_capacity = cmd_buffer.size();
 
-template<CommandLocation> static u64 LoadCommandDword(u32 addr);
-template<CommandLocation> static void LoadExecuteCommands();
+static void LoadExecuteCommands();
 constexpr std::string_view RegOffsetToStr(u32 reg_offset);
 
 void Initialize()
@@ -65,16 +64,7 @@ void Initialize()
     dp.status.ready = 1;
 }
 
-template<CommandLocation cmd_loc> u64 LoadCommandDword(u32 addr)
-{
-    if constexpr (cmd_loc == CommandLocation::DMEM) { /* todo: byteswap? */
-        return rsp::RdpReadCommandByteswapped(addr);
-    } else {
-        return rdram::RdpReadCommandByteswapped(addr);
-    }
-}
-
-template<CommandLocation cmd_loc> void LoadExecuteCommands()
+void LoadExecuteCommands()
 {
     if (dp.status.freeze) {
         return;
@@ -89,97 +79,40 @@ template<CommandLocation cmd_loc> void LoadExecuteCommands()
         return;
     }
 
+    u64 (*read_cmd_func)(u32) = dp.status.cmd_source ? rsp::RdpReadCommand : rdram::RdpReadCommand;
+
     do {
-        u64 dword = LoadCommandDword<cmd_loc>(current); /* TODO: swap words? */
-        std::memcpy(&cmd_buffer[num_queued_words], &dword, 8);
+        u64 cmd = read_cmd_func(current);
+        std::memcpy(&cmd_buffer[num_queued_words], &cmd, 8);
         num_queued_words += 2;
         current += 8;
     } while (--num_dwords > 0);
 
     while (queue_word_offset < num_queued_words) {
-        u32 cmd_first_word = cmd_buffer[queue_word_offset];
-        u32 opcode = cmd_first_word & 0x3F;
+        u32 opcode = cmd_buffer[queue_word_offset] >> 24 & 0x3F;
+        // clang-format off
         static constexpr std::array cmd_word_lengths = {
-            2,
-            2,
-            2,
-            2,
-            2,
-            2,
-            2,
-            2,
-            8,
-            12,
-            24,
-            28,
-            24,
-            28,
-            40,
-            44,
-            2,
-            2,
-            2,
-            2,
-            2,
-            2,
-            2,
-            2,
-            2,
-            2,
-            2,
-            2,
-            2,
-            2,
-            2,
-            2,
-            2,
-            2,
-            2,
-            2,
-            4,
-            4,
-            2,
-            2,
-            2,
-            2,
-            2,
-            2,
-            2,
-            2,
-            2,
-            2,
-            2,
-            2,
-            2,
-            2,
-            2,
-            2,
-            2,
-            2,
-            2,
-            2,
-            2,
-            2,
-            2,
-            2,
-            2,
-            2,
+            2, 2, 2, 2, 2, 2, 2, 2, 8,12,24,28,24,28,40,44,
+            2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+            2, 2, 2, 2, 4, 4, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+            2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
         };
-        u32 cmd_word_len = cmd_word_lengths[opcode];
-        if (queue_word_offset + cmd_word_len > num_queued_words) {
+        // clang-format on
+        u32 cmd_len = cmd_word_lengths[opcode];
+        if (queue_word_offset + cmd_len > num_queued_words) {
             /* partial command; keep data around for next processing call */
             dp.start = dp.current = dp.end;
             return;
         }
         if (opcode >= 8) {
-            implementation->EnqueueCommand(cmd_word_len, &cmd_buffer[queue_word_offset]);
+            implementation->EnqueueCommand(cmd_len, &cmd_buffer[queue_word_offset]);
+            if (opcode == 0x29) { /* full sync command */
+                implementation->OnFullSync();
+                dp.status.pipe_busy = dp.status.start_gclk = 0;
+                mi::RaiseInterrupt(mi::InterruptType::DP);
+            }
         }
-        if (opcode == 0x29) { /* full sync command */
-            implementation->OnFullSync();
-            dp.status.pipe_busy = dp.status.start_gclk = false;
-            mi::RaiseInterrupt(mi::InterruptType::DP);
-        }
-        queue_word_offset += cmd_word_len;
+        queue_word_offset += cmd_len;
     }
 
     queue_word_offset = num_queued_words = 0;
@@ -229,11 +162,6 @@ constexpr std::string_view RegOffsetToStr(u32 reg_offset)
 
 void WriteReg(u32 addr, u32 data)
 {
-    auto ProcessCommands = [&] {
-        dp.status.cmd_source ? LoadExecuteCommands<CommandLocation::DMEM>()
-                             : LoadExecuteCommands<CommandLocation::RDRAM>();
-    };
-
     static_assert(sizeof(dp) >> 2 == 8);
     u32 offset = addr >> 2 & 7;
     if constexpr (log_io_rdp) {
@@ -244,7 +172,7 @@ void WriteReg(u32 addr, u32 data)
     case Register::StartReg:
         if (!dp.status.start_valid) {
             dp.start = data & 0xFF'FFF8;
-            dp.status.start_valid = true;
+            dp.status.start_valid = 1;
         }
         break;
 
@@ -252,15 +180,12 @@ void WriteReg(u32 addr, u32 data)
         dp.end = data & 0xFF'FFF8;
         if (dp.status.start_valid) {
             dp.current = dp.start;
-            dp.status.start_valid = false;
+            dp.status.start_valid = 0;
         }
-        if (!dp.status.freeze) {
-            ProcessCommands();
-        }
+        LoadExecuteCommands();
         break;
 
-    case Register::StatusReg: {
-        bool unfrozen = false;
+    case Register::StatusReg:
         if (data & 1) {
             dp.status.cmd_source = 0;
         } else if (data & 2) {
@@ -268,7 +193,7 @@ void WriteReg(u32 addr, u32 data)
         }
         if (data & 4) {
             dp.status.freeze = 0;
-            unfrozen = true;
+            LoadExecuteCommands();
         } else if (data & 8) {
             dp.status.freeze = 1;
         }
@@ -289,10 +214,7 @@ void WriteReg(u32 addr, u32 data)
         if (data & 0x200) {
             dp.clock = 0;
         }
-        if (unfrozen) {
-            ProcessCommands();
-        }
-    } break;
+        break;
     }
 }
 } // namespace n64::rdp

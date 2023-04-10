@@ -90,24 +90,13 @@ template<std::signed_integral Int> Int ReadMemoryCpu(u32 addr)
     }
 }
 
-u64 RdpReadCommandByteswapped(u32 addr)
-{
-    /* The address may be unaligned */
-    u64 command;
-    for (int i = 0; i < 8; ++i) {
-        *((u8*)(&command) + i) = dmem[(addr + 7 - i) & 0xFFF];
-    }
-    return command;
-}
-
-u32 RdpReadCommand(u32 addr)
-{
-    /* The address may be unaligned */
-    u64 command;
-    for (int i = 0; i < 8; ++i) {
-        *((u8*)(&command) + i) = dmem[(addr + i) & 0xFFF];
-    }
-    return command;
+u64 RdpReadCommand(u32 addr)
+{ // The address is aligned to 8 bytes
+    u32 words[2];
+    std::memcpy(words, &dmem[addr & 0xFFF], 8);
+    words[0] = std::byteswap(words[0]);
+    words[1] = std::byteswap(words[1]);
+    return std::bit_cast<u64>(words);
 }
 
 u64 Run(u64 rsp_cycles_to_run)
