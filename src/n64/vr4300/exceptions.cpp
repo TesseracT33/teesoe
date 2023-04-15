@@ -181,13 +181,7 @@ void SignalCoprocessorUnusableException(int co)
 template<Exception exception, MemOp mem_op> void SignalException()
 {
     static constexpr auto new_exception_priority = GetExceptionPriority<exception, mem_op>();
-    if (exception_occurred) {
-        /* Compare exception priorities; return if the new exception has a lower priority than an already occured one.
-         */
-        if (new_exception_priority < occurred_exception_priority) {
-            return;
-        }
-    }
+    if (exception_occurred && new_exception_priority < occurred_exception_priority) return;
     exception_occurred = true;
     occurred_exception = exception;
     occurred_exception_priority = new_exception_priority;
@@ -203,7 +197,7 @@ template<Exception exception, MemOp mem_op> void SignalException()
 template<MemOp mem_op> void SignalAddressErrorException(u64 bad_virt_addr)
 {
     SignalException<Exception::AddressError, mem_op>();
-    exception_bad_virt_addr = bad_virt_addr;
+    exception_bad_vaddr = bad_virt_addr;
 }
 
 template<MemOp mem_op> void AddressErrorException()
@@ -212,9 +206,9 @@ template<MemOp mem_op> void AddressErrorException()
         if constexpr (mem_op == MemOp::Write) return 5;
         else return 4;
     }();
-    cop0.bad_v_addr = exception_bad_virt_addr;
-    cop0.context.bad_vpn2 = cop0.x_context.bad_vpn2 = cop0.entry_hi.vpn2 = exception_bad_virt_addr >> 13;
-    cop0.entry_hi.r = cop0.x_context.r = exception_bad_virt_addr >> 62;
+    cop0.bad_v_addr = exception_bad_vaddr;
+    cop0.context.bad_vpn2 = cop0.x_context.bad_vpn2 = cop0.entry_hi.vpn2 = exception_bad_vaddr >> 13;
+    cop0.entry_hi.r = cop0.x_context.r = exception_bad_vaddr >> 62;
     cop0.cause.ce = 0;
 }
 
@@ -309,8 +303,8 @@ template<MemOp mem_op> void TlbInvalidException()
         if constexpr (mem_op == MemOp::Write) return 3;
         else return 2;
     }();
-    cop0.bad_v_addr = exception_bad_virt_addr;
-    cop0.context.bad_vpn2 = cop0.x_context.bad_vpn2 = cop0.entry_hi.vpn2 = exception_bad_virt_addr >> 13;
+    cop0.bad_v_addr = exception_bad_vaddr;
+    cop0.context.bad_vpn2 = cop0.x_context.bad_vpn2 = cop0.entry_hi.vpn2 = exception_bad_vaddr >> 13;
     cop0.cause.ce = 0;
     /* Tests indicate we should not update entry_hi.asid */
 }
@@ -321,16 +315,16 @@ template<MemOp mem_op> void TlbMissException()
         if constexpr (mem_op == MemOp::Write) return 3;
         else return 2;
     }();
-    cop0.bad_v_addr = exception_bad_virt_addr;
-    cop0.context.bad_vpn2 = cop0.x_context.bad_vpn2 = cop0.entry_hi.vpn2 = exception_bad_virt_addr >> 13;
+    cop0.bad_v_addr = exception_bad_vaddr;
+    cop0.context.bad_vpn2 = cop0.x_context.bad_vpn2 = cop0.entry_hi.vpn2 = exception_bad_vaddr >> 13;
     cop0.cause.ce = 0;
 }
 
 void TlbModException()
 {
     cop0.cause.exc_code = 1;
-    cop0.bad_v_addr = exception_bad_virt_addr;
-    cop0.context.bad_vpn2 = cop0.x_context.bad_vpn2 = cop0.entry_hi.vpn2 = exception_bad_virt_addr >> 13;
+    cop0.bad_v_addr = exception_bad_vaddr;
+    cop0.context.bad_vpn2 = cop0.x_context.bad_vpn2 = cop0.entry_hi.vpn2 = exception_bad_vaddr >> 13;
     cop0.cause.ce = 0;
 }
 
@@ -352,9 +346,9 @@ template<MemOp mem_op> void XtlbMissException()
         if constexpr (mem_op == MemOp::Write) return 3;
         else return 2;
     }();
-    cop0.bad_v_addr = exception_bad_virt_addr;
-    cop0.context.bad_vpn2 = cop0.x_context.bad_vpn2 = cop0.entry_hi.vpn2 = exception_bad_virt_addr >> 13;
-    cop0.entry_hi.r = cop0.x_context.r = exception_bad_virt_addr >> 62;
+    cop0.bad_v_addr = exception_bad_vaddr;
+    cop0.context.bad_vpn2 = cop0.x_context.bad_vpn2 = cop0.entry_hi.vpn2 = exception_bad_vaddr >> 13;
+    cop0.entry_hi.r = cop0.x_context.r = exception_bad_vaddr >> 62;
     cop0.cause.ce = 0;
 }
 

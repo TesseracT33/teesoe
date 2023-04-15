@@ -33,6 +33,6 @@ template<MemOp mem_op> void SignalAddressErrorException(u64 bad_virt_addr);
 void SignalCoprocessorUnusableException(int co);
 
 inline bool exception_occurred;
-inline u64 exception_bad_virt_addr;
+inline u64 exception_bad_vaddr;
 
 } // namespace n64::vr4300

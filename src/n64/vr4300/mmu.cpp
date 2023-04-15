@@ -84,25 +84,31 @@ void InitializeMMU()
     }
 }
 
-template<std::signed_integral Int, Alignment alignment, MemOp mem_op> Int ReadVirtual(u64 virtual_address)
+template<std::signed_integral Int, Alignment alignment, MemOp mem_op> Int ReadVirtual(u64 vaddr)
 {
     /* For aligned accesses, check if the address is misaligned. No need to do it for instruction fetches.
        The PC can be misaligned after an ERET instruction, but we manually check there if the PC read from the EPC
        register is misaligned. */
-    if constexpr (sizeof(Int) > 1 && mem_op != MemOp::InstrFetch) {
-        if constexpr (alignment == Alignment::Aligned) {
-            if (virtual_address & (sizeof(Int) - 1)) {
-                SignalAddressErrorException<mem_op>(virtual_address);
-                return {};
+    if constexpr (sizeof(Int) > 1) {
+        if constexpr (mem_op != MemOp::InstrFetch) {
+            if constexpr (alignment == Alignment::Aligned) {
+                if (vaddr & (sizeof(Int) - 1)) {
+                    SignalAddressErrorException<mem_op>(vaddr);
+                    return {};
+                }
+            } else {
+                /* For unaligned accesses, always read from the last boundary, with the number of bytes being sizeof
+                   Int. The rest is taken care of by the function which handles the load instruction. */
+                vaddr &= ~(sizeof(Int) - 1);
             }
-        } else {
-            /* For unaligned accesses, always read from the last boundary, with the number of bytes being sizeof Int.
-               The rest is taken care of by the function which handles the load instruction. */
-            virtual_address &= ~(sizeof(Int) - 1);
+        }
+        if (addressing_mode == AddressingMode::_32bit && s32(vaddr) != vaddr) {
+            SignalAddressErrorException<mem_op>(vaddr);
+            return {};
         }
     }
     bool cacheable_area;
-    u32 physical_address = active_virtual_to_physical_fun_read(virtual_address, cacheable_area);
+    u32 physical_address = active_virtual_to_physical_fun_read(vaddr, cacheable_area);
     if (exception_occurred) {
         return {};
     }
@@ -163,113 +169,113 @@ void SetActiveVirtualToPhysicalFunctions()
     }
 }
 
-template<MemOp mem_op> u32 VirtualToPhysicalAddressUserMode32(u64 virt_addr, bool& cacheable_area)
+template<MemOp mem_op> u32 VirtualToPhysicalAddressUserMode32(u64 vaddr, bool& cacheable_area)
 {
-    if (virt_addr & 0x8000'0000) {
-        SignalAddressErrorException<mem_op>(virt_addr);
+    if (vaddr & 0x8000'0000) {
+        SignalAddressErrorException<mem_op>(vaddr);
         return 0;
     } else {
         cacheable_area = false;
-        return VirtualToPhysicalAddressTlb<mem_op>(virt_addr);
+        return VirtualToPhysicalAddressTlb<mem_op>(vaddr);
     }
 }
 
-template<MemOp mem_op> u32 VirtualToPhysicalAddressUserMode64(u64 virt_addr, bool& cacheable_area)
+template<MemOp mem_op> u32 VirtualToPhysicalAddressUserMode64(u64 vaddr, bool& cacheable_area)
 {
-    if (virt_addr < 0x100'0000'0000) {
+    if (vaddr < 0x100'0000'0000) {
         cacheable_area = false;
-        return VirtualToPhysicalAddressTlb<mem_op>(virt_addr);
+        return VirtualToPhysicalAddressTlb<mem_op>(vaddr);
     } else {
-        SignalAddressErrorException<mem_op>(virt_addr);
+        SignalAddressErrorException<mem_op>(vaddr);
         return 0;
     }
 }
 
-template<MemOp mem_op> u32 VirtualToPhysicalAddressSupervisorMode32(u64 virt_addr, bool& cacheable_area)
+template<MemOp mem_op> u32 VirtualToPhysicalAddressSupervisorMode32(u64 vaddr, bool& cacheable_area)
 {
     /* $8000'0000-$BFFF'FFFF; $E000'0000-$FFFF'FFFF */
-    if ((virt_addr & 1 << 31) && (virt_addr & 0b11 << 29) != 0b10 << 29) {
-        SignalAddressErrorException<mem_op>(virt_addr);
+    if ((vaddr & 1 << 31) && (vaddr & 0b11 << 29) != 0b10 << 29) {
+        SignalAddressErrorException<mem_op>(vaddr);
         return 0;
     }
     /* 0-$7FFF'FFFF; $C000'0000-$DFFF'FFFF */
     else {
         cacheable_area = false;
-        return VirtualToPhysicalAddressTlb<mem_op>(virt_addr);
+        return VirtualToPhysicalAddressTlb<mem_op>(vaddr);
     }
 }
 
-template<MemOp mem_op> u32 VirtualToPhysicalAddressSupervisorMode64(u64 virt_addr, bool& cacheable_area)
+template<MemOp mem_op> u32 VirtualToPhysicalAddressSupervisorMode64(u64 vaddr, bool& cacheable_area)
 {
-    switch (virt_addr >> 60) {
+    switch (vaddr >> 60) {
     case 0x0:
-        if (virt_addr <= 0x0000'00FF'FFFF'FFFF) {
+        if (vaddr <= 0x0000'00FF'FFFF'FFFF) {
             cacheable_area = false;
-            return VirtualToPhysicalAddressTlb<mem_op>(virt_addr);
+            return VirtualToPhysicalAddressTlb<mem_op>(vaddr);
         } else {
-            SignalAddressErrorException<mem_op>(virt_addr);
+            SignalAddressErrorException<mem_op>(vaddr);
             return 0;
         }
 
     case 0x4:
-        if (virt_addr <= 0x4000'00FF'FFFF'FFFF) {
+        if (vaddr <= 0x4000'00FF'FFFF'FFFF) {
             cacheable_area = false;
-            return VirtualToPhysicalAddressTlb<mem_op>(virt_addr);
+            return VirtualToPhysicalAddressTlb<mem_op>(vaddr);
         } else {
-            SignalAddressErrorException<mem_op>(virt_addr);
+            SignalAddressErrorException<mem_op>(vaddr);
             return 0;
         }
 
     case 0xF:
         /* $FFFF'FFFF'C0000'0000 -- $FFFF'FFFF'DFFF'FFFF */
-        if ((virt_addr & 0xFFFF'FFFF'E000'0000) == 0xFFFF'FFFF'C000'0000) {
+        if ((vaddr & 0xFFFF'FFFF'E000'0000) == 0xFFFF'FFFF'C000'0000) {
             cacheable_area = false;
-            return VirtualToPhysicalAddressTlb<mem_op>(virt_addr);
+            return VirtualToPhysicalAddressTlb<mem_op>(vaddr);
         }
         /* $F000'0000'0000'0000 -- $FFFF'FFFF'BFFF'FFFF; $FFFF'FFFF'E000'0000 -- $FFFF'FFFF'FFFF'FFFF */
         else {
-            SignalAddressErrorException<mem_op>(virt_addr);
+            SignalAddressErrorException<mem_op>(vaddr);
             return 0;
         }
 
-    default: SignalAddressErrorException<mem_op>(virt_addr); return 0;
+    default: SignalAddressErrorException<mem_op>(vaddr); return 0;
     }
 }
 
-template<MemOp mem_op> u32 VirtualToPhysicalAddressKernelMode32(u64 virt_addr, bool& cacheable_area)
+template<MemOp mem_op> u32 VirtualToPhysicalAddressKernelMode32(u64 vaddr, bool& cacheable_area)
 {
-    if ((virt_addr & 0xE000'0000) == 0x8000'0000) {
+    if ((vaddr & 0xE000'0000) == 0x8000'0000) {
         /* $8000'0000-$9FFF'FFFF; TLB unmapped; cacheable */
         cacheable_area = true;
-        return virt_addr & 0x1FFF'FFFF;
-    } else if ((virt_addr & 0xE000'0000) == 0xA000'0000) {
+        return vaddr & 0x1FFF'FFFF;
+    } else if ((vaddr & 0xE000'0000) == 0xA000'0000) {
         /* $A000'0000-$BFFF'FFFF; TLB unmapped; uncacheable */
         cacheable_area = false;
-        return virt_addr & 0x1FFF'FFFF;
+        return vaddr & 0x1FFF'FFFF;
     } else {
         cacheable_area = false;
-        return VirtualToPhysicalAddressTlb<mem_op>(s32(virt_addr)); /* TLB mapped */
+        return VirtualToPhysicalAddressTlb<mem_op>(s32(vaddr)); /* TLB mapped */
     }
 }
 
-template<MemOp mem_op> u32 VirtualToPhysicalAddressKernelMode64(u64 virt_addr, bool& cacheable_area)
+template<MemOp mem_op> u32 VirtualToPhysicalAddressKernelMode64(u64 vaddr, bool& cacheable_area)
 {
-    switch (virt_addr >> 60 & 0xF) {
+    switch (vaddr >> 60 & 0xF) {
     case 0x0:
-        if (virt_addr <= 0x0000'00FF'FFFF'FFFF) {
+        if (vaddr <= 0x0000'00FF'FFFF'FFFF) {
             cacheable_area = false;
-            return VirtualToPhysicalAddressTlb<mem_op>(virt_addr);
+            return VirtualToPhysicalAddressTlb<mem_op>(vaddr);
         } else {
-            SignalAddressErrorException<mem_op>(virt_addr);
+            SignalAddressErrorException<mem_op>(vaddr);
             return 0;
         }
 
     case 0x4:
-        if (virt_addr <= 0x4000'00FF'FFFF'FFFF) {
+        if (vaddr <= 0x4000'00FF'FFFF'FFFF) {
             cacheable_area = false;
-            return VirtualToPhysicalAddressTlb<mem_op>(virt_addr);
+            return VirtualToPhysicalAddressTlb<mem_op>(vaddr);
         } else {
-            SignalAddressErrorException<mem_op>(virt_addr);
+            SignalAddressErrorException<mem_op>(vaddr);
             return 0;
         }
 
@@ -277,84 +283,90 @@ template<MemOp mem_op> u32 VirtualToPhysicalAddressKernelMode64(u64 virt_addr, b
     case 0x9:
     case 0xA:
     case 0xB:
-        if ((virt_addr & 0x07FF'FFFF'0000'0000) == 0) { /* tlb unmapped */
-            cacheable_area = (virt_addr & 0x9800'0000'0000'0000) != 0x9000'0000'0000'0000;
-            u64 phys_addr = virt_addr & 0xFFFF'FFFF;
+        if ((vaddr & 0x07FF'FFFF'0000'0000) == 0) { /* tlb unmapped */
+            cacheable_area = (vaddr & 0x9800'0000'0000'0000) != 0x9000'0000'0000'0000;
+            u64 phys_addr = vaddr & 0xFFFF'FFFF;
             return phys_addr;
         } else {
-            SignalAddressErrorException<mem_op>(virt_addr);
+            SignalAddressErrorException<mem_op>(vaddr);
             return 0;
         }
 
     case 0xC:
-        if (virt_addr <= 0xC000'00FF'7FFF'FFFF) {
+        if (vaddr <= 0xC000'00FF'7FFF'FFFF) {
             cacheable_area = false;
-            return VirtualToPhysicalAddressTlb<mem_op>(virt_addr);
+            return VirtualToPhysicalAddressTlb<mem_op>(vaddr);
         } else {
-            SignalAddressErrorException<mem_op>(virt_addr);
+            SignalAddressErrorException<mem_op>(vaddr);
             return 0;
         }
 
     case 0xF:
-        if (virt_addr >= 0xFFFF'FFFF'0000'0000) {
-            return VirtualToPhysicalAddressKernelMode32<mem_op>(virt_addr, cacheable_area);
+        if (vaddr >= 0xFFFF'FFFF'0000'0000) {
+            return VirtualToPhysicalAddressKernelMode32<mem_op>(vaddr, cacheable_area);
         } else {
-            SignalAddressErrorException<mem_op>(virt_addr);
+            SignalAddressErrorException<mem_op>(vaddr);
             return 0;
         }
 
-    default: SignalAddressErrorException<mem_op>(virt_addr); return 0;
+    default: SignalAddressErrorException<mem_op>(vaddr); return 0;
     }
 }
 
-template<MemOp mem_op> u32 VirtualToPhysicalAddressTlb(u64 virt_addr)
+template<MemOp mem_op> u32 VirtualToPhysicalAddressTlb(u64 vaddr)
 {
     for (TlbEntry const& entry : tlb_entries) {
         /* Compare the virtual page number (divided by two; VPN2) of the entry with the VPN2 of the virtual address */
-        if ((virt_addr & entry.vpn2_addr_mask) != entry.vpn2_compare) continue;
+        if ((vaddr & entry.vpn2_addr_mask) != entry.vpn2_compare) continue;
         /* If the global bit is clear, the entry's ASID (Address space ID field) must coincide with the one in the
          * EntryHi register. */
         if (!entry.entry_hi.g && entry.entry_hi.asid != cop0.entry_hi.asid) continue;
         /* Bits 62-63 of vaddr must match the entry's region */ /* TODO: also checked in 32-bit mode? */
-        if (virt_addr >> 62 != entry.entry_hi.r) continue;
+        if (vaddr >> 62 != entry.entry_hi.r) continue;
         /* The VPN maps to two (consecutive) pages; EntryLo0 for even virtual pages and EntryLo1 for odd virtual pages.
          */
-        bool vpn_odd = (virt_addr & (entry.offset_addr_mask + 1)) != 0;
+        bool vpn_odd = (vaddr & (entry.offset_addr_mask + 1)) != 0;
         auto entry_lo = entry.entry_lo[vpn_odd];
         if (!entry_lo.v) { /* If the "Valid" bit is clear, it indicates that the TLB entry is invalid. */
             SignalException<Exception::TlbInvalid, mem_op>();
-            exception_bad_virt_addr = virt_addr;
+            exception_bad_vaddr = vaddr;
             return 0;
         }
         if constexpr (mem_op == MemOp::Write) {
             if (!entry_lo.d) { /* If the "Dirty" bit is clear, writing is disallowed. */
                 SignalException<Exception::TlbModification, mem_op>();
-                exception_bad_virt_addr = virt_addr;
+                exception_bad_vaddr = vaddr;
                 return 0;
             }
         }
         /* TLB hit */
-        return virt_addr & entry.offset_addr_mask | entry_lo.pfn << 12 & ~entry.offset_addr_mask;
+        return vaddr & entry.offset_addr_mask | entry_lo.pfn << 12 & ~entry.offset_addr_mask;
     }
     /* TLB miss */
     if (addressing_mode == AddressingMode::_32bit) SignalException<Exception::TlbMiss, mem_op>();
     else SignalException<Exception::XtlbMiss, mem_op>();
-    exception_bad_virt_addr = virt_addr;
+    exception_bad_vaddr = vaddr;
     return 0;
 }
 
-template<size_t access_size, Alignment alignment> void WriteVirtual(u64 virtual_address, s64 data)
+template<size_t access_size, Alignment alignment> void WriteVirtual(u64 vaddr, s64 data)
 {
     static_assert(std::has_single_bit(access_size) && access_size <= 8);
-    u32 offset = virtual_address & (access_size - 1);
-    if constexpr (access_size > 1 && alignment == Alignment::Aligned) {
-        if (offset) {
-            SignalAddressErrorException<MemOp::Write>(virtual_address);
+    u32 offset = vaddr & (access_size - 1);
+    if constexpr (access_size > 1) {
+        if constexpr (alignment == Alignment::Aligned) {
+            if (offset) {
+                SignalAddressErrorException<MemOp::Write>(vaddr);
+                return;
+            }
+        }
+        if (addressing_mode == AddressingMode::_32bit && s32(vaddr) != vaddr) {
+            SignalAddressErrorException<MemOp::Write>(vaddr);
             return;
         }
     }
     bool cacheable_area;
-    u32 physical_address = active_virtual_to_physical_fun_write(virtual_address, cacheable_area);
+    u32 physical_address = active_virtual_to_physical_fun_write(vaddr, cacheable_area);
     if (exception_occurred) {
         return;
     }
