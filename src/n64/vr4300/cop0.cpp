@@ -157,7 +157,7 @@ template<bool raw> void Cop0Registers::Set(size_t reg_index, std::integral auto 
         break;
 
     case Cop0Reg::count:
-        count = value << 1; /* See the declaration of 'count' */
+        count = u64(value) << 1; /* See the declaration of 'count' */
         OnWriteToCount();
         break;
 
@@ -167,7 +167,7 @@ template<bool raw> void Cop0Registers::Set(size_t reg_index, std::integral auto 
         break;
 
     case Cop0Reg::compare:
-        compare = value << 1; /* See the declaration of 'compare' */
+        compare = u64(value) << 1; /* See the declaration of 'compare' */
         OnWriteToCompare();
         break;
 

@@ -238,10 +238,6 @@ template<MemOp mem_op> u32 VirtualToPhysicalAddressSupervisorMode64(u64 virt_add
 
 template<MemOp mem_op> u32 VirtualToPhysicalAddressKernelMode32(u64 virt_addr, bool& cacheable_area)
 {
-    // if (virt_addr < 0xFFFF'FFFF'0000'0000) { /* TODO: same for user and supervisor modes? */
-    //	SignalAddressErrorException<mem_op>(virt_addr);
-    //	return 0;
-    // }
     if ((virt_addr & 0xE000'0000) == 0x8000'0000) {
         /* $8000'0000-$9FFF'FFFF; TLB unmapped; cacheable */
         cacheable_area = true;

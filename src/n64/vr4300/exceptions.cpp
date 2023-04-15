@@ -213,8 +213,8 @@ template<MemOp mem_op> void AddressErrorException()
         else return 4;
     }();
     cop0.bad_v_addr = exception_bad_virt_addr;
-    cop0.context.bad_vpn2 = cop0.x_context.bad_vpn2 = exception_bad_virt_addr >> 13;
-    cop0.x_context.r = exception_bad_virt_addr >> 62;
+    cop0.context.bad_vpn2 = cop0.x_context.bad_vpn2 = cop0.entry_hi.vpn2 = exception_bad_virt_addr >> 13;
+    cop0.entry_hi.r = cop0.x_context.r = exception_bad_virt_addr >> 62;
     cop0.cause.ce = 0;
 }
 
@@ -354,6 +354,7 @@ template<MemOp mem_op> void XtlbMissException()
     }();
     cop0.bad_v_addr = exception_bad_virt_addr;
     cop0.context.bad_vpn2 = cop0.x_context.bad_vpn2 = cop0.entry_hi.vpn2 = exception_bad_virt_addr >> 13;
+    cop0.entry_hi.r = cop0.x_context.r = exception_bad_virt_addr >> 62;
     cop0.cause.ce = 0;
 }
 

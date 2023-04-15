@@ -99,8 +99,8 @@ struct Cop0Registers {
                         miss occurs. */
         u32 d   : 1; /* Dirty. If this bit is set, the page is marked as dirty, and therefore writable. */
         u32 c   : 3; /* Specifies the TLB page attribute. */
-        u32 pfn : 20; /* Page frame number -- the high-order bits of the physical address. */
-        u32     : 6;
+        u32 pfn : 24; /* Page frame number -- the high-order bits of the physical address. */
+        u32     : 2;
     } entry_lo[2];
 
     struct { /* (4) */
