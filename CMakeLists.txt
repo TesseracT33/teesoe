@@ -37,6 +37,7 @@ if (${CMAKE_CXX_COMPILER_ID} STREQUAL "GNU")
 endif()
 
 list(APPEND clang_flags
+	-std=c++2b
 	-Wall
 	-Wcast-align
 	-Wconversion
@@ -128,8 +129,7 @@ endif()
 
 list(APPEND msvc_flags
 	/EHsc          # Standard stack unwinding
-	/fp:except     # Allows proper reading of floating-point exceptions
-	/fp:strict     # Strict floating-point model
+	/fp:precise    # Precise floating-point model
 	/GR            # Enable run-time type information
 	/MP            # Build with multiple processes
 	/permissive-   # Disallow non-standard behaviour
@@ -160,7 +160,6 @@ else()
 		/Oi # Generate intrinsic functions
 	)
 endif()
-
 
 if (X64)
 	list(APPEND msvc_flags
