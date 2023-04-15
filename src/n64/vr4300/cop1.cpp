@@ -1,3 +1,5 @@
+#pragma fenv_access(on)
+
 #include "cop1.hpp"
 #include "cop0.hpp"
 #include "exceptions.hpp"
@@ -295,43 +297,43 @@ void OnInvalidFormat()
 
 bool SignalDivZero()
 { /* return true if floatingpoint exception should be raised */
-    fcr31.cause_div_zero = true;
+    fcr31.cause_div_zero = 1;
     fcr31.flag_div_zero |= !fcr31.enable_div_zero;
     return fcr31.enable_div_zero;
 }
 
 bool SignalInexactOp()
 {
-    fcr31.cause_inexact = true;
+    fcr31.cause_inexact = 1;
     fcr31.flag_inexact |= !fcr31.enable_inexact;
     return fcr31.enable_inexact;
 }
 
 bool SignalInvalidOp()
 {
-    fcr31.cause_invalid = true;
+    fcr31.cause_invalid = 1;
     fcr31.flag_invalid |= !fcr31.enable_invalid;
     return fcr31.enable_invalid;
 }
 
 bool SignalOverflow()
 {
-    fcr31.cause_overflow = true;
+    fcr31.cause_overflow = 1;
     fcr31.flag_overflow |= !fcr31.enable_overflow;
     return fcr31.enable_overflow;
 }
 
 bool SignalUnderflow()
 {
-    fcr31.cause_underflow = true;
+    fcr31.cause_underflow = 1;
     fcr31.flag_underflow |= !fcr31.enable_underflow;
     return fcr31.enable_underflow;
 }
 
 bool SignalUnimplementedOp()
 {
-    fcr31.cause_unimplemented = true;
-    return true;
+    fcr31.cause_unimplemented = 1;
+    return 1;
 }
 
 template<bool ctc1> bool TestAllExceptions()
@@ -350,13 +352,14 @@ template<bool ctc1> bool TestAllExceptions()
        of the exception is prohibited. Otherwise, they remain unchanged.
     */
     if constexpr (!ctc1) {
-        fcr31.cause_inexact |= std::fetestexcept(FE_INEXACT);
-        fcr31.cause_underflow |= std::fetestexcept(FE_UNDERFLOW);
-        fcr31.cause_overflow |= std::fetestexcept(FE_OVERFLOW);
-        fcr31.cause_div_zero |= std::fetestexcept(FE_DIVBYZERO);
-        fcr31.cause_invalid |= std::fetestexcept(FE_INVALID);
+        // TODO: store the flags as they come from fetestexcept, until they are read by the program?
+        fcr31.cause_inexact |= bool(std::fetestexcept(FE_INEXACT));
+        fcr31.cause_underflow |= bool(std::fetestexcept(FE_UNDERFLOW));
+        fcr31.cause_overflow |= bool(std::fetestexcept(FE_OVERFLOW));
+        fcr31.cause_div_zero |= bool(std::fetestexcept(FE_DIVBYZERO));
+        fcr31.cause_invalid |= bool(std::fetestexcept(FE_INVALID));
         if (fcr31.cause_underflow && (!fcr31.fs || fcr31.enable_underflow || fcr31.enable_inexact)) {
-            fcr31.cause_unimplemented = true;
+            fcr31.cause_unimplemented = 1;
         }
     }
 
@@ -820,7 +823,6 @@ template<ComputeInstr1Op instr, std::floating_point Float> void Compute(u32 fs, 
     }();
     if constexpr (instr == MOV) {
         fpr.Set<Float>(fd, result);
-        // ClearAllExceptions();
     } else {
         bool exc_raised = TestAllExceptions();
         if (!exc_raised && IsValidOutput(result)) {
