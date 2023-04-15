@@ -256,8 +256,9 @@ bool IsValidInput(std::floating_point auto f)
         SignalUnimplementedOp();
         SignalException<Exception::FloatingPoint>();
         return false;
+
+    default: return true;
     }
-    return true;
 }
 
 bool IsValidOutput(std::floating_point auto& f)
@@ -279,8 +280,9 @@ bool IsValidOutput(std::floating_point auto& f)
             f = Flush(f);
             return true;
         }
+
+    default: return true;
     }
-    return true;
 }
 
 void OnInvalidFormat()
@@ -359,8 +361,8 @@ template<bool ctc1> bool TestAllExceptions()
     }
 
     u32 fcr31_u32 = std::bit_cast<u32>(fcr31);
-    u32 enables = fcr31_u32 >> 7 & 0x1F;
-    u32 causes = fcr31_u32 >> 12 & 0x1F;
+    u32 enables = fcr31_u32 >> 7 & 31;
+    u32 causes = fcr31_u32 >> 12 & 31;
     if constexpr (!ctc1) {
         u32 flags = causes & ~enables;
         fcr31_u32 |= flags << 2;
@@ -465,7 +467,7 @@ template<Fmt fmt> void c(u32 fs, u32 ft, u8 cond)
             }
             fcr31.c = cond & 1;
         } else {
-            fcr31.c = (cond >> 2 & 1) & (op1 < op2) | (cond >> 1 & 1) & (op1 == op2);
+            fcr31.c = ((cond >> 2) & (op1 < op2) | (cond >> 1) & (op1 == op2)) & 1;
         }
     }
 }
@@ -786,8 +788,13 @@ template<Fmt fmt> void sub(u32 fs, u32 ft, u32 fd)
 
 template<ComputeInstr1Op instr, std::floating_point Float> void Compute(u32 fs, u32 fd)
 {
-    if (!FpuUsable()) return;
     using enum ComputeInstr1Op;
+    if constexpr (instr == MOV) {
+        if (!cop0.status.cu1) {
+            SignalCoprocessorUnusableException(1);
+            return;
+        }
+    } else if (!FpuUsable()) return;
     Float op = fpr.Get<Float>(fs);
     if constexpr (instr != MOV) {
         if (!IsValidInput(op)) {
@@ -807,11 +814,13 @@ template<ComputeInstr1Op instr, std::floating_point Float> void Compute(u32 fs, 
         }
         if constexpr (instr == SQRT) {
             AdvancePipeline(sizeof(Float) == 4 ? 28 : 57);
+            if (op < Float()) SignalInvalidOp();
             return std::sqrt(op);
         }
     }();
     if constexpr (instr == MOV) {
         fpr.Set<Float>(fd, result);
+        // ClearAllExceptions();
     } else {
         bool exc_raised = TestAllExceptions();
         if (!exc_raised && IsValidOutput(result)) {
@@ -951,7 +960,6 @@ template<FpuNum From, FpuNum To> static void Convert(u32 fs, u32 fd)
     } else {
         fpr.Set<To>(fd, conv);
     }
-    TestAllExceptions();
 }
 
 template s32 FGR::Get<s32>(size_t) const;

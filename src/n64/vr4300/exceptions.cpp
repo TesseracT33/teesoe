@@ -180,9 +180,6 @@ void SignalCoprocessorUnusableException(int co)
 
 template<Exception exception, MemOp mem_op> void SignalException()
 {
-    if constexpr (exception == Exception::FloatingPoint) {
-        int a = 3;
-    }
     static constexpr auto new_exception_priority = GetExceptionPriority<exception, mem_op>();
     if (exception_occurred) {
         /* Compare exception priorities; return if the new exception has a lower priority than an already occured one.
