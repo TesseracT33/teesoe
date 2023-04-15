@@ -13,7 +13,7 @@ public:
 
     u8* acquire(size_t size)
     {
-        if (index >= size) {
+        if (index >= memory.size()) {
             log_warn("[JIT] ran out of space for pool allocator; resetting all available memory.");
             std::ranges::fill(memory, 0);
             index = 0;
