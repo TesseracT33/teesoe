@@ -106,10 +106,8 @@ template<std::signed_integral Int, Alignment alignment, MemOp mem_op> Int ReadVi
     if (exception_occurred) {
         return {};
     }
-    if constexpr (mem_op == MemOp::InstrFetch) {
-        if constexpr (log_cpu_instructions) {
-            last_instr_fetch_phys_addr = physical_address;
-        }
+    if constexpr (mem_op == MemOp::InstrFetch && log_cpu_instructions) {
+        last_instr_fetch_phys_addr = physical_address;
     }
     last_physical_address_on_load = physical_address;
     if (cacheable_area) { /* TODO: figure out some way to avoid this branch, if possible */
@@ -416,7 +414,8 @@ void tlbr()
     if (operating_mode != OperatingMode::Kernel && !cop0.status.cu0) {
         SignalCoprocessorUnusableException(0);
     } else {
-        tlb_entries[cop0.index.value & 31].Read();
+        auto index = cop0.index.value;
+        if (index < 32) tlb_entries[index].Read();
     }
 }
 
@@ -425,7 +424,8 @@ void tlbwi()
     if (operating_mode != OperatingMode::Kernel && !cop0.status.cu0) {
         SignalCoprocessorUnusableException(0);
     } else {
-        tlb_entries[cop0.index.value & 31].Write();
+        auto index = cop0.index.value;
+        if (index < 32) tlb_entries[index].Write();
     }
 }
 
@@ -434,11 +434,8 @@ void tlbwr()
     if (operating_mode != OperatingMode::Kernel && !cop0.status.cu0) {
         SignalCoprocessorUnusableException(0);
     } else {
-        auto index = random_generator.Generate() & 31;
-        auto wired = cop0.wired & 0x1F;
-        if (index > wired) {
-            tlb_entries[index].Write();
-        }
+        auto index = random_generator.Generate();
+        if (index < 32) tlb_entries[index].Write();
     }
 }
 
