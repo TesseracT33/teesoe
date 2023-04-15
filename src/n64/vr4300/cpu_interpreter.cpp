@@ -126,7 +126,7 @@ void Interpreter::ldl(u32 rs, u32 rt, s16 imm) const
 void Interpreter::ldr(u32 rs, u32 rt, s16 imm) const
 {
     s64 addr = gpr[rs] + imm;
-    s64 val = ReadVirtual<s64, Alignment::UnalignedRight>(addr);
+    u64 val = ReadVirtual<s64, Alignment::UnalignedRight>(addr);
     if (!exception_occurred) {
         u32 bytes_from_last_boundary = addr & 7;
         val >>= 8 * (7 - bytes_from_last_boundary);
@@ -194,12 +194,12 @@ void Interpreter::lwl(u32 rs, u32 rt, s16 imm) const
 void Interpreter::lwr(u32 rs, u32 rt, s16 imm) const
 {
     s64 addr = gpr[rs] + imm;
-    s32 val = ReadVirtual<s32, Alignment::UnalignedRight>(addr);
+    u32 val = ReadVirtual<s32, Alignment::UnalignedRight>(addr);
     if (!exception_occurred) {
         u32 bytes_from_last_boundary = addr & 3;
         val >>= 8 * (3 - bytes_from_last_boundary);
         s32 untouched_gpr = s32(gpr[rt] & right_load_mask[bytes_from_last_boundary]);
-        gpr.set(rt, val | untouched_gpr);
+        gpr.set(rt, s32(val) | untouched_gpr);
     }
 }
 
