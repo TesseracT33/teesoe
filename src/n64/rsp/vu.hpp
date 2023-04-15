@@ -16,8 +16,8 @@ struct Accumulator {
 } inline acc;
 
 struct ControlRegister {
-    __m128i low;
-    __m128i high;
+    __m128i lo;
+    __m128i hi;
 };
 
 inline s16 div_out, div_in, div_dp;

@@ -48,14 +48,28 @@ asmjit::x86::Mem vpr_ptr(u32 idx)
     return ptr(vpr[idx]);
 }
 
+// template<Cpu cpu, auto impl, typename Arg, typename... Args>
+// void call_interpreter_impl(Arg first_arg, Args... remaining_args)
+//{
+//     static int r_idx{};
+//     c.mov(gp[r_idx], first_arg);
+//     if (sizeof...(remaining_args)) {
+//         r_idx++;
+//         jit_call_interpreter_impl<cpu, impl>(remaining_args...);
+//     } else {
+//         r_idx = 0;
+//         compiler->call(impl);
+//     }
+// }
+
 template<> void cfc2<Recompiler>(u32 rt, u32 vs)
 {
     vs = std::min(vs & 3, 2u);
     c.vpxor(ymm0, ymm0, ymm0);
-    c.vmovdqa(ymm1, ptr(&ctrl_reg[vs].low));
+    c.vmovdqa(ymm1, ptr(&ctrl_reg[vs].lo));
     c.vpacksswb(ymm1, ymm1, ymm0);
     c.vpmovmskb(eax, ymm1);
-    c.vmovdqa(ymm1, ptr(&ctrl_reg[vs].high));
+    c.vmovdqa(ymm1, ptr(&ctrl_reg[vs].hi));
     c.vpacksswb(ymm1, ymm1, ymm0);
     c.vpmovmskb(ecx, ymm1);
 }
@@ -74,6 +88,11 @@ template<> void mtc2<Recompiler>(u32 rt, u32 vs, u32 e)
 
 template<> void lbv<Recompiler>(u32 base, u32 vt, u32 e, s32 offset)
 {
+    c.mov(gp[0], base);
+    c.mov(gp[1], vt);
+    c.mov(gp[2], e);
+    c.mov(gp[3], offset);
+    call(c, lbv<Interpreter>);
 }
 
 template<> void ldv<Recompiler>(u32 base, u32 vt, u32 e, s32 offset)
@@ -330,6 +349,13 @@ template<> void vrsql<Recompiler>(u32 vt, u32 vt_e, u32 vd, u32 vd_e)
 
 template<> void vsar<Recompiler>(u32 vd, u32 e)
 {
+    // switch (e) {
+    // case 8: c.movdqa(xmm0, acc_lo_ptr()); break;
+    // case 9: c.movdqa(xmm0, acc_mi_ptr()); break;
+    // case 10: c.movdqa(xmm0, acc_hi_ptr()); break;
+    // default: c.pxor(xmm0, xmm0); break;
+    // }
+    // set_vpr(vd, xmm0);
 }
 
 template<> void vsub<Recompiler>(u32 vs, u32 vt, u32 vd, u32 e)
