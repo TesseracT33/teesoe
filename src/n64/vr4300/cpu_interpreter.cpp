@@ -213,13 +213,13 @@ void Interpreter::lwu(u32 rs, u32 rt, s16 imm) const
 
 void Interpreter::sb(u32 rs, u32 rt, s16 imm) const
 {
-    WriteVirtual<1>(gpr[rs] + imm, s8(gpr[rt]));
+    WriteVirtual<1>(gpr[rs] + imm, gpr[rt]);
 }
 
 void Interpreter::sc(u32 rs, u32 rt, s16 imm) const
 {
     if (ll_bit) {
-        WriteVirtual<4>(gpr[rs] + imm, s32(gpr[rt]));
+        WriteVirtual<4>(gpr[rs] + imm, gpr[rt]);
     }
     gpr.set(rt, ll_bit);
 }
@@ -251,7 +251,7 @@ void Interpreter::sdr(u32 rs, u32 rt, s16 imm) const
 
 void Interpreter::sh(u32 rs, u32 rt, s16 imm) const
 {
-    WriteVirtual<2>(gpr[rs] + imm, s16(gpr[rt]));
+    WriteVirtual<2>(gpr[rs] + imm, gpr[rt]);
 }
 
 void Interpreter::sync() const
@@ -267,13 +267,13 @@ void Interpreter::syscall() const
 
 void Interpreter::sw(u32 rs, u32 rt, s16 imm) const
 {
-    WriteVirtual<4>(gpr[rs] + imm, s32(gpr[rt]));
+    WriteVirtual<4>(gpr[rs] + imm, gpr[rt]);
 }
 
 void Interpreter::swl(u32 rs, u32 rt, s16 imm) const
 {
     s64 addr = gpr[rs] + imm;
-    WriteVirtual<4, Alignment::UnalignedLeft>(addr, u32(gpr[rt]) >> (8 * (addr & 3)));
+    WriteVirtual<4, Alignment::UnalignedLeft>(addr, u64(gpr[rt]) >> (8 * (addr & 3)));
 }
 
 void Interpreter::swr(u32 rs, u32 rt, s16 imm) const
