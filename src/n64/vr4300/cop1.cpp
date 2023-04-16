@@ -353,14 +353,17 @@ template<bool ctc1> bool TestAllExceptions()
     */
     if constexpr (!ctc1) {
         // TODO: store the flags as they come from fetestexcept, until they are read by the program?
-        fcr31.cause_inexact |= bool(std::fetestexcept(FE_INEXACT));
-        fcr31.cause_underflow |= bool(std::fetestexcept(FE_UNDERFLOW));
-        fcr31.cause_overflow |= bool(std::fetestexcept(FE_OVERFLOW));
-        fcr31.cause_div_zero |= bool(std::fetestexcept(FE_DIVBYZERO));
-        fcr31.cause_invalid |= bool(std::fetestexcept(FE_INVALID));
-        if (fcr31.cause_underflow && (!fcr31.fs || fcr31.enable_underflow || fcr31.enable_inexact)) {
+        bool underflow = std::fetestexcept(FE_UNDERFLOW);
+        if (underflow && (!fcr31.fs || fcr31.enable_underflow || fcr31.enable_inexact)) {
             fcr31.cause_unimplemented = 1;
+            SignalException<Exception::FloatingPoint>();
+            return true;
         }
+        fcr31.cause_underflow |= underflow;
+        fcr31.cause_inexact |= std::fetestexcept(FE_INEXACT) != 0;
+        fcr31.cause_overflow |= std::fetestexcept(FE_OVERFLOW) != 0;
+        fcr31.cause_div_zero |= std::fetestexcept(FE_DIVBYZERO) != 0;
+        fcr31.cause_invalid |= std::fetestexcept(FE_INVALID) != 0;
     }
 
     u32 fcr31_u32 = std::bit_cast<u32>(fcr31);
@@ -817,7 +820,6 @@ template<ComputeInstr1Op instr, std::floating_point Float> void Compute(u32 fs, 
         }
         if constexpr (instr == SQRT) {
             AdvancePipeline(sizeof(Float) == 4 ? 28 : 57);
-            if (op < Float()) SignalInvalidOp();
             return std::sqrt(op);
         }
     }();
