@@ -56,8 +56,11 @@ void TlbEntry::Write()
     entry_lo[1] = cop0.entry_lo[1];
     entry_hi = std::bit_cast<Cop0Registers::EntryHi>(std::bit_cast<u64>(cop0.entry_hi) & ~u64(cop0.page_mask));
     page_mask = cop0.page_mask;
+    // Each pair of bits in PageMask should be either 00 or 11
+    page_mask = page_mask & 0xAAA << 13;
+    page_mask |= page_mask >> 1;
     entry_hi.g = cop0.entry_lo[0].g & cop0.entry_lo[1].g;
-    /* Compute things that speed up virtual-to-physical-address translation. */
+    // Compute things that speed up virtual-to-physical-address translation
     vpn2_addr_mask = 0xFF'FFFF'E000 & ~u64(page_mask);
     vpn2_compare = std::bit_cast<u64>(entry_hi) & vpn2_addr_mask;
     offset_addr_mask = page_mask >> 1 | 0xFFF;
