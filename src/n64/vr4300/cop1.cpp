@@ -77,9 +77,12 @@ template<FpuNum, FpuNum> static void Convert(u32 fs, u32 fd);
 template<std::floating_point Float> static Float Flush(Float f);
 constexpr char FmtToChar(u32 fmt);
 bool FpuUsable();
+static bool GetAndTestExceptions();
+static bool GetAndTestExceptionsConvFloatToWord();
 static bool IsQuietNan(f32 f);
 static bool IsQuietNan(f64 f);
 static bool IsValidInput(std::floating_point auto f);
+template<std::signed_integral Int> static bool IsValidInputCvtRound(std::floating_point auto f);
 static bool IsValidOutput(std::floating_point auto& f);
 static void OnInvalidFormat();
 template<RoundInstr, FpuNum, FpuNum> static void Round(u32 fs, u32 fd);
@@ -89,7 +92,7 @@ static bool SignalInvalidOp();
 static bool SignalOverflow();
 static bool SignalUnderflow();
 static bool SignalUnimplementedOp();
-template<bool ctc1 = false> static bool TestAllExceptions();
+template<bool update_flags = true> static bool TestExceptions();
 
 /* Floating point control register #31 */
 struct FCR31 {
@@ -136,8 +139,6 @@ private:
     std::array<s64, 32> fpr;
 } static fpr;
 
-constexpr u32 fcr0 = 0xA00;
-
 [[maybe_unused]] constexpr std::array compare_cond_strings = {
     "F",
     "UN",
@@ -160,27 +161,26 @@ constexpr u32 fcr0 = 0xA00;
 u32 FPUControl::Get(size_t index) const
 {
     if (index == 31) return std::bit_cast<u32>(fcr31);
-    else if (index == 0) return fcr0;
-    else return 0; /* Only #0 and #31 are "valid". */
+    if (index == 0) return 0xA00;
+    return 0; /* Only #0 and #31 are "valid". */
 }
 
 void FPUControl::Set(size_t index, u32 data)
 {
-    if (index == 31) {
-        static constexpr u32 mask = 0x183'FFFF;
-        fcr31 = std::bit_cast<FCR31>(data & mask | std::bit_cast<u32>(fcr31) & ~mask);
-        auto new_rounding_mode = [&] {
-            switch (fcr31.rm) {
-            case 0: return FE_TONEAREST; /* RN */
-            case 1: return FE_TOWARDZERO; /* RZ */
-            case 2: return FE_UPWARD; /* RP */
-            case 3: return FE_DOWNWARD; /* RM */
-            default: std::unreachable();
-            }
-        }();
-        std::fesetround(new_rounding_mode);
-        TestAllExceptions<true /* ctc1 */>();
-    }
+    if (index != 31) return;
+    static constexpr u32 mask = 0x183'FFFF;
+    fcr31 = std::bit_cast<FCR31>(data & mask | std::bit_cast<u32>(fcr31) & ~mask);
+    auto new_rounding_mode = [&] {
+        switch (fcr31.rm) {
+        case 0: return FE_TONEAREST; /* RN */
+        case 1: return FE_TOWARDZERO; /* RZ */
+        case 2: return FE_UPWARD; /* RP */
+        case 3: return FE_DOWNWARD; /* RM */
+        default: std::unreachable();
+        }
+    }();
+    std::fesetround(new_rounding_mode);
+    TestExceptions<false>();
 }
 
 template<FpuNum T> T FGR::Get(size_t index) const
@@ -263,6 +263,31 @@ bool IsValidInput(std::floating_point auto f)
     }
 }
 
+template<std::signed_integral Int> bool IsValidInputCvtRound(std::floating_point auto f)
+{
+    auto classify = std::fpclassify(f);
+    if (classify == FP_INFINITE || classify == FP_NAN || classify == FP_SUBNORMAL) {
+        SignalUnimplementedOp();
+        SignalException<Exception::FloatingPoint>();
+        return false;
+    }
+    if constexpr (sizeof(Int) == 4) {
+        if (f >= 0x1p+31 || f < -0x1p+31) {
+            SignalUnimplementedOp();
+            SignalException<Exception::FloatingPoint>();
+            return false;
+        }
+        return true;
+    } else {
+        if (f >= 0x1p+53 || f < -0x1p+53) {
+            SignalUnimplementedOp();
+            SignalException<Exception::FloatingPoint>();
+            return false;
+        }
+        return true;
+    }
+}
+
 bool IsValidOutput(std::floating_point auto& f)
 {
     switch (std::fpclassify(f)) {
@@ -336,7 +361,7 @@ bool SignalUnimplementedOp()
     return 1;
 }
 
-template<bool ctc1> bool TestAllExceptions()
+template<bool update_flags> bool TestExceptions()
 {
     /* * The Cause bits are updated by the floating-point operations (except load, store,
        and transfer instructions).
@@ -351,25 +376,10 @@ template<bool ctc1> bool TestAllExceptions()
        reset. Flag bits are set to 1 if an IEEE754 exception is raised but the occurrence
        of the exception is prohibited. Otherwise, they remain unchanged.
     */
-    if constexpr (!ctc1) {
-        // TODO: store the flags as they come from fetestexcept, until they are read by the program?
-        bool underflow = std::fetestexcept(FE_UNDERFLOW);
-        if (underflow && (!fcr31.fs || fcr31.enable_underflow || fcr31.enable_inexact)) {
-            fcr31.cause_unimplemented = 1;
-            SignalException<Exception::FloatingPoint>();
-            return true;
-        }
-        fcr31.cause_underflow |= underflow;
-        fcr31.cause_inexact |= std::fetestexcept(FE_INEXACT) != 0;
-        fcr31.cause_overflow |= std::fetestexcept(FE_OVERFLOW) != 0;
-        fcr31.cause_div_zero |= std::fetestexcept(FE_DIVBYZERO) != 0;
-        fcr31.cause_invalid |= std::fetestexcept(FE_INVALID) != 0;
-    }
-
     u32 fcr31_u32 = std::bit_cast<u32>(fcr31);
     u32 enables = fcr31_u32 >> 7 & 31;
     u32 causes = fcr31_u32 >> 12 & 31;
-    if constexpr (!ctc1) {
+    if constexpr (update_flags) {
         u32 flags = causes & ~enables;
         fcr31_u32 |= flags << 2;
         fcr31 = std::bit_cast<FCR31>(fcr31_u32);
@@ -380,6 +390,48 @@ template<bool ctc1> bool TestAllExceptions()
     } else {
         return false;
     }
+}
+
+bool GetAndTestExceptions()
+{
+    // TODO: store the flags as they come from fetestexcept, until they are read by the program?
+    bool underflow = std::fetestexcept(FE_UNDERFLOW);
+    if (underflow && (!fcr31.fs || fcr31.enable_underflow || fcr31.enable_inexact)) {
+        fcr31.cause_unimplemented = 1;
+        SignalException<Exception::FloatingPoint>();
+        return true;
+    }
+
+    fcr31.cause_underflow |= underflow;
+    fcr31.cause_inexact |= std::fetestexcept(FE_INEXACT) != 0;
+    fcr31.cause_overflow |= std::fetestexcept(FE_OVERFLOW) != 0;
+    fcr31.cause_div_zero |= std::fetestexcept(FE_DIVBYZERO) != 0;
+    fcr31.cause_invalid |= std::fetestexcept(FE_INVALID) != 0;
+
+    return TestExceptions();
+}
+
+bool GetAndTestExceptionsConvFloatToWord()
+{
+    bool invalid = std::fetestexcept(FE_INVALID);
+    if (invalid) {
+        fcr31.cause_unimplemented = 1;
+        SignalException<Exception::FloatingPoint>();
+        return true;
+    }
+    bool underflow = std::fetestexcept(FE_UNDERFLOW);
+    if (underflow && (!fcr31.fs || fcr31.enable_underflow || fcr31.enable_inexact)) {
+        fcr31.cause_unimplemented = 1;
+        SignalException<Exception::FloatingPoint>();
+        return true;
+    }
+    fcr31.cause_invalid |= invalid;
+    fcr31.cause_underflow |= underflow;
+    fcr31.cause_inexact |= std::fetestexcept(FE_INEXACT) != 0;
+    fcr31.cause_overflow |= std::fetestexcept(FE_OVERFLOW) != 0;
+    fcr31.cause_div_zero |= std::fetestexcept(FE_DIVBYZERO) != 0;
+
+    return TestExceptions();
 }
 
 template<std::floating_point Float> Float Flush(Float f)
@@ -826,8 +878,7 @@ template<ComputeInstr1Op instr, std::floating_point Float> void Compute(u32 fs, 
     if constexpr (instr == MOV) {
         fpr.Set<Float>(fd, result);
     } else {
-        bool exc_raised = TestAllExceptions();
-        if (!exc_raised && IsValidOutput(result)) {
+        if (!GetAndTestExceptions() && IsValidOutput(result)) {
             fpr.Set<Float>(fd, result);
         }
     }
@@ -835,8 +886,8 @@ template<ComputeInstr1Op instr, std::floating_point Float> void Compute(u32 fs, 
 
 template<ComputeInstr2Op instr, std::floating_point Float> void Compute(u32 fs, u32 ft, u32 fd)
 {
-    if (!FpuUsable()) return;
     using enum ComputeInstr2Op;
+    if (!FpuUsable()) return;
     Float op1 = fpr.Get<Float>(fs);
     if (!IsValidInput(op1)) {
         AdvancePipeline(1);
@@ -865,61 +916,42 @@ template<ComputeInstr2Op instr, std::floating_point Float> void Compute(u32 fs, 
             return op1 / op2;
         }
     }();
-    bool exc_raised = TestAllExceptions();
-    if (!exc_raised && IsValidOutput(result)) {
+    if (!GetAndTestExceptions() && IsValidOutput(result)) {
         fpr.Set<Float>(fd, result);
     }
 }
 
 template<RoundInstr instr, FpuNum From, FpuNum To> void Round(u32 fs, u32 fd)
 {
+    using enum RoundInstr;
     if (!FpuUsable()) return;
-
-    From source = fpr.Get<From>(fs);
-
-    To result = To([source] {
-        if constexpr (instr == RoundInstr::ROUND) return std::nearbyint(source);
-        if constexpr (instr == RoundInstr::TRUNC) return std::trunc(source);
-        if constexpr (instr == RoundInstr::CEIL) return std::ceil(source);
-        if constexpr (instr == RoundInstr::FLOOR) return std::floor(source);
-    }());
-
-    fcr31.cause_unimplemented = [source] {
-        /* Test for unimplemented operation exception sources for CVT/round instructions. These cannot be found out from
-        std::fetestexcept. This function should be called after the conversion has been made. For all these
-        instructions, an unimplemented exception will occur if either:
-        * If the source operand is infinity or NaN, or
-        * If overflow occurs during conversion to integer format. */
-        if constexpr (std::integral<From> && std::same_as<To, f64>) {
-            return false; /* zero-cost shortcut; integers cannot be infinity or NaN, and the operation is then always
-                             exact when converting to a double */
-        }
-        if constexpr (std::floating_point<From>) {
-            if (std::isnan(source) || std::isinf(source)) {
-                return true;
-            }
-        }
-        if constexpr (std::integral<To>) {
-            return std::fetestexcept(FE_OVERFLOW) != 0; // TODO: should this also include underflow?
-        }
-        return false;
-    }();
-
-    /* If the invalid operation exception occurs, but the exception is not enabled, return INT_MAX */
-    if (std::fetestexcept(FE_INVALID) && !fcr31.enable_inexact) {
-        fpr.Set<To>(fd, std::numeric_limits<To>::max());
-    } else {
-        fpr.Set<To>(fd, result);
-    }
     AdvancePipeline(4);
+    From source = fpr.Get<From>(fs);
+    if (!IsValidInputCvtRound<To>(source)) return;
+    To result = To([source] {
+        if constexpr (instr == ROUND) return std::nearbyint(source);
+        if constexpr (instr == TRUNC) return std::trunc(source);
+        if constexpr (instr == CEIL) return std::ceil(source);
+        if constexpr (instr == FLOOR) return std::floor(source);
+    }());
+    if constexpr (std::same_as<To, s32>) {
+        if (GetAndTestExceptionsConvFloatToWord()) return;
+    } else {
+        if (GetAndTestExceptions()) return;
+    }
+    if constexpr (instr == ROUND || instr == TRUNC) {
+        if (fs != fd && SignalInexactOp()) {
+            SignalException<Exception::FloatingPoint>();
+            return;
+        }
+    }
+    fpr.Set<To>(fd, result);
 }
 
 template<FpuNum From, FpuNum To> static void Convert(u32 fs, u32 fd)
 {
     if (!FpuUsable()) return;
 
-    /* TODO: the below is assuming that conv. between W and L takes 2 cycles.
-                See footnote 2 in table 7-14, VR4300 manual */
     static constexpr int cycles = [&] {
         if constexpr (std::same_as<From, To>) return 0;
         else if constexpr (std::same_as<From, f32> && std::same_as<To, f64>) return 0;
@@ -935,9 +967,13 @@ template<FpuNum From, FpuNum To> static void Convert(u32 fs, u32 fd)
         SignalException<Exception::FloatingPoint>();
         return;
     }
+
     From source = fpr.Get<From>(fs);
-    if constexpr (std::floating_point<From>) {
+    if constexpr (std::floating_point<From> && std::floating_point<To>) {
         if (!IsValidInput(source)) return;
+    }
+    if constexpr (std::floating_point<From> && std::integral<To>) {
+        if (!IsValidInputCvtRound<To>(source)) return;
     }
     if constexpr (std::same_as<From, s64> && std::floating_point<To>) {
         if (source >= s64(0x0080'0000'0000'0000) || source < s64(0xFF80'0000'0000'0000)) {
@@ -946,24 +982,17 @@ template<FpuNum From, FpuNum To> static void Convert(u32 fs, u32 fd)
             return;
         }
     }
-    To conv = To(source);
-    bool exc_raised = TestAllExceptions();
-    if constexpr (std::floating_point<From> && std::same_as<To, s64>) {
-        if (conv >= s64(0x0020'0000'0000'0000) || conv < s64(0xFFE0'0000'0000'0000)) {
-            SignalUnimplementedOp();
-            SignalException<Exception::FloatingPoint>();
-            return;
-        }
+
+    To result = To(source);
+    if constexpr (std::same_as<To, s32>) {
+        if (GetAndTestExceptionsConvFloatToWord()) return;
+    } else {
+        if (GetAndTestExceptions()) return;
     }
     if constexpr (std::floating_point<To>) {
-        if (!exc_raised && IsValidOutput(conv)) {
-            fpr.Set<To>(fd, conv);
-        }
-    } else if (exc_raised) {
-        SignalException<Exception::FloatingPoint>();
-    } else {
-        fpr.Set<To>(fd, conv);
+        if (!IsValidOutput(result)) return;
     }
+    fpr.Set<To>(fd, result);
 }
 
 template s32 FGR::Get<s32>(size_t) const;
