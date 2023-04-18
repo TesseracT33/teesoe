@@ -14,6 +14,8 @@
 
 namespace n64::vr4300 {
 
+static u32 last_cop0_write;
+
 void Cop0Registers::OnWriteToCause()
 {
     CheckInterrupts();
@@ -43,47 +45,45 @@ void Cop0Registers::OnWriteToWired()
 
 u64 Cop0Registers::Get(size_t reg_index) const
 {
-    auto StructToInt = [](auto struct_)
-        requires(sizeof(struct_) == 4 || sizeof(struct_) == 8)
-    {
-        if constexpr (sizeof(struct_) == 4) return std::bit_cast<u32>(struct_);
-        else if constexpr (sizeof(struct_) == 8) return std::bit_cast<u64>(struct_);
-        else static_assert(always_false<sizeof(struct_)>, "Struct must be either 4 or 8 bytes.");
+    auto Read = [](auto reg) {
+        if constexpr (sizeof(reg) == 4) return std::bit_cast<u32>(reg);
+        else if constexpr (sizeof(reg) == 8) return std::bit_cast<u64>(reg);
+        else static_assert(always_false<sizeof(reg)>, "Register must be either 4 or 8 bytes.");
     };
 
     switch (reg_index & 31) {
-    case Cop0Reg::index: return StructToInt(index);
+    case Cop0Reg::index: return Read(index);
     case Cop0Reg::random: return random_generator.Generate(); /* Generate a random number in the interval [wired, 31] */
-    case Cop0Reg::entry_lo_0: return StructToInt(entry_lo[0]);
-    case Cop0Reg::entry_lo_1: return StructToInt(entry_lo[1]);
-    case Cop0Reg::context: return StructToInt(context);
+    case Cop0Reg::entry_lo_0: return Read(entry_lo[0]);
+    case Cop0Reg::entry_lo_1: return Read(entry_lo[1]);
+    case Cop0Reg::context: return Read(context);
     case Cop0Reg::page_mask: return page_mask;
     case Cop0Reg::wired: return wired;
     case Cop0Reg::bad_v_addr: return bad_v_addr;
     case Cop0Reg::count: return u32(count >> 1); /* See the declaration of 'count' */
-    case Cop0Reg::entry_hi: return StructToInt(entry_hi);
+    case Cop0Reg::entry_hi: return Read(entry_hi);
     case Cop0Reg::compare: return u32(compare >> 1); /* See the declaration of 'compare' */
-    case Cop0Reg::status: return StructToInt(status);
-    case Cop0Reg::cause: return StructToInt(cause);
+    case Cop0Reg::status: return Read(status);
+    case Cop0Reg::cause: return Read(cause);
     case Cop0Reg::epc: return epc;
-    case Cop0Reg::pr_id: return StructToInt(pr_id);
-    case Cop0Reg::config: return StructToInt(config);
+    case Cop0Reg::pr_id: return Read(pr_id);
+    case Cop0Reg::config: return Read(config);
     case Cop0Reg::ll_addr: return ll_addr;
-    case Cop0Reg::watch_lo: return StructToInt(watch_lo);
-    case Cop0Reg::watch_hi: return StructToInt(watch_hi);
-    case Cop0Reg::x_context: return StructToInt(x_context);
-    case Cop0Reg::parity_error: return StructToInt(parity_error);
+    case Cop0Reg::watch_lo: return Read(watch_lo);
+    case Cop0Reg::watch_hi: return Read(watch_hi);
+    case Cop0Reg::x_context: return Read(x_context);
+    case Cop0Reg::parity_error: return Read(parity_error);
     case Cop0Reg::cache_error: return cache_error;
-    case Cop0Reg::tag_lo: return StructToInt(tag_lo);
+    case Cop0Reg::tag_lo: return Read(tag_lo);
     case Cop0Reg::tag_hi: return tag_hi;
     case Cop0Reg::error_epc: return error_epc;
-    case 7: return cop0_unused_7;
-    case 21: return cop0_unused_21;
-    case 22: return cop0_unused_22;
-    case 23: return cop0_unused_23;
-    case 24: return cop0_unused_24;
-    case 25: return cop0_unused_25;
-    case 31: return cop0_unused_31;
+    case 7:
+    case 21:
+    case 22:
+    case 23:
+    case 24:
+    case 25:
+    case 31: return last_cop0_write;
     default: return 0;
     }
 }
@@ -107,7 +107,7 @@ template<bool raw> void Cop0Registers::Set(size_t reg_index, std::signed_integra
         reg = std::bit_cast<std::remove_reference_t<decltype(reg)>>(to_write);
     };
 
-    switch (reg_index) { /* Masks are used for bits that are non-writeable. */
+    switch (reg_index & 31) {
     case Cop0Reg::index:
         if constexpr (raw) Write(index, value);
         else Write(index, value, 0x8000'003F);
@@ -207,15 +207,9 @@ template<bool raw> void Cop0Registers::Set(size_t reg_index, std::signed_integra
         break;
 
     case Cop0Reg::error_epc: error_epc = value; break;
-
-    case 7: cop0_unused_7 = u32(value); break;
-    case 21: cop0_unused_21 = u32(value); break;
-    case 22: cop0_unused_22 = u32(value); break;
-    case 23: cop0_unused_23 = u32(value); break;
-    case 24: cop0_unused_24 = u32(value); break;
-    case 25: cop0_unused_25 = u32(value); break;
-    case 31: cop0_unused_31 = u32(value); break;
     }
+
+    last_cop0_write = u32(value);
 }
 
 void OnCountCompareMatchEvent()

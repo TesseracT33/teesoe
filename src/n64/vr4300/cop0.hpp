@@ -117,8 +117,6 @@ struct Cop0Registers {
     u32 wired; /* (6); Specifies the boundary between the "wired" and "random" entries of the TLB; wired entries cannot
                   be overwritten by a TLBWR operation. */
 
-    u32 cop0_unused_7; /* (7) */
-
     u64 bad_v_addr; /* (8) Virtual address at which an address error occurred last or which failed in address
                        translation. */
 
@@ -232,12 +230,6 @@ struct Cop0Registers {
         u64 pte_base : 31;
     } x_context;
 
-    u32 cop0_unused_21; /* (21) */
-    u32 cop0_unused_22; /* (22) */
-    u32 cop0_unused_23; /* (23) */
-    u32 cop0_unused_24; /* (24) */
-    u32 cop0_unused_25; /* (25) */
-
     struct { /* (26) */
         u32 diagnostic : 8;
         u32            : 24;
@@ -257,8 +249,6 @@ struct Cop0Registers {
     const u32 tag_hi = 0; /* (29); Always returns 0 when read. */
 
     u64 error_epc; /* (30) */
-
-    u32 cop0_unused_31; /* (31) */
 
     u64 Get(size_t reg_index) const;
     template<bool raw = false> void Set(size_t reg_index, std::signed_integral auto value);
