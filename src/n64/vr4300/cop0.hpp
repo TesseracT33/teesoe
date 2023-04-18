@@ -261,8 +261,8 @@ struct Cop0Registers {
     u32 cop0_unused_31; /* (31) */
 
     u64 Get(size_t reg_index) const;
-    template<bool raw = false> void Set(size_t reg_index, std::integral auto value);
-    void SetRaw(size_t reg_index, auto value) { Set<true>(reg_index, value); }
+    template<bool raw = false> void Set(size_t reg_index, std::signed_integral auto value);
+    void SetRaw(size_t reg_index, std::signed_integral auto value) { Set<true>(reg_index, value); }
     void OnWriteToCause();
     void OnWriteToCompare();
     void OnWriteToCount();

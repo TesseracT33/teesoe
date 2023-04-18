@@ -66,15 +66,15 @@ void InitializeRegisters()
     cop0.SetRaw(Cop0Reg::index, 0x3F);
     cop0.SetRaw(Cop0Reg::config, 0x7006'E463);
     cop0.SetRaw(Cop0Reg::context, 0x007F'FFF0);
-    cop0.SetRaw(Cop0Reg::bad_v_addr, 0xFFFF'FFFF'FFFF'FFFF);
-    cop0.SetRaw(Cop0Reg::cause, 0xB000'007C);
-    cop0.SetRaw(Cop0Reg::epc, 0xFFFF'FFFF'FFFF'FFFF);
+    cop0.SetRaw(Cop0Reg::bad_v_addr, s64(0xFFFF'FFFF'FFFF'FFFF));
+    cop0.SetRaw(Cop0Reg::cause, s32(0xB000'007C));
+    cop0.SetRaw(Cop0Reg::epc, s64(0xFFFF'FFFF'FFFF'FFFF));
     cop0.SetRaw(Cop0Reg::status, 0x3400'0000);
-    cop0.SetRaw(Cop0Reg::ll_addr, 0xFFFF'FFFF);
-    cop0.SetRaw(Cop0Reg::watch_lo, 0xFFFF'FFFB);
+    cop0.SetRaw(Cop0Reg::ll_addr, s32(0xFFFF'FFFF));
+    cop0.SetRaw(Cop0Reg::watch_lo, s32(0xFFFF'FFFB));
     cop0.SetRaw(Cop0Reg::watch_hi, 0xF);
-    cop0.SetRaw(Cop0Reg::x_context, 0xFFFF'FFFF'FFFF'FFF0);
-    cop0.SetRaw(Cop0Reg::error_epc, 0xFFFF'FFFF'FFFF'FFFF);
+    cop0.SetRaw(Cop0Reg::x_context, s64(0xFFFF'FFFF'FFFF'FFF0));
+    cop0.SetRaw(Cop0Reg::error_epc, s64(0xFFFF'FFFF'FFFF'FFFF));
 }
 
 void InitRun(bool hle_pif)

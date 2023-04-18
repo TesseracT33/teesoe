@@ -90,7 +90,7 @@ template<std::signed_integral Int, Alignment alignment, MemOp mem_op> Int ReadVi
        The PC can be misaligned after an ERET instruction, but we manually check there if the PC read from the EPC
        register is misaligned. */
     if constexpr (sizeof(Int) > 1) {
-        if constexpr (mem_op != MemOp::InstrFetch) {
+        if constexpr (mem_op == MemOp::Read) {
             if constexpr (alignment == Alignment::Aligned) {
                 if (vaddr & (sizeof(Int) - 1)) {
                     SignalAddressErrorException<mem_op>(vaddr);

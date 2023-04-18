@@ -88,37 +88,29 @@ u64 Cop0Registers::Get(size_t reg_index) const
     }
 }
 
-template<bool raw> void Cop0Registers::Set(size_t reg_index, std::integral auto value)
+template<bool raw> void Cop0Registers::Set(size_t reg_index, std::signed_integral auto value)
 {
-    auto IntToStruct = [](auto& struct_, auto value) {
-        /* The operation of DMFC0 instruction on a 32-bit register of the CP0 is undefined.
-            Here: simply write to the lower 32 bits. */
-        static_assert(sizeof(struct_) == 4 || sizeof(struct_) == 8);
-        static_assert(sizeof(value) == 4 || sizeof(value) == 8);
-        static constexpr auto num_bytes_to_write = std::min(sizeof(struct_), sizeof(value));
-        std::memcpy(&struct_, &value, num_bytes_to_write);
-    };
-
-    auto IntToStructMasked = [](auto& struct_, auto value, auto mask) {
-        using StructT = std::remove_reference_t<decltype(struct_)>;
-        static_assert(sizeof(struct_) == 4 || sizeof(struct_) == 8);
-        static_assert(sizeof(value) == 4 || sizeof(value) == 8);
-        value &= mask;
-        if constexpr (sizeof(struct_) == 4) {
-            u32 prev_struct = std::bit_cast<u32>(struct_);
-            u32 new_struct = u32(value | prev_struct & ~mask);
-            struct_ = std::bit_cast<StructT>(new_struct);
-        } else {
-            u64 prev_struct = std::bit_cast<u64>(struct_);
-            u64 new_struct = value | prev_struct & ~mask;
-            struct_ = std::bit_cast<StructT>(new_struct);
+    auto Write = [](auto& reg, std::signed_integral auto value, auto... mask) {
+        static_assert((sizeof(reg) == 4 || sizeof(reg) == 8) && (sizeof(value) == 4 || sizeof(value) == 8));
+        static_assert(sizeof...(mask) < 2);
+        auto to_write = [=] {
+            if constexpr (sizeof(reg) == 4 && sizeof(value) == 8) return s32(value);
+            else if constexpr (sizeof(reg) == 8 && sizeof(value) == 4) return s64(value);
+            else return value;
+        }();
+        if constexpr (sizeof...(mask) == 1) {
+            to_write &= (..., mask);
+            auto prev = std::bit_cast<decltype(to_write)>(reg);
+            prev &= ~(..., mask);
+            to_write |= prev;
         }
+        reg = std::bit_cast<std::remove_reference_t<decltype(reg)>>(to_write);
     };
 
     switch (reg_index) { /* Masks are used for bits that are non-writeable. */
     case Cop0Reg::index:
-        if constexpr (raw) IntToStruct(index, value);
-        else IntToStructMasked(index, value, 0x8000'003F);
+        if constexpr (raw) Write(index, value);
+        else Write(index, value, 0x8000'003F);
         break;
 
     case Cop0Reg::random:
@@ -127,18 +119,18 @@ template<bool raw> void Cop0Registers::Set(size_t reg_index, std::integral auto 
         break;
 
     case Cop0Reg::entry_lo_0:
-        if constexpr (raw) IntToStruct(entry_lo[0], value);
-        else IntToStructMasked(entry_lo[0], value, 0x3FFF'FFFF);
+        if constexpr (raw) Write(entry_lo[0], value);
+        else Write(entry_lo[0], value, 0x3FFF'FFFF);
         break;
 
     case Cop0Reg::entry_lo_1:
-        if constexpr (raw) IntToStruct(entry_lo[1], value);
-        else IntToStructMasked(entry_lo[1], value, 0x3FFF'FFFF);
+        if constexpr (raw) Write(entry_lo[1], value);
+        else Write(entry_lo[1], value, 0x3FFF'FFFF);
         break;
 
     case Cop0Reg::context:
-        if constexpr (raw) IntToStruct(context, value);
-        else IntToStructMasked(context, value, ~0xFull);
+        if constexpr (raw) Write(context, value);
+        else Write(context, value, 0xFFFF'FFFF'FF80'0000);
         break;
 
     case Cop0Reg::page_mask:
@@ -162,8 +154,8 @@ template<bool raw> void Cop0Registers::Set(size_t reg_index, std::integral auto 
         break;
 
     case Cop0Reg::entry_hi:
-        if constexpr (raw) IntToStruct(entry_hi, value);
-        else IntToStructMasked(entry_hi, value, 0xC000'00FF'FFFF'E0FF);
+        if constexpr (raw) Write(entry_hi, value);
+        else Write(entry_hi, value, 0xC000'00FF'FFFF'E0FF);
         break;
 
     case Cop0Reg::compare:
@@ -172,46 +164,46 @@ template<bool raw> void Cop0Registers::Set(size_t reg_index, std::integral auto 
         break;
 
     case Cop0Reg::status:
-        if constexpr (raw) IntToStruct(status, value);
-        else IntToStructMasked(status, value, 0xFF57'FFFF);
+        if constexpr (raw) Write(status, value);
+        else Write(status, value, 0xFF57'FFFF);
         OnWriteToStatus();
         break;
 
     case Cop0Reg::cause:
-        if constexpr (raw) IntToStruct(cause, value);
-        else IntToStructMasked(cause, value, 0x300);
+        if constexpr (raw) Write(cause, value);
+        else Write(cause, value, 0x300);
         OnWriteToCause();
         break;
 
     case Cop0Reg::epc: epc = value; break;
 
     case Cop0Reg::config:
-        if constexpr (raw) IntToStruct(config, value);
-        else IntToStructMasked(config, value, 0xF00'800F);
+        if constexpr (raw) Write(config, value);
+        else Write(config, value, 0xF00'800F);
         break;
 
     case Cop0Reg::ll_addr: ll_addr = value; break;
 
     case Cop0Reg::watch_lo:
-        if constexpr (raw) IntToStruct(watch_lo, value);
-        else IntToStructMasked(watch_lo, value, 0xFFFF'FFFB);
+        if constexpr (raw) Write(watch_lo, value);
+        else Write(watch_lo, value, 0xFFFF'FFFB);
         break;
 
-    case Cop0Reg::watch_hi: IntToStruct(watch_hi, value); break;
+    case Cop0Reg::watch_hi: Write(watch_hi, value); break;
 
     case Cop0Reg::x_context:
-        if constexpr (raw) IntToStruct(x_context, value);
-        else IntToStructMasked(x_context, value, ~0xFull);
+        if constexpr (raw) Write(x_context, value);
+        else Write(x_context, value, 0xFFFF'FFFE'0000'0000);
         break;
 
     case Cop0Reg::parity_error:
-        if constexpr (raw) IntToStruct(parity_error, value);
-        else IntToStructMasked(parity_error, value, 0xFF);
+        if constexpr (raw) Write(parity_error, value);
+        else Write(parity_error, value, 0xFF);
         break;
 
     case Cop0Reg::tag_lo:
-        if constexpr (raw) IntToStruct(tag_lo, value);
-        else IntToStructMasked(tag_lo, value, 0x0FFF'FFC0);
+        if constexpr (raw) Write(tag_lo, value);
+        else Write(tag_lo, value, 0x0FFF'FFC0);
         break;
 
     case Cop0Reg::error_epc: error_epc = value; break;
@@ -321,11 +313,9 @@ void mtc0(u32 rt, u32 rd)
 }
 
 template void Cop0Registers::Set<false>(size_t, s32);
-template void Cop0Registers::Set<false>(size_t, u32);
-template void Cop0Registers::Set<false>(size_t, u64);
+template void Cop0Registers::Set<false>(size_t, s64);
 template void Cop0Registers::Set<true>(size_t, s32);
-template void Cop0Registers::Set<true>(size_t, u32);
-template void Cop0Registers::Set<true>(size_t, u64);
+template void Cop0Registers::Set<true>(size_t, s64);
 
 template void ReloadCountCompareEvent<false>();
 template void ReloadCountCompareEvent<true>();
