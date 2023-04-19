@@ -85,20 +85,20 @@ struct Interpreter : public Cpu<GprInt, LoHiInt, PcInt, GprBaseInt> {
 
     void bgezal(u32 rs, s16 imm) const
     {
-        link(31);
         if (s64(gpr[rs]) >= 0) {
             jump(pc + (imm << 2));
         }
+        link(31);
     }
 
     void bgezall(u32 rs, s16 imm) const
     {
-        link(31);
         if (s64(gpr[rs]) >= 0) {
             jump(pc + (imm << 2));
         } else {
             pc += 4;
         }
+        link(31);
     }
 
     void bgezl(u32 rs, s16 imm) const
@@ -151,20 +151,20 @@ struct Interpreter : public Cpu<GprInt, LoHiInt, PcInt, GprBaseInt> {
 
     void bltzal(u32 rs, s16 imm) const
     {
-        link(31);
         if (s64(gpr[rs]) < 0) {
             jump(pc + (imm << 2));
         }
+        link(31);
     }
 
     void bltzall(u32 rs, s16 imm) const
     {
-        link(31);
         if (s64(gpr[rs]) < 0) {
             jump(pc + (imm << 2));
         } else {
             pc += 4;
         }
+        link(31);
     }
 
     void bltzl(u32 rs, s16 imm) const
@@ -305,18 +305,19 @@ struct Interpreter : public Cpu<GprInt, LoHiInt, PcInt, GprBaseInt> {
 
     void jal(u32 instr) const
     {
+        link(31);
         if (!in_branch_delay_slot) {
             jump(pc & ~PcInt(0xFFF'FFFF) | instr << 2 & 0xFFF'FFFF);
         }
-        link(31);
     }
 
     void jalr(u32 rs, u32 rd) const
     {
-        if (!in_branch_delay_slot) {
-            jump(gpr[rs]);
-        }
+        auto target = gpr[rs];
         link(rd);
+        if (!in_branch_delay_slot) {
+            jump(target);
+        }
     }
 
     void jr(u32 rs) const
