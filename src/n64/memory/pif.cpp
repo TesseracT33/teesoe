@@ -1,9 +1,11 @@
 #include "pif.hpp"
+#include "log.hpp"
 #include "util.hpp"
 
 #include <algorithm>
 #include <array>
 #include <bit>
+#include <cassert>
 #include <cstring>
 #include <expected>
 #include <format>
@@ -13,11 +15,14 @@
 
 namespace n64::pif {
 
-constexpr size_t command_byte_index = 0x7FF;
-constexpr size_t ram_size = 0x40;
-constexpr size_t rom_size = 0x7C0;
-constexpr size_t ram_start = rom_size;
-constexpr size_t memory_size = ram_size + rom_size;
+constexpr size_t command_byte_index = 0x3F;
+
+struct {
+    std::array<u8, 0x7C0> rom;
+    std::array<u8, 0x40> ram;
+} static mem;
+
+static_assert(sizeof(mem) == 0x800);
 
 struct JoypadStatus {
     u32 a      : 1;
@@ -40,11 +45,13 @@ struct JoypadStatus {
     u32 y_axis : 8;
 } static joypad_status;
 
-static std::array<u8, memory_size> memory; /* $0-$7BF: rom; $7C0-$7FF: ram */
-
 static void ChallengeProtection();
 static void ChecksumVerification();
-static void ClearRam();
+static void ControllerId(u8* cmd_result);
+static void ControllerReadState();
+static void ControllerReset();
+static u8 AddrCrc(u16 addr);
+static u8 DataCrc(std::string_view data);
 static void RomLockout();
 static void RunJoybusProtocol();
 static void TerminateBootProcess();
@@ -55,37 +62,61 @@ void ChallengeProtection()
 
 void ChecksumVerification()
 {
-    memory[command_byte_index] |= 0x80;
+    mem.ram[command_byte_index] |= 0x80;
 }
 
-void ClearRam()
+void ControllerId(u8* cmd_result)
 {
-    std::fill(memory.begin() + ram_start, memory.end(), 0);
+    /* Device: controller */
+    cmd_result[0] = 0x05;
+    cmd_result[1] = 0x00;
+    /* Pak installed */
+    cmd_result[2] = 0x01;
 }
 
-size_t GetNumberOfBytesUntilMemoryEnd(u32 offset)
+void ControllerReadState()
 {
-    return memory_size - (offset & (memory_size - 1)); /* Size is 0x800 bytes */
+    // std::memcpy(&memory[ram_start], &joypad_status, sizeof(joypad_status));
 }
 
-size_t GetNumberOfBytesUntilRamStart(u32 offset)
+void ControllerReset()
 {
-    offset &= memory_size - 1;
-    return offset < ram_start ? ram_start - offset : 0;
 }
 
-u8* GetPointerToMemory(u32 address)
+u8 AddrCrc(u16 addr)
 {
-    return memory.data() + (address & (memory_size - 1));
+    u8 crc{};
+    for (int i = 0; i < 16; ++i) {
+        u8 xor_ = crc & 0x10 ? 0x15 : 0;
+        crc <<= 1;
+        if (addr & 0x8000) crc |= 1;
+        addr <<= 1;
+        crc ^= xor_;
+    }
+    return crc & 31;
+}
+
+u8 DataCrc(std::string_view data)
+{
+    u8 crc{};
+    for (int i = 0; i < 33; ++i) {
+        for (int j = 7; j >= 0; --j) {
+            u8 xor_ = crc & 0x80 ? 0x85 : 0;
+            crc <<= 1;
+            if (i < 32 && data[i] & 1 << j) crc |= 1;
+            crc ^= xor_;
+        }
+    }
+    return crc;
 }
 
 Status LoadIPL12(std::filesystem::path const& path)
 {
-    std::expected<std::vector<u8>, std::string> expected_rom = read_file(path, memory_size);
+    std::expected<std::vector<u8>, std::string> expected_rom = read_file(path, sizeof(mem));
     if (!expected_rom) {
         return status_failure(std::format("Failed to open boot rom (IPL) file; {}", expected_rom.error()));
     }
-    std::copy(expected_rom.value().begin(), expected_rom.value().end(), memory.begin());
+    std::copy(expected_rom.value().begin(), expected_rom.value().end(), mem.rom.begin());
     return status_ok();
 }
 
@@ -144,7 +175,7 @@ void OnJoystickMovement(Control control, s16 value)
 template<std::signed_integral Int> Int ReadMemory(u32 addr)
 { /* CPU precondition: addr is aligned */
     Int ret;
-    std::memcpy(&ret, memory.data() + (addr & 0x7FF), sizeof(Int));
+    std::memcpy(&ret, reinterpret_cast<u8*>(&mem) + (addr & 0x7FF), sizeof(Int));
     return std::byteswap(ret);
 }
 
@@ -154,29 +185,44 @@ void RomLockout()
 
 void RunJoybusProtocol()
 {
-    switch (memory[ram_start]) { /* joybus command */
-    case 0x00: /* Info */
-    case 0xFF: /* Reset & Info */
-        /* Device: controller */
-        memory[ram_start] = 0x05;
-        memory[ram_start + 1] = 0x00;
-        /* Pak installed */
-        memory[ram_start + 2] = 0x01;
-        break;
+    int channel{}, offset{};
+    while (offset < 64 && channel < 5) {
+        u8* cmd_base = &mem.ram[offset++];
+        u8 cmd_len = cmd_base[0];
+        if (cmd_len == 0 || cmd_len == 253) {
+            ++channel;
+            continue;
+        }
+        if (cmd_len == 254) break; // end of commands
+        if (cmd_len == 255) continue;
+        cmd_len &= 63;
+        u8 result_len = mem.ram[offset++];
+        if (result_len == 254) break; // end of commands
+        result_len &= 63;
+        assert(offset + cmd_len < mem.ram.size());
+        u8* result = &mem.ram[offset + cmd_len];
 
-    case 0x01: /* Controller State */ std::memcpy(&memory[ram_start], &joypad_status, sizeof(joypad_status)); break;
-
-    case 0x02: /* Read Controller Accessory */ break;
-
-    case 0x03: /* Write Controller Accessory */ break;
-
-    case 0x04: /* Read EEPROM */ break;
-
-    case 0x05: /* Write EEPROM */ break;
-
-    case 0x06: /* Real-Time Clock Info */
-        std::memset(&memory[ram_start], 0, 3); /* clock does not exist */
-        break;
+        switch (u8 cmd = mem.ram[offset++]; cmd) {
+        case 0:
+            ControllerId(result);
+            ++channel;
+            break; /* Info */
+        case 1: /* Controller State */
+            std::memcpy(result, &joypad_status, 4);
+            ++channel;
+            break;
+        case 2: /* Read Controller Accessory */ break;
+        case 3: /* Write Controller Accessory */ break;
+        case 4: /* Read EEPROM */ break;
+        case 5: /* Write EEPROM */ break;
+        case 6: /* Real-Time Clock Info */ break;
+        case 255: /* Reset & Info */
+            ControllerReset();
+            ControllerId(result);
+            ++channel;
+            break;
+        default: log_warn(std::format("Unexpected joybus command {} encountered.", cmd));
+        }
     }
 }
 
@@ -187,41 +233,41 @@ void TerminateBootProcess()
 template<size_t access_size> void WriteMemory(u32 addr, s64 data)
 { /* CPU precondition: write does not go to the next boundary */
     addr &= 0x7FF;
-    if (addr < ram_start) return;
+    if (addr < 0x7C0) return;
     s32 to_write = [&] {
         if constexpr (access_size == 1) return data << (8 * (3 - (addr & 3)));
         if constexpr (access_size == 2) return data << (8 * (2 - (addr & 2)));
         if constexpr (access_size == 4) return data;
-        if constexpr (access_size == 8) return data >> 32; /* TODO: not confirmed; could cause console lock-up? */
+        if constexpr (access_size == 8) return s32(data >> 32); /* TODO: could cause console lock-up? */
     }();
     to_write = std::byteswap(to_write);
-    addr &= ~3;
-    std::memcpy(&memory[addr], &to_write, 4);
+    addr &= 0x3C;
+    std::memcpy(&mem.ram[addr], &to_write, 4);
 
     if (addr == command_byte_index - 3) {
-        if (memory[command_byte_index] & 1) {
+        if (mem.ram[command_byte_index] & 1) {
             RunJoybusProtocol();
-            memory[command_byte_index] &= ~1;
+            mem.ram[command_byte_index] &= ~1;
         }
-        if (memory[command_byte_index] & 2) {
+        if (mem.ram[command_byte_index] & 2) {
             ChallengeProtection();
-            memory[command_byte_index] &= ~2;
+            mem.ram[command_byte_index] &= ~2;
         }
-        if (memory[command_byte_index] & 8) {
+        if (mem.ram[command_byte_index] & 8) {
             TerminateBootProcess();
-            memory[command_byte_index] &= ~8;
+            mem.ram[command_byte_index] &= ~8;
         }
-        if (memory[command_byte_index] & 0x10) {
+        if (mem.ram[command_byte_index] & 16) {
             RomLockout();
-            memory[command_byte_index] &= ~0x10;
+            mem.ram[command_byte_index] &= ~16;
         }
-        if (memory[command_byte_index] & 0x20) {
+        if (mem.ram[command_byte_index] & 32) {
             ChecksumVerification();
-            memory[command_byte_index] &= ~0x20;
+            mem.ram[command_byte_index] &= ~32;
         }
-        if (memory[command_byte_index] & 0x40) {
-            ClearRam();
-            memory[command_byte_index] &= ~0x40;
+        if (mem.ram[command_byte_index] & 64) {
+            mem.ram = {};
+            mem.ram[command_byte_index] &= ~64;
         }
     }
 }
