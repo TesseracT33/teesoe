@@ -395,7 +395,6 @@ template<Cpu cpu, CpuImpl cpu_impl, bool make_string> void disassemble(u32 instr
         case 7: COP_RSP(luv, BASE, VT, ELEM_LO, IMM7); break;
         case 8: COP_RSP(lhv, BASE, VT, ELEM_LO, IMM7); break;
         case 9: COP_RSP(lfv, BASE, VT, ELEM_LO, IMM7); break;
-        case 10: COP_RSP(lwv, BASE, VT, ELEM_LO, IMM7); break;
         case 11: COP_RSP(ltv, BASE, VT, ELEM_LO, IMM7); break;
         default: reserved_instruction<cpu, make_string>(instr);
         }
@@ -537,17 +536,17 @@ template<Cpu cpu, CpuImpl cpu_impl, bool make_string> void special(u32 instr)
 
 u32 vt_e_bug(u32 vt_e, u32 vd_e)
 {
-    if (vt_e & 7) {
-        bool vt_e_bit_3 = vt_e & 8;
-        vt_e &= 7;
-        if (vt_e_bit_3 == 0) {
-            if (vt_e & 4) vt_e = vd_e & 4 | vt_e & 3;
-            else if (vt_e & 2) vt_e = vd_e & 6 | vt_e & 1;
-            else vt_e = vd_e;
-        }
-    } else {
-        vt_e = 0; /* effectively clear bit 3 */
-    }
+    // if (vt_e & 7) {
+    //     bool vt_e_bit_3 = vt_e & 8;
+    //     vt_e &= 7;
+    //     if (vt_e_bit_3 == 0) {
+    //         if (vt_e & 4) vt_e = vd_e & 4 | vt_e & 3;
+    //         else if (vt_e & 2) vt_e = vd_e & 6 | vt_e & 1;
+    //         else vt_e = vd_e;
+    //     }
+    // } else {
+    //     vt_e = 0; /* effectively clear bit 3 */
+    // }
     return vt_e;
 }
 

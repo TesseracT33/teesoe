@@ -99,7 +99,6 @@ template<DmaType dma_type> void InitDma()
     auto DstPtr = [] {
         if constexpr (dma_type == DmaType::RdToSp) {
             return rsp::GetPointerToMemory(sp.dma_spaddr);
-
         } else {
             return rdram::GetPointerToMemory(sp.dma_ramaddr);
         }

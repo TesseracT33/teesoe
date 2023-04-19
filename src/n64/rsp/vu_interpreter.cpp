@@ -181,20 +181,19 @@ template<std::signed_integral Int> void StoreUpToDword(u32 base, u32 vt, u32 e, 
 s32 Rcp(s32 input)
 {
     s32 mask = input >> 31;
-    s32 data = input ^ mask;
-    if (input > -32768) {
-        data -= mask;
+    input ^= mask;
+    if (input > -0x8000) {
+        input -= mask;
     }
-    if (data == 0) {
+    if (input == 0) {
         return 0x7FFF'FFFF;
-    } else if (input == -32768) {
+    } else if (input == -0x8000) {
         return 0xFFFF'0000;
     } else {
-        u32 shift = std::countl_zero(u32(data));
-        u32 index = (u64(data) << shift & 0x7FC0'0000) >> 22;
-        s32 result = rcp_rom[index];
-        result = (0x10000 | result) << 14;
-        return (result >> (31 - shift)) ^ mask;
+        u32 shift = std::countl_zero(u32(input));
+        u32 index = (u64(input) << shift & 0x7FC0'0000) >> 22;
+        s32 result = (0x10000 | rcp_rom[index]) << 14;
+        return result >> 31 - shift ^ mask;
     }
 }
 
@@ -277,15 +276,24 @@ template<> void mfc2<Interpreter>(u32 rt, u32 vs, u32 e)
 {
     /* GPR[rt](31..0) = sign_extend(VS<elem>(15..0)) */
     u8* v = (u8*)(&vpr[vs]);
-    gpr.set(rt, s16(v[e] << 8 | v[e + 1 & 15]));
+    if (e & 1) {
+        gpr.set(rt, s16(v[e ^ 1] << 8 | v[e + 1 & 15 ^ 1]));
+    } else {
+        gpr.set(rt, s16(v[e] | v[e + 1] << 8));
+    }
 }
 
 template<> void mtc2<Interpreter>(u32 rt, u32 vs, u32 e)
 {
     /* VS<elem>(15..0) = GPR[rt](15..0) */
     u8* v = (u8*)(&vpr[vs]);
-    v[e] = u8(gpr[rt] >> 8);
-    if (e < 15) v[e + 1] = u8(gpr[rt]);
+    if (e & 1) {
+        v[e ^ 1] = u8(gpr[rt] >> 8);
+        if (e < 15) v[e + 1 ^ 1] = u8(gpr[rt]);
+    } else {
+        v[e] = u8(gpr[rt]);
+        v[e + 1] = u8(gpr[rt] >> 8);
+    }
 }
 
 template<> void lbv<Interpreter>(u32 base, u32 vt, u32 e, s32 offset)
@@ -306,11 +314,11 @@ template<> void lfv<Interpreter>(u32 base, u32 vt, u32 e, s32 offset)
     addr &= ~7;
     s16 tmp[8];
     for (int i = 0; i < 4; ++i) {
-        tmp[i] = dmem[(addr + (mem_offset + 4 * i & 15) ^ 1) & 0xFFF] << 7;
-        tmp[i + 4] = dmem[(addr + (mem_offset + 4 * i + 8 & 15) ^ 1) & 0xFFF] << 7;
+        tmp[i] = dmem[addr + (mem_offset + 4 * i & 15) & 0xFFF] << 7;
+        tmp[i + 4] = dmem[addr + (mem_offset + 4 * i + 8 & 15) & 0xFFF] << 7;
     }
-    for (auto elem = e; elem < std::min(e + 8, 16u); ++elem) {
-        vpr_dst[elem] = reinterpret_cast<u8*>(tmp)[elem];
+    for (auto byte = e; byte < std::min(e + 8, 16u); ++byte) {
+        vpr_dst[byte] = reinterpret_cast<u8*>(tmp)[byte];
     }
 }
 
@@ -379,7 +387,7 @@ template<> void ltv<Interpreter>(u32 base, u32 vt, u32 e, s32 offset)
     auto const reg_base = vt & 0x18;
     auto reg_off = e >> 1;
     for (int i = 0; i < 8; ++i) {
-        for (int j = 0; j < 2; ++j) {
+        for (int j = 1; j >= 0; --j) {
             reinterpret_cast<u8*>(&vpr[reg_base + reg_off])[2 * i + j] = dmem[addr & 0xFFF];
             addr = addr == wrap_addr + 15 ? wrap_addr : addr + 1;
         }
@@ -398,16 +406,6 @@ template<> void luv<Interpreter>(u32 base, u32 vt, u32 e, s32 offset)
     }
 }
 
-template<> void lwv<Interpreter>(u32 base, u32 vt, u32 e, s32 offset)
-{
-    u8* vpr_dst = (u8*)(&vpr[vt]);
-    auto addr = gpr[base] + offset * 16;
-    for (auto elem = 16 - e; elem < 16 + e; ++elem) {
-        vpr_dst[elem & 15 ^ 1] = dmem[addr & 0xFFF ^ 1];
-        addr += 4;
-    }
-}
-
 template<> void sbv<Interpreter>(u32 base, u32 vt, u32 e, s32 offset)
 {
     StoreUpToDword<s8>(base, vt, e, offset);
@@ -420,12 +418,13 @@ template<> void sdv<Interpreter>(u32 base, u32 vt, u32 e, s32 offset)
 
 template<> void sfv<Interpreter>(u32 base, u32 vt, u32 e, s32 offset)
 {
+    u16* vpr_src = (u16*)(&vpr[vt]);
     auto addr = gpr[base] + offset * 16;
     auto mem_offset = addr & 7;
     addr &= ~7;
-    auto store = [addr, mem_offset, vt](std::array<u8, 4> elems) {
+    auto store = [addr, mem_offset, vpr_src](std::array<u8, 4> elems) {
         for (int i = 0; i < 4; ++i) {
-            dmem[addr + (mem_offset + 4 * i & 15) & 0xFFF] = reinterpret_cast<u16*>(&vpr[vt])[elems[i]] >> 7;
+            dmem[addr + (mem_offset + 4 * i & 15) & 0xFFF] = std::byteswap(vpr_src[elems[i]]) >> 7;
         }
     };
     switch (e) {
@@ -448,11 +447,9 @@ template<> void shv<Interpreter>(u32 base, u32 vt, u32 e, s32 offset)
     auto addr_offset = addr & 7;
     addr &= ~7;
     for (int i = 0; i < 8; ++i) {
-        auto src_e = e + 2 * i;
-        s16 val;
-        std::memcpy(&val, vpr_src + src_e, 2);
-        if (src_e & 1) val = std::byteswap(val);
-        dmem[addr + (addr_offset + 2 * i & 15) & 0xFFF] = val >> 7;
+        auto byte = e + 2 * i;
+        s16 val = vpr_src[byte & 15 ^ 1] << 1 | vpr_src[byte + 1 & 15 ^ 1] >> 7;
+        dmem[addr + (addr_offset + 2 * i & 15) & 0xFFF] = u8(val);
     }
 }
 
@@ -480,11 +477,9 @@ template<> void sqv<Interpreter>(u32 base, u32 vt, u32 e, s32 offset)
 {
     u8 const* vpr_src = (u8*)(&vpr[vt]);
     auto addr = gpr[base] + offset * 16;
-    u32 num_bytes = 16 - (addr & 0xF);
-    u32 base_element = 0;
-    addr &= 0xFFF;
-    for (u32 i = 0; i < num_bytes; ++i) {
-        dmem[addr++] = *(vpr_src + ((base_element + e++ & 0xF) ^ 1));
+    u32 addr_offset = addr & 15;
+    for (auto elem = e; elem < e + (16 - addr_offset); ++elem) {
+        dmem[addr++ & 0xFFF] = vpr_src[elem & 15 ^ 1];
     }
 }
 
@@ -492,11 +487,11 @@ template<> void srv<Interpreter>(u32 base, u32 vt, u32 e, s32 offset)
 {
     u8 const* vpr_src = (u8*)(&vpr[vt]);
     auto addr = gpr[base] + offset * 16;
-    u32 num_bytes = addr & 0xF;
-    u32 base_element = 16 - (addr & 0xF);
+    u32 addr_offset = addr & 15;
+    u32 base_e = 16 - addr_offset;
     addr &= 0xFF0;
-    for (u32 i = 0; i < num_bytes; ++i) {
-        dmem[addr++] = *(vpr_src + ((base_element + e++ & 0xF) ^ 1));
+    for (auto elem = e; elem < e + addr_offset; ++elem) {
+        dmem[addr++] = vpr_src[base_e + elem & 15 ^ 1];
     }
 }
 
@@ -510,9 +505,10 @@ template<> void stv<Interpreter>(u32 base, u32 vt, u32 e, s32 offset)
     auto addr = gpr[base] + offset * 16;
     auto offset_addr = (addr & 7) - (e & ~1);
     auto elem = 16 - (e & ~1);
+    addr &= ~7;
     for (auto reg = vt & 0x18; reg < (vt & 0x18) + 8; ++reg) {
         for (int i = 0; i < 2; ++i) {
-            dmem[addr + (offset_addr++ & 15) & 0xFFF] = reinterpret_cast<u8*>(&vpr[reg])[elem++ & 15];
+            dmem[addr + (offset_addr++ & 15) & 0xFFF] = reinterpret_cast<u8*>(&vpr[reg])[elem++ & 15 ^ 1];
         }
     }
 }
@@ -538,8 +534,8 @@ template<> void swv<Interpreter>(u32 base, u32 vt, u32 e, s32 offset)
     auto addr = gpr[base] + offset * 16;
     base = addr & 7;
     addr &= ~7;
-    for (auto current_elem = e; current_elem < e + 16; ++current_elem) {
-        dmem[(addr + (base++ & 0xF)) & 0xFFF] = *(vpr_src + ((current_elem & 0xF) ^ 1));
+    for (auto elem = e; elem < e + 16; ++elem) {
+        dmem[(addr + (base++ & 15)) & 0xFFF] = vpr_src[elem & 15 ^ 1];
     }
 }
 
@@ -602,7 +598,7 @@ template<> void vcl<Interpreter>(u32 vs, u32 vt, u32 vd, u32 e)
     m128i clip = _mm_blendv_epi8(vcc.hi, vcc.lo, vco.lo);
     m128i vt_abs = _mm_blendv_epi8(vt_op, neg_vt, vco.lo);
     vpr[vd] = acc.low = _mm_blendv_epi8(vpr[vs], vt_abs, clip);
-    vco.lo = vco.hi = vcc.lo = _mm_setzero_si128();
+    vco.lo = vco.hi = vce = _mm_setzero_si128();
 }
 
 template<> void vcr<Interpreter>(u32 vs, u32 vt, u32 vd, u32 e)
@@ -755,8 +751,9 @@ template<> void vmadn<Interpreter>(u32 vs, u32 vt, u32 vd, u32 e)
 
 template<> void vmov<Interpreter>(u32 vt, u32 vt_e, u32 vd, u32 vd_e)
 {
-    reinterpret_cast<s16*>(&vpr[vd])[vd_e] = reinterpret_cast<s16*>(&vpr[vt])[vt_e];
-    acc.low = vpr[vt];
+    m128i vte = GetVTBroadcast(vt, vt_e);
+    reinterpret_cast<s16*>(&vpr[vd])[vd_e] = reinterpret_cast<s16*>(&vte)[vd_e];
+    acc.low = vte;
 }
 
 template<> void vmrg<Interpreter>(u32 vs, u32 vt, u32 vd, u32 e)
@@ -900,29 +897,29 @@ template<> void vrcp<Interpreter>(u32 vt, u32 vt_e, u32 vd, u32 vd_e)
 {
     s32 input = _mm_getlane_epi16(&vpr[vt], vt_e);
     s32 result = Rcp(input);
+    acc.low = GetVTBroadcast(vt, vt_e);
     _mm_setlane_epi16(&vpr[vd], vd_e, s16(result));
-    div_out = result >> 16 & 0xFFFF;
+    div_out = u16(result >> 16);
     div_dp = 0;
-    acc.low = vpr[vt];
 }
 
 template<> void vrcph<Interpreter>(u32 vt, u32 vt_e, u32 vd, u32 vd_e)
 {
+    acc.low = GetVTBroadcast(vt, vt_e);
     _mm_setlane_epi16(&vpr[vd], vd_e, div_out);
     div_in = _mm_getlane_epi16(&vpr[vt], vt_e);
     div_dp = 1;
-    acc.low = vpr[vt];
 }
 
 template<> void vrcpl<Interpreter>(u32 vt, u32 vt_e, u32 vd, u32 vd_e)
 {
+    acc.low = GetVTBroadcast(vt, vt_e);
     u16 vte = _mm_getlane_epi16(&vpr[vt], vt_e);
     s32 input = div_dp ? vte | div_in << 16 : s16(vte);
     s32 result = Rcp(input);
     _mm_setlane_epi16(&vpr[vd], vd_e, s16(result));
-    div_out = result >> 16 & 0xFFFF;
+    div_out = u16(result >> 16);
     div_in = div_dp = 0;
-    acc.low = vpr[vt];
 }
 
 template<bool p> void vrnd(u32 vt, u32 vt_e, u32 vd, u32 vd_e)

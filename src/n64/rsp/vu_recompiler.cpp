@@ -135,10 +135,6 @@ template<> void luv<Recompiler>(u32 base, u32 vt, u32 e, s32 offset)
 {
 }
 
-template<> void lwv<Recompiler>(u32 base, u32 vt, u32 e, s32 offset)
-{
-}
-
 template<> void sbv<Recompiler>(u32 base, u32 vt, u32 e, s32 offset)
 {
 }

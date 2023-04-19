@@ -41,10 +41,20 @@ inline const std::array broadcast_mask = {
     _mm_set1_epi16(0x09'08), /* 4,4,4,4,4,4,4,4 */
     _mm_set1_epi16(0x0B'0A), /* 5,5,5,5,5,5,5,5 */
     _mm_set1_epi16(0x0D'0C), /* 6,6,6,6,6,6,6,6 */
-    _mm_set1_epi16(0x0F'0E) /* 7,7,7,7,7,7,7,7 */
+    _mm_set1_epi16(0x0F'0E), /* 7,7,7,7,7,7,7,7 */
 };
 
 // clang-format off
+
+//inline constexpr std::array rcp_rom = []{
+//	std::array<u16, 512> arr;
+//	arr[0] = 0xFFFF;
+//	for (int i = 1; i < 512; ++i) {
+//		u64 x = (1ull << 34) / (i + 512);
+//		arr[i] = u16(x + 1 >> 8);
+//	}
+//	return arr;
+//}();
 
 inline constexpr std::array<u16, 512> rcp_rom = {
 	0xFFFF, 0xFF00, 0xFE01, 0xFD04, 0xFC07, 0xFB0C, 0xFA11, 0xF918, 0xF81F, 0xF727, 0xF631, 0xF53B, 0xF446, 0xF352, 0xF25F, 0xF16D,
@@ -134,7 +144,6 @@ template<CpuImpl> void lrv(u32 base, u32 vt, u32 e, s32 offset);
 template<CpuImpl> void lsv(u32 base, u32 vt, u32 e, s32 offset);
 template<CpuImpl> void ltv(u32 base, u32 vt, u32 e, s32 offset);
 template<CpuImpl> void luv(u32 base, u32 vt, u32 e, s32 offset);
-template<CpuImpl> void lwv(u32 base, u32 vt, u32 e, s32 offset);
 template<CpuImpl> void sbv(u32 base, u32 vt, u32 e, s32 offset);
 template<CpuImpl> void sdv(u32 base, u32 vt, u32 e, s32 offset);
 template<CpuImpl> void sfv(u32 base, u32 vt, u32 e, s32 offset);
