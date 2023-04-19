@@ -204,33 +204,15 @@ s32 Rsq(s32 input)
     } else if (input == -32768) {
         return 0xFFFF'0000;
     } else {
-        auto unsigned_input = to_unsigned(std::abs(input));
-        auto lshift = std::countl_zero(unsigned_input) + 1;
-        auto rshift = (32 - lshift) >> 1;
-        auto index = (unsigned_input << lshift) >> 24;
-        auto rom = rsq_rom[(index | ((lshift & 1) << 8))];
-        s32 result = ((0x10000 | rom) << 14) >> rshift;
-        if (unsigned_input != input) {
-            return ~result;
-        } else {
-            return result;
-        }
+        u32 unsigned_input = u32(std::abs(input));
+        u32 lshift = std::countl_zero(unsigned_input) + 1;
+        u32 rshift = (32 - lshift) >> 1;
+        u32 index = (unsigned_input << lshift) >> 24;
+        u32 rom = rsq_rom[(index | ((lshift & 1) << 8))];
+        u32 result = ((0x10000 | rom) << 14) >> rshift;
+        if (unsigned_input != input) result = ~result;
+        return result;
     }
-    // if (input == 0) {
-    //     return 0x7FFF'FFFF;
-    // } else if (input == 0xFFFF'8000) {
-    //     return 0xFFFF0000;
-    // } else if (input > 0xFFFF'8000) {
-    //     input--;
-    // }
-    // s32 mask = input >> 31;
-    // input ^= mask;
-    // u32 shift = std::countl_zero(u32(input));
-    // u32 index = input << shift >> 24 | (shift & 1) << 8;
-    // u32 rom = u16(rsq_rom[index]) << 14;
-    // u32 r_shift = (32 - shift) >> 1;
-    // u32 result = (0x4000'0000 | rom) >> r_shift;
-    // return result ^ mask;
 }
 
 template<> void cfc2<Interpreter>(u32 rt, u32 vs)
@@ -895,10 +877,10 @@ template<> void vor<Interpreter>(u32 vs, u32 vt, u32 vd, u32 e)
 
 template<> void vrcp<Interpreter>(u32 vt, u32 vt_e, u32 vd, u32 vd_e)
 {
-    s32 input = _mm_getlane_epi16(&vpr[vt], vt_e);
+    s32 input = _mm_getlane_epi16(&vpr[vt], vt_e & 7);
     s32 result = Rcp(input);
     acc.low = GetVTBroadcast(vt, vt_e);
-    _mm_setlane_epi16(&vpr[vd], vd_e, s16(result));
+    _mm_setlane_epi16(&vpr[vd], vd_e & 7, s16(result));
     div_out = u16(result >> 16);
     div_dp = 0;
 }
@@ -906,18 +888,18 @@ template<> void vrcp<Interpreter>(u32 vt, u32 vt_e, u32 vd, u32 vd_e)
 template<> void vrcph<Interpreter>(u32 vt, u32 vt_e, u32 vd, u32 vd_e)
 {
     acc.low = GetVTBroadcast(vt, vt_e);
-    _mm_setlane_epi16(&vpr[vd], vd_e, div_out);
-    div_in = _mm_getlane_epi16(&vpr[vt], vt_e);
+    _mm_setlane_epi16(&vpr[vd], vd_e & 7, div_out);
+    div_in = _mm_getlane_epi16(&vpr[vt], vt_e & 7);
     div_dp = 1;
 }
 
 template<> void vrcpl<Interpreter>(u32 vt, u32 vt_e, u32 vd, u32 vd_e)
 {
     acc.low = GetVTBroadcast(vt, vt_e);
-    u16 vte = _mm_getlane_epi16(&vpr[vt], vt_e);
+    u16 vte = _mm_getlane_epi16(&vpr[vt], vt_e & 7);
     s32 input = div_dp ? vte | div_in << 16 : s16(vte);
     s32 result = Rcp(input);
-    _mm_setlane_epi16(&vpr[vd], vd_e, s16(result));
+    _mm_setlane_epi16(&vpr[vd], vd_e & 7, s16(result));
     div_out = u16(result >> 16);
     div_in = div_dp = 0;
 }
@@ -927,10 +909,10 @@ template<bool p> void vrnd(u32 vt, u32 vt_e, u32 vd, u32 vd_e)
     m128i low, mid, high, cond;
     if (vd_e & 1) { /* sign_extend(VT << 16) */
         low = _mm_setzero_si128();
-        mid = vpr[vt];
+        mid = GetVTBroadcast(vt, vt_e);
         high = _mm_srai_epi16(mid, 16);
     } else { /* sign_extend(VT) */
-        low = vpr[vt];
+        low = GetVTBroadcast(vt, vt_e);
         mid = high = _mm_srai_epi16(low, 16);
     }
     cond = _mm_srai_epi16(acc.high, 16);
@@ -953,31 +935,31 @@ template<> void vrndp<Interpreter>(u32 vt, u32 vt_e, u32 vd, u32 vd_e)
 
 template<> void vrsq<Interpreter>(u32 vt, u32 vt_e, u32 vd, u32 vd_e)
 {
-    s32 input = _mm_getlane_epi16(&vpr[vt], vt_e);
+    s32 input = _mm_getlane_epi16(&vpr[vt], vt_e & 7);
     s32 result = Rsq(input);
-    _mm_setlane_epi16(&vpr[vd], vd_e, s16(result));
+    acc.low = GetVTBroadcast(vt, vt_e);
+    _mm_setlane_epi16(&vpr[vd], vd_e & 7, s16(result));
     div_out = result >> 16;
     div_dp = 0;
-    acc.low = vpr[vt];
 }
 
 template<> void vrsqh<Interpreter>(u32 vt, u32 vt_e, u32 vd, u32 vd_e)
 {
-    _mm_setlane_epi16(&vpr[vd], vd_e, div_out);
-    div_in = _mm_getlane_epi16(&vpr[vt], vt_e);
+    acc.low = GetVTBroadcast(vt, vt_e);
+    _mm_setlane_epi16(&vpr[vd], vd_e & 7, div_out);
+    div_in = _mm_getlane_epi16(&vpr[vt], vt_e & 7);
     div_dp = 1;
-    acc.low = vpr[vt];
 }
 
 template<> void vrsql<Interpreter>(u32 vt, u32 vt_e, u32 vd, u32 vd_e)
 {
-    u16 vte = _mm_getlane_epi16(&vpr[vt], vt_e);
+    acc.low = GetVTBroadcast(vt, vt_e);
+    u16 vte = _mm_getlane_epi16(&vpr[vt], vt_e & 7);
     s32 input = div_dp ? vte | div_in << 16 : s16(vte);
     s32 result = Rsq(input);
-    _mm_setlane_epi16(&vpr[vd], vd_e, s16(result));
-    div_out = result >> 16;
+    _mm_setlane_epi16(&vpr[vd], vd_e & 7, s16(result));
+    div_out = u16(result >> 16);
     div_in = div_dp = 0;
-    acc.low = vpr[vt];
 }
 
 template<> void vsar<Interpreter>(u32 vd, u32 e)
