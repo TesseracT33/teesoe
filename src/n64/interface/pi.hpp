@@ -2,19 +2,14 @@
 
 #include "types.hpp"
 
+#include <optional>
+
 namespace n64::pi {
 
-enum class StatusFlag : s32 {
-    DmaBusy = 1 << 0,
-    IoBusy = 1 << 1,
-    DmaError = 1 << 2,
-    DmaCompleted = 1 << 3
-};
-
-void ClearStatusFlag(StatusFlag);
 void Initialize();
+std::optional<u32> IoBusy();
 u32 ReadReg(u32 addr);
-void SetStatusFlag(StatusFlag);
+template<size_t size> void Write(u32 addr, s64 value, u8* dst = nullptr);
 void WriteReg(u32 addr, u32 data);
 
 } // namespace n64::pi

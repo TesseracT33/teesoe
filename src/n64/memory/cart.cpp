@@ -1,5 +1,6 @@
 #include "cart.hpp"
 #include "frontend/message.hpp"
+#include "interface/pi.hpp"
 #include "util.hpp"
 
 #include <algorithm>
@@ -87,6 +88,14 @@ Status LoadSram(std::filesystem::path const& sram_path)
 
 template<std::signed_integral Int> Int ReadRom(u32 addr)
 {
+    std::optional<u32> pi_latch = pi::IoBusy();
+    if (pi_latch) {
+        u32 ret = pi_latch.value();
+        if constexpr (sizeof(Int) < 4) {
+            if (!(addr & 2)) ret >>= 16; /* PI external bus glitch */
+        }
+        return ret;
+    }
     if constexpr (sizeof(Int) < 4) {
         addr += addr & 2; /* PI external bus glitch */
     }
@@ -97,6 +106,10 @@ template<std::signed_integral Int> Int ReadRom(u32 addr)
 
 template<std::signed_integral Int> Int ReadSram(u32 addr)
 { /* CPU precondition: addr is always aligned */
+    std::optional<u32> pi_latch = pi::IoBusy();
+    if (pi_latch) {
+        return pi_latch.value();
+    }
     if constexpr (sizeof(Int) < 4) {
         addr += addr & 2; /* PI external bus glitch */
     }
@@ -118,16 +131,17 @@ void ResizeRomToPowerOfTwo()
 
 template<size_t access_size> void WriteSram(u32 addr, s64 data)
 { /* CPU precondition: addr + number_of_bytes does not go beyond the next alignment boundary */
+    pi::Write<access_size>(addr, data, GetPointerToSram(addr));
     if constexpr (access_size < 4) {
         addr += addr & 2; /* PI external bus glitch */ /* TODO: not sure how it works for writes */
-    }
-    data = std::byteswap(data);
-    std::memcpy(GetPointerToSram(addr), &data, access_size);
+    } /*
+     data = std::byteswap(data);
+     std::memcpy(GetPointerToSram(addr), &data, access_size);*/
 }
 
 template<size_t access_size> void WriteRom(u32 addr, s64 data)
 {
-    /* TODO */
+    pi::Write<access_size>(addr, data);
 }
 
 template s8 ReadRom<s8>(u32);

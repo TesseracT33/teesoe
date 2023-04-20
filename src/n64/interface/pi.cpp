@@ -36,11 +36,21 @@ enum Register {
     BsdDom2Rls
 };
 
+static u32 latch;
+static u8* write_dst;
+
 struct {
-    s32 dram_addr, cart_addr, rd_len, wr_len, status;
-    s32 bsd_dom1_lat, bsd_dom1_pwd, bsd_dom1_pgs, bsd_dom1_rls;
-    s32 bsd_dom2_lat, bsd_dom2_pwd, bsd_dom2_pgs, bsd_dom2_rls;
-    s32 dummy0, dummy1, dummy2;
+    u32 dram_addr, cart_addr, rd_len, wr_len;
+    struct {
+        u32 dma_busy      : 1;
+        u32 io_busy       : 1;
+        u32 dma_error     : 1;
+        u32 dma_completed : 1;
+        u32               : 28;
+    } status;
+    u32 bsd_dom1_lat, bsd_dom1_pwd, bsd_dom1_pgs, bsd_dom1_rls;
+    u32 bsd_dom2_lat, bsd_dom2_pwd, bsd_dom2_pgs, bsd_dom2_rls;
+    u32 dummy0, dummy1, dummy2;
 } static pi;
 
 static size_t dma_len;
@@ -49,15 +59,10 @@ template<DmaType> static void InitDma(DmaType type);
 static void OnDmaFinish();
 constexpr std::string_view RegOffsetToStr(u32 reg_offset);
 
-void ClearStatusFlag(StatusFlag status_flag)
-{
-    pi.status &= ~std::to_underlying(status_flag);
-}
-
 template<DmaType type> void InitDma()
 {
-    SetStatusFlag(StatusFlag::DmaBusy);
-    ClearStatusFlag(StatusFlag::DmaCompleted);
+    pi.status.dma_busy = 1;
+    pi.status.dma_completed = 0;
 
     u8* rdram_ptr = rdram::GetPointerToMemory(pi.dram_addr);
     u8* cart_ptr = cart::GetPointerToRom(pi.cart_addr);
@@ -120,13 +125,24 @@ template<DmaType type> void InitDma()
 
 void Initialize()
 {
-    std::memset(&pi, 0, sizeof(pi));
+    latch = {};
+    pi = {};
+}
+
+std::optional<u32> IoBusy()
+{
+    // TODO: this is probably not how it works? Or will the read block if io_busy?
+    if (pi.status.io_busy) {
+        pi.status.io_busy = 0;
+        return latch;
+    }
+    return {};
 }
 
 void OnDmaFinish()
 {
-    SetStatusFlag(StatusFlag::DmaCompleted);
-    ClearStatusFlag(StatusFlag::DmaBusy);
+    pi.status.dma_busy = 0;
+    pi.status.dma_completed = 1;
     mi::RaiseInterrupt(mi::InterruptType::PI);
     pi.dram_addr = (pi.dram_addr + dma_len) & 0xFF'FFFF;
     pi.cart_addr = (pi.cart_addr + dma_len) & 0xFF'FFFF;
@@ -160,13 +176,26 @@ constexpr std::string_view RegOffsetToStr(u32 reg_offset)
     case BsdDom2Pwd: return "PI_BSDDOM2PWD";
     case BsdDom2Pgs: return "PI_BSDDOM2PGS";
     case BsdDom2Rls: return "PI_BSDDOM2RLS";
-    default: std::unreachable();
+    default: return "PI_UNKNOWN";
     }
 }
 
-void SetStatusFlag(StatusFlag status_flag)
+template<size_t size> void Write(u32 addr, s64 value, u8* dst)
 {
-    pi.status |= std::to_underlying(status_flag);
+    if (pi.status.io_busy) return;
+
+    if constexpr (size == 1) latch = u32(value << (16 + 8 * (addr & 1)));
+    if constexpr (size == 2) latch = u32(value << 16);
+    if constexpr (size == 4) latch = value;
+    if constexpr (size == 8) latch = u32(value >> 32);
+    addr &= ~1;
+    pi.status.io_busy = 1;
+    write_dst = dst;
+    scheduler::AddEvent(scheduler::EventType::PiWriteFinish, 50, [] { // TODO: how many cycles?
+        pi.status.io_busy = 0;
+        latch = std::byteswap(latch); // TODO: assuming only SRAM is the only effectful write and that it is in BE
+        if (write_dst) std::memcpy(write_dst, &latch, 4);
+    });
 }
 
 void WriteReg(u32 addr, u32 data)
@@ -197,13 +226,13 @@ void WriteReg(u32 addr, u32 data)
         static constexpr s32 clear_interrupt_mask = 0x02;
         if (data & reset_dma_mask) {
             /* Reset the DMA controller and stop any transfer being done */
-            pi.status = 0;
+            pi.status = {};
             mi::ClearInterrupt(mi::InterruptType::PI); /* TODO: correct? */
             scheduler::RemoveEvent(scheduler::EventType::PiDmaFinish);
         }
         if (data & clear_interrupt_mask) {
             /* Clear Interrupt */
-            ClearStatusFlag(StatusFlag::DmaCompleted);
+            pi.status.dma_completed = 0;
             mi::ClearInterrupt(mi::InterruptType::PI);
         }
     } break;
@@ -220,5 +249,10 @@ void WriteReg(u32 addr, u32 data)
     default: log_warn(std::format("Unexpected write made to PI register at address ${:08X}", addr));
     }
 }
+
+template void Write<1>(u32, s64, u8*);
+template void Write<2>(u32, s64, u8*);
+template void Write<4>(u32, s64, u8*);
+template void Write<8>(u32, s64, u8*);
 
 } // namespace n64::pi
