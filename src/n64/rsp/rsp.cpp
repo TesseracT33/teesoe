@@ -125,6 +125,11 @@ u64 Run(u64 rsp_cycles_to_run)
         while (p_cycle_counter < rsp_cycles_to_run) {
             Instr();
             if (sp.status.halted) {
+                if (jump_is_pending) { // note for future refactors: this makes rsp::op_break::BREAKWithinDelay pass
+                    pc = jump_addr;
+                    jump_is_pending = false;
+                    in_branch_delay_slot = false;
+                }
                 return p_cycle_counter <= rsp_cycles_to_run ? 0 : p_cycle_counter - rsp_cycles_to_run;
             }
         }

@@ -574,7 +574,7 @@ template<> void vch<Interpreter>(u32 vs, u32 vt, u32 vd, u32 e)
     vce = _mm_and_si128(vce, vco.lo);
     vco.hi = _mm_or_si128(diff0, vce);
     vco.hi = _mm_cmpeq_epi16(vco.hi, _mm_setzero_si128());
-    m128i mask = _mm_blendv_epi8(vco.hi, vcc.lo, vco.lo);
+    m128i mask = _mm_blendv_epi8(vcc.hi, vcc.lo, vco.lo);
     vpr[vd] = acc.low = _mm_blendv_epi8(vpr[vs], nvt, mask);
 }
 
