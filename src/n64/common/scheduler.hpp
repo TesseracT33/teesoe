@@ -10,6 +10,7 @@ using EventCallback = void (*)();
 enum class EventType {
     CountCompareMatch,
     PiDmaFinish,
+    PiWriteFinish,
     SiDmaFinish,
     SpDmaFinish,
     VINewHalfline
