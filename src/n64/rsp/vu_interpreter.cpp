@@ -300,7 +300,7 @@ template<> void lfv<Interpreter>(u32 base, u32 vt, u32 e, s32 offset)
         tmp[i + 4] = dmem[addr + (mem_offset + 4 * i + 8 & 15) & 0xFFF] << 7;
     }
     for (auto byte = e; byte < std::min(e + 8, 16u); ++byte) {
-        vpr_dst[byte] = reinterpret_cast<u8*>(tmp)[byte];
+        vpr_dst[byte ^ 1] = reinterpret_cast<u8*>(tmp)[byte ^ 1];
     }
 }
 
@@ -406,7 +406,7 @@ template<> void sfv<Interpreter>(u32 base, u32 vt, u32 e, s32 offset)
     addr &= ~7;
     auto store = [addr, mem_offset, vpr_src](std::array<u8, 4> elems) {
         for (int i = 0; i < 4; ++i) {
-            dmem[addr + (mem_offset + 4 * i & 15) & 0xFFF] = std::byteswap(vpr_src[elems[i]]) >> 7;
+            dmem[addr + (mem_offset + 4 * i & 15) & 0xFFF] = s16(vpr_src[elems[i]] >> 7);
         }
     };
     switch (e) {
@@ -558,28 +558,51 @@ template<> void vand<Interpreter>(u32 vs, u32 vt, u32 vd, u32 e)
 template<> void vch<Interpreter>(u32 vs, u32 vt, u32 vd, u32 e)
 {
     m128i vt_op = GetVTBroadcast(vt, e);
-    m128i neg_vt = _mm_neg_epi16(vt_op);
-    vco.lo = _mm_srai_epi16(_mm_xor_si128(vpr[vs], vt_op), 15);
-    m128i vt_abs = _mm_blendv_epi8(vt_op, neg_vt, vco.lo);
-    vce = _mm_and_si128(vco.lo, _mm_cmpeq_epi16(vpr[vs], _mm_sub_epi16(neg_vt, _mm_set1_epi16(1))));
-    vco.hi = _mm_not_si128(_mm_or_si128(vce, _mm_cmpeq_epi16(vpr[vs], vt_abs)));
-    vcc.lo = _mm_cmple_epi16(vpr[vs], neg_vt);
-    vcc.hi = _mm_cmpge_epi16(vpr[vs], vt_op);
-    m128i clip = _mm_blendv_epi8(vcc.hi, vcc.lo, vco.lo);
-    vpr[vd] = acc.low = _mm_blendv_epi8(vpr[vs], vt_abs, clip);
+    vco.lo = _mm_xor_si128(vpr[vs], vt_op);
+    vco.lo = _mm_cmplt_epi16(vco.lo, _mm_setzero_si128());
+    m128i nvt = _mm_xor_si128(vt_op, vco.lo);
+    nvt = _mm_sub_epi16(nvt, vco.lo);
+    m128i diff = _mm_sub_epi16(vpr[vs], nvt);
+    m128i diff0 = _mm_cmpeq_epi16(diff, _mm_setzero_si128());
+    m128i vtn = _mm_cmplt_epi16(vt_op, _mm_setzero_si128());
+    m128i dlez = _mm_cmpgt_epi16(diff, _mm_setzero_si128());
+    m128i dgez = _mm_or_si128(dlez, diff0);
+    dlez = _mm_cmpeq_epi16(_mm_setzero_si128(), dlez);
+    vcc.hi = _mm_blendv_epi8(dgez, vtn, vco.lo);
+    vcc.lo = _mm_blendv_epi8(vtn, dlez, vco.lo);
+    vce = _mm_cmpeq_epi16(diff, vco.lo);
+    vce = _mm_and_si128(vce, vco.lo);
+    vco.hi = _mm_or_si128(diff0, vce);
+    vco.hi = _mm_cmpeq_epi16(vco.hi, _mm_setzero_si128());
+    m128i mask = _mm_blendv_epi8(vco.hi, vcc.lo, vco.lo);
+    vpr[vd] = acc.low = _mm_blendv_epi8(vpr[vs], nvt, mask);
 }
 
 template<> void vcl<Interpreter>(u32 vs, u32 vt, u32 vd, u32 e)
 {
     m128i vt_op = GetVTBroadcast(vt, e);
-    vcc.hi = _mm_blendv_epi8(_mm_cmpge_epu16(vpr[vs], vt_op), vcc.hi, _mm_or_si128(vco.lo, vco.hi));
-    m128i neg_vt = _mm_neg_epi16(vt_op);
-    m128i le = _mm_cmple_epu16(vpr[vs], neg_vt);
-    m128i eq = _mm_cmpeq_epi16(vpr[vs], neg_vt);
-    vcc.lo = _mm_blendv_epi8(vcc.lo, _mm_blendv_epi8(eq, le, vce), _mm_andnot_si128(vco.hi, vco.lo));
-    m128i clip = _mm_blendv_epi8(vcc.hi, vcc.lo, vco.lo);
-    m128i vt_abs = _mm_blendv_epi8(vt_op, neg_vt, vco.lo);
-    vpr[vd] = acc.low = _mm_blendv_epi8(vpr[vs], vt_abs, clip);
+    m128i nvt = _mm_xor_si128(vt_op, vco.lo);
+    nvt = _mm_sub_epi16(nvt, vco.lo);
+    m128i diff = _mm_sub_epi16(vpr[vs], nvt);
+    m128i ncarry = _mm_adds_epu16(vpr[vs], vt_op);
+    ncarry = _mm_cmpeq_epi16(diff, ncarry);
+    m128i nvce = _mm_cmpeq_epi16(vce, _mm_setzero_si128());
+    m128i diff0 = _mm_cmpeq_epi16(diff, _mm_setzero_si128());
+    m128i lec1 = _mm_and_si128(diff0, ncarry);
+    lec1 = _mm_and_si128(nvce, lec1);
+    m128i lec2 = _mm_or_si128(diff0, ncarry);
+    lec2 = _mm_and_si128(vce, lec2);
+    m128i leeq = _mm_or_si128(lec1, lec2);
+    m128i geeq = _mm_subs_epu16(vt_op, vpr[vs]);
+    geeq = _mm_cmpeq_epi16(geeq, _mm_setzero_si128());
+    m128i le = _mm_andnot_si128(vco.hi, vco.lo);
+    le = _mm_blendv_epi8(vcc.lo, leeq, le);
+    m128i ge = _mm_or_si128(vco.lo, vco.hi);
+    ge = _mm_blendv_epi8(geeq, vcc.hi, ge);
+    m128i mask = _mm_blendv_epi8(ge, le, vco.lo);
+    vpr[vd] = acc.low = _mm_blendv_epi8(vpr[vs], nvt, mask);
+    vcc.hi = ge;
+    vcc.lo = le;
     vco.lo = vco.hi = vce = _mm_setzero_si128();
 }
 
