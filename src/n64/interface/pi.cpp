@@ -184,8 +184,8 @@ template<size_t size> void Write(u32 addr, s64 value, u8* dst)
 {
     if (pi.status.io_busy) return;
 
-    if constexpr (size == 1) latch = u32(value << (16 + 8 * (addr & 1)));
-    if constexpr (size == 2) latch = u32(value << 16);
+    if constexpr (size == 1) latch = u32(value << 8 * (3 - (addr & 3)));
+    if constexpr (size == 2) latch = u32(value << 8 * (2 - (addr & 2)));
     if constexpr (size == 4) latch = value;
     if constexpr (size == 8) latch = u32(value >> 32);
     addr &= ~1;
