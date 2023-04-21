@@ -23,12 +23,12 @@ struct TlbEntry {
 
     Cop0Registers::EntryLo entry_lo[2];
     Cop0Registers::EntryHi entry_hi;
-    u32 page_mask; /* Determines the virtual page size of the corresponding entry. */
-
     u64 vpn2_addr_mask; /* Used to extract the VPN2 from a virtual address, given page_mask. */
     u64 vpn2_compare; /* entry_hi.vpn2, but shifted left according to page_mask. */
+    u32 page_mask;
     u32 offset_addr_mask; /* Used to extract the offset from a virtual address, given page_mask, i.e., the bits lower
-                             than those part of the VPN. */
+                         than those part of the VPN. */
+    bool global;
 };
 
 static std::array<TlbEntry, 32> tlb_entries;
@@ -45,21 +45,23 @@ void TlbEntry::Read() const
 {
     cop0.entry_lo[0] = entry_lo[0];
     cop0.entry_lo[1] = entry_lo[1];
-    cop0.entry_lo[0].g = cop0.entry_lo[1].g = entry_hi.g;
-    cop0.entry_hi = std::bit_cast<Cop0Registers::EntryHi>(std::bit_cast<u64>(entry_hi) & ~u64(page_mask));
+    cop0.entry_lo[0].g = cop0.entry_lo[1].g = global;
+    // cop0.entry_hi = std::bit_cast<Cop0Registers::EntryHi>(std::bit_cast<u64>(entry_hi) & ~u64(page_mask));
+    cop0.entry_hi = entry_hi;
     cop0.page_mask = page_mask;
 }
 
 void TlbEntry::Write()
 {
-    entry_lo[0] = cop0.entry_lo[0];
-    entry_lo[1] = cop0.entry_lo[1];
-    entry_hi = std::bit_cast<Cop0Registers::EntryHi>(std::bit_cast<u64>(cop0.entry_hi) & ~u64(cop0.page_mask));
-    page_mask = cop0.page_mask;
     // Each pair of bits in PageMask should be either 00 or 11
-    page_mask = page_mask & 0xAAA << 13;
+    page_mask = cop0.page_mask & 0xAAA << 13;
     page_mask |= page_mask >> 1;
-    entry_hi.g = cop0.entry_lo[0].g & cop0.entry_lo[1].g;
+    for (int i = 0; i < 2; ++i) {
+        entry_lo[i] = cop0.entry_lo[i];
+        entry_lo[i].pfn &= 0xFFFFF;
+    }
+    entry_hi = std::bit_cast<Cop0Registers::EntryHi>(std::bit_cast<u64>(cop0.entry_hi) & ~u64(page_mask));
+    global = cop0.entry_lo[0].g & cop0.entry_lo[1].g;
     // Compute things that speed up virtual-to-physical-address translation
     vpn2_addr_mask = 0xFF'FFFF'E000 & ~u64(page_mask);
     vpn2_compare = std::bit_cast<u64>(entry_hi) & vpn2_addr_mask;
@@ -81,8 +83,8 @@ void InitializeMMU()
 {
     for (TlbEntry& entry : tlb_entries) {
         entry.entry_hi.asid = 0xFF;
-        entry.entry_hi.g = 1;
         entry.entry_hi.vpn2 = 0x07FF'FFFF;
+        entry.global = 1;
         /* TODO: vpn2_addr_mask, vpn2_compare, offset_addr_mask? */
     }
 }
@@ -323,7 +325,7 @@ template<MemOp mem_op> u32 VirtualToPhysicalAddressTlb(u64 vaddr)
         if ((vaddr & entry.vpn2_addr_mask) != entry.vpn2_compare) continue;
         /* If the global bit is clear, the entry's ASID (Address space ID field) must coincide with the one in the
          * EntryHi register. */
-        if (!entry.entry_hi.g && entry.entry_hi.asid != cop0.entry_hi.asid) continue;
+        if (!entry.global && entry.entry_hi.asid != cop0.entry_hi.asid) continue;
         /* Bits 62-63 of vaddr must match the entry's region */ /* TODO: also checked in 32-bit mode? */
         if (vaddr >> 62 != entry.entry_hi.r) continue;
         /* The VPN maps to two (consecutive) pages; EntryLo0 for even virtual pages and EntryLo1 for odd virtual pages.
@@ -407,7 +409,7 @@ void tlbp()
         u64 vpn2_mask = 0xFF'FFFF'E000 & ~u64(entry.page_mask);
         if ((std::bit_cast<u64>(entry.entry_hi) & vpn2_mask) != (std::bit_cast<u64>(cop0.entry_hi) & vpn2_mask))
             return false;
-        if (!entry.entry_hi.g && entry.entry_hi.asid != cop0.entry_hi.asid) return false;
+        if (!entry.global && entry.entry_hi.asid != cop0.entry_hi.asid) return false;
         if (entry.entry_hi.r != cop0.entry_hi.r) return false;
         return true;
     });

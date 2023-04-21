@@ -129,8 +129,7 @@ struct Cop0Registers {
     struct EntryHi { /* (10) */
         u64 asid : 8; /* Address space ID field. Lets multiple processes share the TLB; virtual addresses for each
                          process can be shared. */
-        u64      : 4;
-        u64 g    : 1;
+        u64      : 5;
         u64 vpn2 : 27; /* Virtual page number divided by two (maps to two pages). */
         u64      : 22;
         u64 r : 2; /* Region (00 => user; 01 => supervisor; 11 => kernel) used to match virtual address bits 63..62. */
