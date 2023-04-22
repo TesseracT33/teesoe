@@ -39,10 +39,6 @@ template<bool vmulf> static void vmulfu(u32 vs, u32 vt, u32 vd, u32 e);
 
 void AddToAcc(m128i low)
 {
-    /* for i in 0..7
-            accumulator<i>(47..0) += low<i>
-        endfor
-    */
     m128i prev_acc_low = acc.low;
     acc.low = _mm_add_epi16(acc.low, low);
     m128i low_carry = _mm_cmplt_epu16(acc.low, prev_acc_low);
@@ -53,10 +49,6 @@ void AddToAcc(m128i low)
 
 void AddToAcc(m128i low, m128i mid)
 {
-    /* for i in 0..7
-            accumulator<i>(47..0) += mid<i> << 16 | low<i>
-       endfor
-    */
     AddToAcc(low);
     m128i prev_acc_mid = acc.mid;
     acc.mid = _mm_add_epi16(acc.mid, mid);
@@ -66,10 +58,6 @@ void AddToAcc(m128i low, m128i mid)
 
 void AddToAcc(m128i low, m128i mid, m128i high)
 {
-    /* for i in 0..7
-            accumulator<i>(47..0) += high<i> << 32 | mid<i> << 16 | low<i>
-       endfor
-    */
     AddToAcc(low, mid);
     acc.high = _mm_add_epi16(acc.high, high);
 }
@@ -102,10 +90,6 @@ void AddToAccCond(m128i low, m128i mid, m128i high, m128i cond)
 
 void AddToAccFromMid(m128i mid, m128i high)
 {
-    /* for i in 0..7
-            accumulator<i>(47..0) += high<i> << 32 | mid<i> << 16
-       endfor
-    */
     m128i prev_acc_mid = acc.mid;
     acc.mid = _mm_add_epi16(acc.mid, mid);
     m128i mid_carry = _mm_cmplt_epu16(acc.mid, prev_acc_mid);
@@ -404,20 +388,28 @@ template<> void sfv<Interpreter>(u32 base, u32 vt, u32 e, s32 offset)
     auto addr = gpr[base] + offset * 16;
     auto mem_offset = addr & 7;
     addr &= ~7;
-    auto store = [addr, mem_offset, vpr_src](std::array<u8, 4> elems) {
+    auto store = [addr, mem_offset, vpr_src](std::array<u8, 4> values) {
         for (int i = 0; i < 4; ++i) {
-            dmem[addr + (mem_offset + 4 * i & 15) & 0xFFF] = s16(vpr_src[elems[i]] >> 7);
+            dmem[addr + (mem_offset + 4 * i & 15) & 0xFFF] = values[i];
         }
+    };
+    auto store_elems = [vpr_src, store](std::array<u8, 4> elems) {
+        store({
+          u8(vpr_src[elems[0]] >> 7),
+          u8(vpr_src[elems[1]] >> 7),
+          u8(vpr_src[elems[2]] >> 7),
+          u8(vpr_src[elems[3]] >> 7),
+        });
     };
     switch (e) {
     case 0:
-    case 15: store({ 0, 1, 2, 3 }); break;
-    case 1: store({ 6, 7, 4, 5 }); break;
-    case 4: store({ 1, 2, 3, 0 }); break;
-    case 5: store({ 7, 4, 5, 6 }); break;
-    case 8: store({ 4, 5, 6, 7 }); break;
-    case 11: store({ 3, 0, 1, 2 }); break;
-    case 12: store({ 5, 6, 7, 4 }); break;
+    case 15: store_elems({ 0, 1, 2, 3 }); break;
+    case 1: store_elems({ 6, 7, 4, 5 }); break;
+    case 4: store_elems({ 1, 2, 3, 0 }); break;
+    case 5: store_elems({ 7, 4, 5, 6 }); break;
+    case 8: store_elems({ 4, 5, 6, 7 }); break;
+    case 11: store_elems({ 3, 0, 1, 2 }); break;
+    case 12: store_elems({ 5, 6, 7, 4 }); break;
     default: store({ 0, 0, 0, 0 }); break;
     }
 }
