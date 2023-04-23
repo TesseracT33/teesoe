@@ -29,10 +29,11 @@ template<size_t access_size> void WriteMemoryCpu(u32 addr, s64 data);
 inline bool in_branch_delay_slot;
 inline bool jump_is_pending;
 inline bool ll_bit;
-inline uint pc;
+inline u32 pc;
 inline uint p_cycle_counter;
 inline uint instructions_until_jump;
-inline uint jump_addr;
+inline u32 jump_addr;
+inline s32 lo_dummy, hi_dummy;
 
 inline ::mips::Gpr<s32> gpr;
 

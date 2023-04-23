@@ -21,6 +21,138 @@ constexpr std::array right_load_mask = {
     0ull,
 };
 
+void Interpreter::beq(u32 rs, u32 rt, s16 imm) const
+{
+    if (gpr[rs] == gpr[rt]) {
+        Jump(pc + (imm << 2));
+    }
+}
+
+void Interpreter::beql(u32 rs, u32 rt, s16 imm) const
+{
+    if (gpr[rs] == gpr[rt]) {
+        Jump(pc + (imm << 2));
+    } else {
+        pc += 4;
+    }
+}
+
+void Interpreter::bgez(u32 rs, s16 imm) const
+{
+    if (gpr[rs] >= 0) {
+        Jump(pc + (imm << 2));
+    }
+}
+
+void Interpreter::bgezal(u32 rs, s16 imm) const
+{
+    if (gpr[rs] >= 0) {
+        Jump(pc + (imm << 2));
+    }
+    Link(31);
+}
+
+void Interpreter::bgezall(u32 rs, s16 imm) const
+{
+    if (gpr[rs] >= 0) {
+        Jump(pc + (imm << 2));
+    } else {
+        pc += 4;
+    }
+    Link(31);
+}
+
+void Interpreter::bgezl(u32 rs, s16 imm) const
+{
+    if (gpr[rs] >= 0) {
+        Jump(pc + (imm << 2));
+    } else {
+        pc += 4;
+    }
+}
+
+void Interpreter::bgtz(u32 rs, s16 imm) const
+{
+    if (gpr[rs] > 0) {
+        Jump(pc + (imm << 2));
+    }
+}
+
+void Interpreter::bgtzl(u32 rs, s16 imm) const
+{
+    if (gpr[rs] > 0) {
+        Jump(pc + (imm << 2));
+    } else {
+        pc += 4;
+    }
+}
+
+void Interpreter::blez(u32 rs, s16 imm) const
+{
+    if (gpr[rs] <= 0) {
+        Jump(pc + (imm << 2));
+    }
+}
+
+void Interpreter::blezl(u32 rs, s16 imm) const
+{
+    if (gpr[rs] <= 0) {
+        Jump(pc + (imm << 2));
+    } else {
+        pc += 4;
+    }
+}
+
+void Interpreter::bltz(u32 rs, s16 imm) const
+{
+    if (gpr[rs] < 0) {
+        Jump(pc + (imm << 2));
+    }
+}
+
+void Interpreter::bltzal(u32 rs, s16 imm) const
+{
+    if (gpr[rs] < 0) {
+        Jump(pc + (imm << 2));
+    }
+    Link(31);
+}
+
+void Interpreter::bltzall(u32 rs, s16 imm) const
+{
+    if (gpr[rs] < 0) {
+        Jump(pc + (imm << 2));
+    } else {
+        pc += 4;
+    }
+    Link(31);
+}
+
+void Interpreter::bltzl(u32 rs, s16 imm) const
+{
+    if (gpr[rs] < 0) {
+        Jump(pc + (imm << 2));
+    } else {
+        pc += 4;
+    }
+}
+
+void Interpreter::bne(u32 rs, u32 rt, s16 imm) const
+{
+    if (gpr[rs] != gpr[rt]) {
+        Jump(pc + (imm << 2));
+    }
+}
+
+void Interpreter::bnel(u32 rs, u32 rt, s16 imm) const
+{
+    if (gpr[rs] != gpr[rt]) {
+        Jump(pc + (imm << 2));
+    } else {
+        pc += 4;
+    }
+}
+
 void Interpreter::break_() const
 {
     SignalException<Exception::Breakpoint>();
@@ -31,14 +163,14 @@ void Interpreter::ddiv(u32 rs, u32 rt) const
     s64 op1 = gpr[rs];
     s64 op2 = gpr[rt];
     if (op2 == 0) { /* Peter Lemon N64 CPUTest>CPU>DDIV */
-        lo_reg = op1 >= 0 ? -1 : 1;
-        hi_reg = op1;
+        lo = op1 >= 0 ? -1 : 1;
+        hi = op1;
     } else if (op1 == std::numeric_limits<s64>::min() && op2 == -1) {
-        lo_reg = op1;
-        hi_reg = 0;
+        lo = op1;
+        hi = 0;
     } else {
-        lo_reg = op1 / op2;
-        hi_reg = op1 % op2;
+        lo = op1 / op2;
+        hi = op1 % op2;
     }
 }
 
@@ -47,11 +179,40 @@ void Interpreter::ddivu(u32 rs, u32 rt) const
     u64 op1 = u64(gpr[rs]);
     u64 op2 = u64(gpr[rt]);
     if (op2 == 0) {
-        lo_reg = -1;
-        hi_reg = op1;
+        lo = -1;
+        hi = op1;
     } else {
-        lo_reg = op1 / op2;
-        hi_reg = op1 % op2;
+        lo = op1 / op2;
+        hi = op1 % op2;
+    }
+}
+
+void Interpreter::div(u32 rs, u32 rt) const
+{
+    s32 op1 = s32(gpr[rs]);
+    s32 op2 = s32(gpr[rt]);
+    if (op2 == 0) {
+        lo = op1 >= 0 ? -1 : 1;
+        hi = op1;
+    } else if (op1 == std::numeric_limits<s32>::min() && op2 == -1) {
+        lo = std::numeric_limits<s32>::min();
+        hi = 0;
+    } else [[likely]] {
+        lo = op1 / op2;
+        hi = op1 % op2;
+    }
+}
+
+void Interpreter::divu(u32 rs, u32 rt) const
+{
+    u32 op1 = u32(gpr[rs]);
+    u32 op2 = u32(gpr[rt]);
+    if (op2 == 0) {
+        lo = -1;
+        hi = s32(op1);
+    } else {
+        lo = s32(op1 / op2);
+        hi = s32(op1 % op2);
     }
 }
 
@@ -59,13 +220,10 @@ void Interpreter::dmult(u32 rs, u32 rt) const
 {
 #if INT128_AVAILABLE
     s128 prod = s128(gpr[rs]) * s128(gpr[rt]);
-    lo_reg = prod & s64(-1);
-    hi_reg = prod >> 64;
+    lo = prod & s64(-1);
+    hi = prod >> 64;
 #elif defined _MSC_VER
-    s64 hi;
-    s64 lo = _mul128(gpr[rs], gpr[rt], &hi);
-    lo_reg = lo;
-    hi_reg = hi;
+    lo = _mul128(gpr[rs], gpr[rt], &hi);
 #else
 #error DMULT unimplemented on targets where INT128 or MSVC _mul128 is unavailable
 #endif
@@ -75,16 +233,44 @@ void Interpreter::dmultu(u32 rs, u32 rt) const
 {
 #if INT128_AVAILABLE
     u128 prod = u128(gpr[rs]) * u128(gpr[rt]);
-    lo_reg = prod & u64(-1);
-    hi_reg = prod >> 64;
+    lo = prod & u64(-1);
+    hi = prod >> 64;
 #elif defined _MSC_VER
-    u64 hi;
-    u64 lo = _umul128(gpr[rs], gpr[rt], &hi);
-    lo_reg = lo;
-    hi_reg = hi;
+    lo = _umul128(gpr[rs], gpr[rt], reinterpret_cast<u64*>(&hi));
 #else
 #error DMULTU unimplemented on targets where UINT128 or MSVC _umul128 is unavailable
 #endif
+}
+
+void Interpreter::j(u32 instr) const
+{
+    if (!in_branch_delay_slot) {
+        jump(pc & 0xFFFF'FFFF'F000'0000 | instr << 2 & 0xFFF'FFFF);
+    }
+}
+
+void Interpreter::jal(u32 instr) const
+{
+    Link(31);
+    if (!in_branch_delay_slot) {
+        jump(pc & 0xFFFF'FFFF'F000'0000 | instr << 2 & 0xFFF'FFFF);
+    }
+}
+
+void Interpreter::jalr(u32 rs, u32 rd) const
+{
+    s64 target = gpr[rs];
+    Link(rd);
+    if (!in_branch_delay_slot) {
+        jump(target);
+    }
+}
+
+void Interpreter::jr(u32 rs) const
+{
+    if (!in_branch_delay_slot) {
+        jump(gpr[rs]);
+    }
 }
 
 void Interpreter::lb(u32 rs, u32 rt, s16 imm) const
@@ -209,6 +395,20 @@ void Interpreter::lwu(u32 rs, u32 rt, s16 imm) const
     if (!exception_occurred) {
         gpr.set(rt, val);
     }
+}
+
+void Interpreter::mult(u32 rs, u32 rt) const
+{
+    s64 prod = s64(s32(gpr[rs])) * s64(s32(gpr[rt]));
+    lo = s32(prod);
+    hi = prod >> 32;
+}
+
+void Interpreter::multu(u32 rs, u32 rt) const
+{
+    u64 prod = u64(u32(gpr[rs])) * u64(u32(gpr[rt]));
+    lo = s32(prod);
+    hi = s32(prod >> 32);
 }
 
 void Interpreter::sb(u32 rs, u32 rt, s16 imm) const

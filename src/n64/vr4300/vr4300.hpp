@@ -49,7 +49,7 @@ inline bool last_instr_was_load = false;
 inline uint instructions_until_jump = 0;
 inline u64 jump_addr;
 inline u64 pc;
-inline u64 hi_reg, lo_reg; /* Contain the result of a double-word multiplication or division. */
+inline s64 lo, hi; /* Contain the result of a double-word multiplication or division. */
 inline u64 p_cycle_counter;
 inline ::mips::Gpr<s64> gpr;
 

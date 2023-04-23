@@ -8,8 +8,8 @@
 
 namespace n64::rsp {
 
-struct Recompiler : public mips::Recompiler<s32, u32, u32> {
-    using mips::Recompiler<s32, u32, u32>::Recompiler;
+struct Recompiler : public mips::Recompiler<s32, s32, u32> {
+    using mips::Recompiler<s32, s32, u32>::Recompiler;
 
     void add(u32 rs, u32 rt, u32 rd) const;
     void addi(u32 rs, u32 rt, s16 imm) const;
@@ -35,12 +35,10 @@ protected:
 } inline constexpr cpu_recompiler{
     jit,
     gpr,
-    pc, // LO dummy
-    pc, // HI dummy
+    lo_dummy,
+    hi_dummy,
     pc,
-    in_branch_delay_slot,
     Jump,
-    Link,
 };
 
 } // namespace n64::rsp

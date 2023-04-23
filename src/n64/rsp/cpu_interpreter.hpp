@@ -8,8 +8,8 @@
 
 namespace n64::rsp {
 
-struct Interpreter : public mips::Interpreter<s32, u32, u32> {
-    using mips::Interpreter<s32, u32, u32>::Interpreter;
+struct Interpreter : public mips::Interpreter<s32, s32, u32> {
+    using mips::Interpreter<s32, s32, u32>::Interpreter;
 
     void add(u32 rs, u32 rt, u32 rd) const;
     void addi(u32 rs, u32 rt, s16 imm) const;
@@ -30,12 +30,10 @@ struct Interpreter : public mips::Interpreter<s32, u32, u32> {
     void sw(u32 rs, u32 rt, s16 imm) const;
 } inline constexpr cpu_interpreter{
     gpr,
-    pc, // LO dummy
-    pc, // HI dummy
+    lo_dummy,
+    hi_dummy,
     pc,
-    in_branch_delay_slot,
     Jump,
-    Link,
 };
 
 } // namespace n64::rsp

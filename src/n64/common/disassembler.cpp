@@ -29,9 +29,10 @@
 #define FT      (instr >> 16 & 31)
 #define VT      (instr >> 16 & 31)
 #define ELEM_HI (instr >> 21 & 15)
-#define VT_E    (vt_e_bug(instr >> 21 & 15, VD_E))
-#define RS      (instr >> 21 & 31)
-#define BASE    (instr >> 21 & 31)
+// #define VT_E    (vt_e_bug(instr >> 21 & 15, VD_E))
+#define VT_E (instr >> 21 & 15)
+#define RS   (instr >> 21 & 31)
+#define BASE (instr >> 21 & 31)
 
 #define COP1_FMT(instr_name, ...)                                                                              \
     switch (instr >> 21 & 31) {                                                                                \

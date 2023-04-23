@@ -9,10 +9,9 @@
 
 namespace mips {
 
-template<typename GprInt, typename LoHiInt, std::integral PcInt, typename GprBaseInt = GprInt>
-struct Recompiler : public Cpu<GprInt, LoHiInt, PcInt, GprBaseInt> {
+template<std::signed_integral GprInt, std::signed_integral LoHiInt, std::integral PcInt>
+struct Recompiler : public Cpu<GprInt, LoHiInt, PcInt> {
     using ExceptionHandler = void (*)();
-    using LinkHandler = void (*)(u32 reg);
     template<std::integral Int> using JumpHandler = void (*)(PcInt target);
 
     consteval Recompiler(Jit& jit,
@@ -20,36 +19,24 @@ struct Recompiler : public Cpu<GprInt, LoHiInt, PcInt, GprBaseInt> {
       LoHiInt& lo,
       LoHiInt& hi,
       PcInt& pc,
-      bool& in_branch_delay_slot,
       JumpHandler<PcInt> jump_handler,
-      LinkHandler link_handler,
       ExceptionHandler integer_overflow_exception = nullptr,
       ExceptionHandler trap_exception = nullptr)
       : jit(jit),
         c(jit.compiler),
-        Cpu<GprInt, LoHiInt, PcInt, GprBaseInt>(gpr,
-          lo,
-          hi,
-          pc,
-          in_branch_delay_slot,
-          jump_handler,
-          link_handler,
-          integer_overflow_exception,
-          trap_exception)
+        Cpu<GprInt, LoHiInt, PcInt>(gpr, lo, hi, pc, jump_handler, integer_overflow_exception, trap_exception)
     {
     }
 
-    using Cpu<GprInt, LoHiInt, PcInt, GprBaseInt>::gpr;
-    using Cpu<GprInt, LoHiInt, PcInt, GprBaseInt>::lo;
-    using Cpu<GprInt, LoHiInt, PcInt, GprBaseInt>::hi;
-    using Cpu<GprInt, LoHiInt, PcInt, GprBaseInt>::pc;
-    using Cpu<GprInt, LoHiInt, PcInt, GprBaseInt>::in_branch_delay_slot;
-    using Cpu<GprInt, LoHiInt, PcInt, GprBaseInt>::jump;
-    using Cpu<GprInt, LoHiInt, PcInt, GprBaseInt>::link;
-    using Cpu<GprInt, LoHiInt, PcInt, GprBaseInt>::integer_overflow_exception;
-    using Cpu<GprInt, LoHiInt, PcInt, GprBaseInt>::trap_exception;
-    using Cpu<GprInt, LoHiInt, PcInt, GprBaseInt>::mips32;
-    using Cpu<GprInt, LoHiInt, PcInt, GprBaseInt>::mips64;
+    using Cpu<GprInt, LoHiInt, PcInt>::gpr;
+    using Cpu<GprInt, LoHiInt, PcInt>::lo;
+    using Cpu<GprInt, LoHiInt, PcInt>::hi;
+    using Cpu<GprInt, LoHiInt, PcInt>::pc;
+    using Cpu<GprInt, LoHiInt, PcInt>::jump;
+    using Cpu<GprInt, LoHiInt, PcInt>::integer_overflow_exception;
+    using Cpu<GprInt, LoHiInt, PcInt>::trap_exception;
+    using Cpu<GprInt, LoHiInt, PcInt>::mips32;
+    using Cpu<GprInt, LoHiInt, PcInt>::mips64;
 
     Jit& jit;
     asmjit::x86::Compiler& c;
@@ -214,55 +201,6 @@ struct Recompiler : public Cpu<GprInt, LoHiInt, PcInt, GprBaseInt> {
         set_gpr(rd, v0);
     }
 
-    void div(u32 rs, u32 rt) const
-    {
-        asmjit::Label l_div = c.newLabel(), l_divzero = c.newLabel(), l_end = c.newLabel();
-        c.mov(asmjit::x86::eax, gpr_ptr32(rs));
-        c.mov(asmjit::x86::ecx, gpr_ptr32(rt));
-        c.test(asmjit::x86::ecx, asmjit::x86::ecx);
-        c.je(l_divzero);
-        c.mov(asmjit::x86::r8d, asmjit::x86::eax);
-        c.mov(asmjit::x86::r9d, asmjit::x86::ecx);
-        c.add(asmjit::x86::r8d, s32(0x8000'0000));
-        c.not_(asmjit::x86::r9d);
-        c.or_(asmjit::x86::r8d, asmjit::x86::r9d);
-        c.jne(l_div);
-        c.mov(lo_ptr(), s32(0x8000'0000));
-        c.mov(hi_ptr(), 0);
-        c.jmp(l_end);
-        c.bind(l_divzero);
-        set_hi32(asmjit::x86::eax);
-        c.not_(asmjit::x86::eax);
-        c.sar(asmjit::x86::eax, 31);
-        c.or_(asmjit::x86::eax, 1);
-        set_lo32(asmjit::x86::eax);
-        c.jmp(l_end);
-        c.bind(l_div);
-        c.xor_(asmjit::x86::edx, asmjit::x86::edx);
-        c.idiv(asmjit::x86::eax, asmjit::x86::ecx);
-        set_lo32(asmjit::x86::eax);
-        set_hi32(asmjit::x86::edx);
-        c.bind(l_end);
-    }
-
-    void divu(u32 rs, u32 rt) const
-    {
-        asmjit::Label l_div = c.newLabel(), l_end = c.newLabel();
-        c.mov(asmjit::x86::eax, gpr_ptr32(rs));
-        c.mov(asmjit::x86::ecx, gpr_ptr32(rt));
-        c.test(asmjit::x86::ecx, asmjit::x86::ecx);
-        c.jne(l_div);
-        c.mov(lo_ptr(), -1);
-        set_hi32(asmjit::x86::eax);
-        c.jmp(l_end);
-        c.bind(l_div);
-        c.xor_(asmjit::x86::edx, asmjit::x86::edx);
-        c.div(asmjit::x86::eax, asmjit::x86::ecx);
-        set_lo32(asmjit::x86::eax);
-        set_hi32(asmjit::x86::edx);
-        c.bind(l_end);
-    }
-
     void dsll(u32 rt, u32 rd, u32 sa) const
     {
         if (!rd) return;
@@ -367,53 +305,39 @@ struct Recompiler : public Cpu<GprInt, LoHiInt, PcInt, GprBaseInt> {
 
     void j(u32 instr) const
     {
-        asmjit::Label l_nojump = c.newLabel();
-        c.cmp(ptr(in_branch_delay_slot), 0);
-        c.jne(l_nojump);
-        c.mov(r[0], pc_ptr());
-        c.and_(r[0], s32(0xF000'0000));
-        c.or_(r[0], instr << 2 & 0xFFF'FFFF);
+        c.mov(gp[0], pc_ptr());
+        c.and_(gp[0], s32(0xF000'0000));
+        c.or_(gp[0], instr << 2 & 0xFFF'FFFF);
         call(c, jump);
-        c.bind(l_nojump);
         jit.branch_hit = 1;
     }
 
     void jal(u32 instr) const
     {
-        asmjit::Label l_nojump = c.newLabel();
-        c.cmp(ptr(in_branch_delay_slot), 0);
-        c.jne(l_nojump);
-        c.mov(r[0], pc_ptr());
-        c.and_(r[0], s32(0xF000'0000));
-        c.or_(r[0], instr << 2 & 0xFFF'FFFF);
+        c.mov(gp[0], pc_ptr());
+        c.and_(gp[0], s32(0xF000'0000));
+        c.or_(gp[0], instr << 2 & 0xFFF'FFFF);
         call(c, jump);
-        c.bind(l_nojump);
-        c.mov(r[0].r32(), 31);
-        call(c, link);
+        c.mov(gp[0], pc_ptr());
+        c.add(gp[0], 4);
+        c.mov(gpr_ptr(31), gp[0]);
         jit.branch_hit = 1;
     }
 
     void jalr(u32 rs, u32 rd) const
     {
-        asmjit::Label l_nojump = c.newLabel();
-        c.cmp(ptr(in_branch_delay_slot), 0);
-        c.jne(l_nojump);
-        c.mov(r[0], gpr_ptr(rs));
+        c.mov(gp[0], gpr_ptr(rs));
         call(c, jump);
-        c.bind(l_nojump);
-        c.mov(r[0].r32(), rd);
-        call(c, link);
+        c.mov(gp[0], pc_ptr());
+        c.add(gp[0], 4);
+        c.mov(gpr_ptr(rd), gp[0]);
         jit.branch_hit = 1;
     }
 
     void jr(u32 rs) const
     {
-        asmjit::Label l_nojump = c.newLabel();
-        c.cmp(ptr(in_branch_delay_slot), 0);
-        c.jne(l_nojump);
-        c.mov(r[0], gpr_ptr(rs));
+        c.mov(gp[0], gpr_ptr(rs));
         call(c, jump);
-        c.bind(l_nojump);
         jit.branch_hit = 1;
     }
 
@@ -426,15 +350,15 @@ struct Recompiler : public Cpu<GprInt, LoHiInt, PcInt, GprBaseInt> {
     void mfhi(u32 rd) const
     {
         if (!rd) return;
-        c.mov(r[0], hi_ptr());
-        set_gpr(rd, r[0]);
+        c.mov(gp[0], hi_ptr());
+        set_gpr(rd, gp[0]);
     }
 
     void mflo(u32 rd) const
     {
         if (!rd) return;
-        c.mov(r[0], lo_ptr());
-        set_gpr(rd, r[0]);
+        c.mov(gp[0], lo_ptr());
+        set_gpr(rd, gp[0]);
     }
 
     void movn(u32 rs, u32 rt, u32 rd) const
@@ -478,10 +402,6 @@ struct Recompiler : public Cpu<GprInt, LoHiInt, PcInt, GprBaseInt> {
             c.mov(lo_ptr(), 0);
         }
     }
-
-    void mult(u32 rs, u32 rt) const { multiply<false>(rs, rt); }
-
-    void multu(u32 rs, u32 rt) const { multiply<true>(rs, rt); }
 
     void nor(u32 rs, u32 rt, u32 rd) const
     {
@@ -678,31 +598,9 @@ protected:
         Ne
     };
 
-    static constexpr std::array r = {
-#ifdef _WIN32
-        asmjit::x86::rcx,
-        asmjit::x86::rdx,
-        asmjit::x86::r8,
-        asmjit::x86::r9,
-        asmjit::x86::r10,
-        asmjit::x86::r11,
-        asmjit::x86::rax,
-#else
-        asmjit::x86::rdi,
-        asmjit::x86::rsi,
-        asmjit::x86::rdx,
-        asmjit::x86::rcx,
-        asmjit::x86::r8,
-        asmjit::x86::r9,
-        asmjit::x86::r10,
-        asmjit::x86::r11,
-        asmjit::x86::rax,
-#endif
-    };
-
     asmjit::x86::Mem gpr_ptr(u32 idx) const
     {
-        return asmjit::x86::ptr(std::bit_cast<u64>(gpr.ptr(idx)), sizeof(GprBaseInt));
+        return asmjit::x86::ptr(std::bit_cast<u64>(gpr.ptr(idx)), sizeof(GprInt));
     }
 
     asmjit::x86::Mem gpr_ptr32(u32 idx) const { return asmjit::x86::ptr(std::bit_cast<u64>(gpr.ptr(idx)), 4); }
@@ -808,16 +706,18 @@ protected:
 
     template<Cond cc> void branch_and_link(u32 rs, s16 imm) const
     {
-        c.mov(r[0].r32(), 31);
-        call(c, link);
         branch<cc>(rs, imm);
+        c.mov(gp[0], pc_ptr());
+        c.add(gp[0], 4);
+        c.mov(gpr_ptr(31), gp[0]);
     }
 
     template<Cond cc> void branch_and_link_likely(u32 rs, s16 imm) const
     {
-        c.mov(r[0].r32(), 31);
-        call(c, link);
         branch_likely<cc>(rs, imm);
+        c.mov(gp[0], pc_ptr());
+        c.add(gp[0], 4);
+        c.mov(gpr_ptr(31), gp[0]);
     }
 
     void set_lo32(asmjit::x86::Gpd v) const
@@ -846,16 +746,6 @@ protected:
             }
             c.mov(hi_ptr(), v.r64());
         }
-    }
-
-    template<bool unsig> void multiply(u32 rs, u32 rt) const
-    {
-        asmjit::x86::Gp v = get_gpr32(rt);
-        c.mov(asmjit::x86::eax, gpr_ptr32(rs));
-        if constexpr (unsig) c.mul(asmjit::x86::eax, v);
-        else c.imul(asmjit::x86::eax, v);
-        set_lo32(asmjit::x86::eax);
-        set_hi32(asmjit::x86::edx);
     }
 
     template<Cond cc> void trap(u32 rs, u32 rt) const
