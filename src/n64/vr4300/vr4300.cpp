@@ -18,6 +18,13 @@
 
 namespace n64::vr4300 {
 
+enum class BranchState {
+    DelaySlotNotTaken,
+    DelaySlotTaken,
+    NoBranch,
+    Perform,
+} static branch_state{ BranchState::NoBranch };
+
 static bool interrupt;
 
 static void InitializeRegisters();
@@ -51,6 +58,13 @@ void CheckInterrupts()
 void ClearInterruptPending(ExternalInterruptSource interrupt)
 {
     cop0.cause.ip &= ~std::to_underlying(interrupt);
+}
+
+void DiscardBranch()
+{
+    pc += 4;
+    in_branch_delay_slot_taken = in_branch_delay_slot_not_taken = false;
+    branch_state = BranchState::NoBranch;
 }
 
 u64 GetElapsedCycles()
@@ -110,10 +124,10 @@ void JitInstructionEpilogueFirstBlockInstruction()
     Compiler& c = jit.compiler;
     Gp v0 = c.newGpw();
     asmjit::Label l_exit = c.newLabel();
-    c.cmp(Mem(std::bit_cast<u64>(&in_branch_delay_slot)), 0);
+    c.cmp(Mem(std::bit_cast<u64>(&in_branch_delay_slot_taken)), 0);
     c.je(l_exit);
     Gp v1 = c.newGpq();
-    c.mov(Mem(std::bit_cast<u64>(&in_branch_delay_slot)), 0);
+    c.mov(Mem(std::bit_cast<u64>(&in_branch_delay_slot_taken)), 0);
     c.mov(v1, Mem(std::bit_cast<u64>(&jump_addr)));
     c.mov(Mem(std::bit_cast<u64>(&pc)), v1);
     c.ret();
@@ -123,9 +137,10 @@ void JitInstructionEpilogueFirstBlockInstruction()
 
 void Jump(u64 target_address)
 {
-    jump_is_pending = true;
-    instructions_until_jump = 1;
-    jump_addr = target_address & ~u64(3);
+    in_branch_delay_slot_taken = true;
+    in_branch_delay_slot_not_taken = false;
+    branch_state = BranchState::DelaySlotTaken;
+    jump_addr = target_address;
 }
 
 void JumpRecompiler()
@@ -137,31 +152,21 @@ void JumpRecompiler()
   // c.
 }
 
-void Link(u32 reg)
-{
-    gpr.set(reg, 4 + (in_branch_delay_slot ? jump_addr : pc));
-}
-
-void LinkRecompiler(u32 reg)
-{
-    // using namespace asmjit::x86;
-    // Compiler& c = jit.compiler;
-    // c.cmp(mem(&in_branch_delay_slot), 0);
-    // c.mov(rax, mem(&pc));
-    // c.cmovne(rax, mem(&jump_addr));
-    // c.add(rax, 4);
-    // set_gpr(reg, rax);
-}
-
 void NotifyIllegalInstrCode(u32 instr_code)
 {
     log_error(std::format("Illegal CPU instruction code {:08X} encountered.\n", instr_code));
 }
 
+void OnBranchNotTaken()
+{
+    in_branch_delay_slot_not_taken = true;
+    in_branch_delay_slot_taken = false;
+    branch_state = BranchState::DelaySlotNotTaken;
+}
+
 void PowerOn()
 {
     exception_occurred = false;
-    jump_is_pending = false;
 
     InitializeRegisters();
     InitCop1();
@@ -172,7 +177,8 @@ void PowerOn()
 void Reset()
 {
     exception_occurred = false;
-    jump_is_pending = false;
+    in_branch_delay_slot_taken = in_branch_delay_slot_not_taken = false;
+    branch_state = BranchState::NoBranch;
     SignalException<Exception::SoftReset>();
     HandleException();
 }
@@ -181,21 +187,31 @@ u64 RunInterpreter(u64 cpu_cycles)
 {
     p_cycle_counter = 0;
     while (p_cycle_counter < cpu_cycles) {
-        if (jump_is_pending) {
-            if (instructions_until_jump-- == 0) {
-                pc = jump_addr;
-                jump_is_pending = false;
-                in_branch_delay_slot = false;
-            } else {
-                in_branch_delay_slot = true;
-            }
-        }
         u32 instr = FetchInstruction(pc);
+        // TODO: check exceptions. Should also use old pc in exception handler since pc is not incremented yet.
         pc += 4;
         disassembler::exec_cpu<CpuImpl::Interpreter>(instr);
         AdvancePipeline(1);
         if (exception_occurred) {
+            branch_state = BranchState::NoBranch;
             HandleException();
+        } else {
+            switch (branch_state) {
+            case BranchState::DelaySlotNotTaken: branch_state = BranchState::NoBranch; break;
+            case BranchState::DelaySlotTaken: branch_state = BranchState::Perform; break;
+            case BranchState::NoBranch: in_branch_delay_slot_not_taken = false; break;
+            case BranchState::Perform:
+                pc = jump_addr;
+                branch_state = BranchState::NoBranch;
+                in_branch_delay_slot_taken = false;
+                if (jump_addr & 3) {
+                    pc += 4; // compensate for the fact that we skip the instruction fetch
+                    SignalAddressErrorException<MemOp::InstrFetch>(jump_addr);
+                    HandleException();
+                }
+                break;
+            default: std::unreachable();
+            }
         }
     }
     return p_cycle_counter - cpu_cycles;

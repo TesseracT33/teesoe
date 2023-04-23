@@ -155,19 +155,15 @@ void HandleException()
     exception_occurred = false;
 
     if (cop0.status.exl == 0) {
-        cop0.cause.bd =
-          in_branch_delay_slot; /* Peter Lemon exception tests indicate that this should only be set if !exl */
-        /* Store to the EPC register the address of the instruction causing the exception.
-           If the instruction was executing in a branch delay slot, the CPU loads the EPC register
-           to the address of the branch instruction immediately preceding the branch delay slot. */
-        cop0.epc = pc - (in_branch_delay_slot ? 8 : 4);
+        bool in_delay_slot = in_branch_delay_slot_taken | in_branch_delay_slot_not_taken;
+        cop0.cause.bd = in_delay_slot;
+        cop0.epc = pc - (in_delay_slot ? 8 : 4);
         cop0.status.exl = 1;
         SignalInterruptFalse();
         SetActiveVirtualToPhysicalFunctions();
     }
     pc = exception_vector;
-    in_branch_delay_slot = false;
-    jump_is_pending = false;
+    in_branch_delay_slot_taken = in_branch_delay_slot_not_taken = false;
 
     exception_handler();
 }

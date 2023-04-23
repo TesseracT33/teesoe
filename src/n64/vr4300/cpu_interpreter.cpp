@@ -25,6 +25,8 @@ void Interpreter::beq(u32 rs, u32 rt, s16 imm) const
 {
     if (gpr[rs] == gpr[rt]) {
         Jump(pc + (imm << 2));
+    } else {
+        OnBranchNotTaken();
     }
 }
 
@@ -33,7 +35,7 @@ void Interpreter::beql(u32 rs, u32 rt, s16 imm) const
     if (gpr[rs] == gpr[rt]) {
         Jump(pc + (imm << 2));
     } else {
-        pc += 4;
+        DiscardBranch();
     }
 }
 
@@ -41,15 +43,20 @@ void Interpreter::bgez(u32 rs, s16 imm) const
 {
     if (gpr[rs] >= 0) {
         Jump(pc + (imm << 2));
+    } else {
+        OnBranchNotTaken();
     }
 }
 
 void Interpreter::bgezal(u32 rs, s16 imm) const
 {
+    bool in_delay_slot = in_branch_delay_slot_taken || in_branch_delay_slot_not_taken;
     if (gpr[rs] >= 0) {
         Jump(pc + (imm << 2));
+    } else {
+        OnBranchNotTaken();
     }
-    Link(31);
+    gpr.set(31, 4 + (in_delay_slot ? jump_addr : pc));
 }
 
 void Interpreter::bgezall(u32 rs, s16 imm) const
@@ -57,9 +64,9 @@ void Interpreter::bgezall(u32 rs, s16 imm) const
     if (gpr[rs] >= 0) {
         Jump(pc + (imm << 2));
     } else {
-        pc += 4;
+        DiscardBranch();
     }
-    Link(31);
+    gpr.set(31, pc + 4);
 }
 
 void Interpreter::bgezl(u32 rs, s16 imm) const
@@ -67,7 +74,7 @@ void Interpreter::bgezl(u32 rs, s16 imm) const
     if (gpr[rs] >= 0) {
         Jump(pc + (imm << 2));
     } else {
-        pc += 4;
+        DiscardBranch();
     }
 }
 
@@ -75,6 +82,8 @@ void Interpreter::bgtz(u32 rs, s16 imm) const
 {
     if (gpr[rs] > 0) {
         Jump(pc + (imm << 2));
+    } else {
+        OnBranchNotTaken();
     }
 }
 
@@ -83,7 +92,7 @@ void Interpreter::bgtzl(u32 rs, s16 imm) const
     if (gpr[rs] > 0) {
         Jump(pc + (imm << 2));
     } else {
-        pc += 4;
+        DiscardBranch();
     }
 }
 
@@ -91,6 +100,8 @@ void Interpreter::blez(u32 rs, s16 imm) const
 {
     if (gpr[rs] <= 0) {
         Jump(pc + (imm << 2));
+    } else {
+        OnBranchNotTaken();
     }
 }
 
@@ -99,7 +110,7 @@ void Interpreter::blezl(u32 rs, s16 imm) const
     if (gpr[rs] <= 0) {
         Jump(pc + (imm << 2));
     } else {
-        pc += 4;
+        DiscardBranch();
     }
 }
 
@@ -107,25 +118,29 @@ void Interpreter::bltz(u32 rs, s16 imm) const
 {
     if (gpr[rs] < 0) {
         Jump(pc + (imm << 2));
+    } else {
+        OnBranchNotTaken();
     }
 }
 
 void Interpreter::bltzal(u32 rs, s16 imm) const
 {
+    gpr.set(31, pc + 4);
     if (gpr[rs] < 0) {
         Jump(pc + (imm << 2));
+    } else {
+        OnBranchNotTaken();
     }
-    Link(31);
 }
 
 void Interpreter::bltzall(u32 rs, s16 imm) const
 {
+    gpr.set(31, pc + 4);
     if (gpr[rs] < 0) {
         Jump(pc + (imm << 2));
     } else {
-        pc += 4;
+        DiscardBranch();
     }
-    Link(31);
 }
 
 void Interpreter::bltzl(u32 rs, s16 imm) const
@@ -133,7 +148,7 @@ void Interpreter::bltzl(u32 rs, s16 imm) const
     if (gpr[rs] < 0) {
         Jump(pc + (imm << 2));
     } else {
-        pc += 4;
+        DiscardBranch();
     }
 }
 
@@ -141,6 +156,8 @@ void Interpreter::bne(u32 rs, u32 rt, s16 imm) const
 {
     if (gpr[rs] != gpr[rt]) {
         Jump(pc + (imm << 2));
+    } else {
+        OnBranchNotTaken();
     }
 }
 
@@ -149,7 +166,7 @@ void Interpreter::bnel(u32 rs, u32 rt, s16 imm) const
     if (gpr[rs] != gpr[rt]) {
         Jump(pc + (imm << 2));
     } else {
-        pc += 4;
+        DiscardBranch();
     }
 }
 
@@ -254,32 +271,38 @@ void Interpreter::dmultu(u32 rs, u32 rt) const
 
 void Interpreter::j(u32 instr) const
 {
-    if (!in_branch_delay_slot) {
-        jump(pc & 0xFFFF'FFFF'F000'0000 | instr << 2 & 0xFFF'FFFF);
+    if (!in_branch_delay_slot_taken) {
+        Jump(pc & 0xFFFF'FFFF'F000'0000 | instr << 2 & 0xFFF'FFFF);
     }
 }
 
 void Interpreter::jal(u32 instr) const
 {
-    Link(31);
-    if (!in_branch_delay_slot) {
-        jump(pc & 0xFFFF'FFFF'F000'0000 | instr << 2 & 0xFFF'FFFF);
+    gpr.set(31, 4 + (in_branch_delay_slot_taken ? jump_addr : pc));
+    if (!in_branch_delay_slot_taken) {
+        Jump(pc & 0xFFFF'FFFF'F000'0000 | instr << 2 & 0xFFF'FFFF);
+    } else if (!in_branch_delay_slot_not_taken) {
+        OnBranchNotTaken();
     }
 }
 
 void Interpreter::jalr(u32 rs, u32 rd) const
 {
     s64 target = gpr[rs];
-    Link(rd);
-    if (!in_branch_delay_slot) {
-        jump(target);
+    gpr.set(rd, 4 + (in_branch_delay_slot_taken ? jump_addr : pc));
+    if (!in_branch_delay_slot_taken) {
+        Jump(target);
+    } else if (!in_branch_delay_slot_not_taken) {
+        OnBranchNotTaken();
     }
 }
 
 void Interpreter::jr(u32 rs) const
 {
-    if (!in_branch_delay_slot) {
-        jump(gpr[rs]);
+    if (!in_branch_delay_slot_taken) {
+        Jump(gpr[rs]);
+    } else if (!in_branch_delay_slot_not_taken) {
+        OnBranchNotTaken();
     }
 }
 

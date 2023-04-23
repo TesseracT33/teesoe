@@ -25,13 +25,13 @@ enum class MemOp {
     Write
 };
 
-u32 FetchInstruction(u64 virtual_address);
+u32 FetchInstruction(u64 vaddr);
 u32 GetPhysicalPC();
 void InitializeMMU();
 template<std::signed_integral Int, Alignment alignment = Alignment::Aligned, MemOp mem_op = MemOp::Read>
-Int ReadVirtual(u64 virtual_address);
+Int ReadVirtual(u64 vaddr);
 void SetActiveVirtualToPhysicalFunctions();
-template<size_t access_size, Alignment alignment = Alignment::Aligned> void WriteVirtual(u64 virtual_address, s64 data);
+template<size_t access_size, Alignment alignment = Alignment::Aligned> void WriteVirtual(u64 vaddr, s64 data);
 
 void tlbr();
 void tlbwi();

@@ -29,11 +29,11 @@ void AddInitialEvents();
 void AdvancePipeline(u64 cycles);
 void CheckInterrupts();
 void ClearInterruptPending(ExternalInterruptSource);
+void DiscardBranch();
 u64 GetElapsedCycles();
 void InitRun(bool hle_pif);
 void Jump(u64 target_address);
-void Link(u32 reg);
-void LinkRecompiler(u32 reg);
+void OnBranchNotTaken();
 void NotifyIllegalInstrCode(u32 instr_code);
 void PowerOn();
 void Reset();
@@ -42,11 +42,9 @@ u64 RunRecompiler(u64 cpu_cycles);
 void SetInterruptPending(ExternalInterruptSource);
 void SignalInterruptFalse();
 
-inline bool in_branch_delay_slot;
+inline bool in_branch_delay_slot_taken, in_branch_delay_slot_not_taken;
 inline bool ll_bit; /* Read from / written to by load linked and store conditional instructions. */
-inline bool jump_is_pending = false;
 inline bool last_instr_was_load = false;
-inline uint instructions_until_jump = 0;
 inline u64 jump_addr;
 inline u64 pc;
 inline s64 lo, hi; /* Contain the result of a double-word multiplication or division. */

@@ -68,9 +68,9 @@ void TlbEntry::Write()
     offset_addr_mask = page_mask >> 1 | 0xFFF;
 }
 
-u32 FetchInstruction(u64 virtual_address)
+u32 FetchInstruction(u64 vaddr)
 {
-    return ReadVirtual<s32, Alignment::Aligned, MemOp::InstrFetch>(virtual_address);
+    return ReadVirtual<s32, Alignment::Aligned, MemOp::InstrFetch>(vaddr);
 }
 
 u32 GetPhysicalPC()
