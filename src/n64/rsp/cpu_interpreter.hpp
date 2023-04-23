@@ -33,6 +33,7 @@ struct Interpreter : public mips::Interpreter<s32, s32, u32> {
     lo_dummy,
     hi_dummy,
     pc,
+    can_execute_dword_instrs_dummy,
     Jump,
 };
 

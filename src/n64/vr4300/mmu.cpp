@@ -172,6 +172,7 @@ void SetActiveVirtualToPhysicalFunctions()
         log_error("cop0.status.ksu was set to 3.");
         assert(false);
     }
+    can_execute_dword_instrs = operating_mode == Kernel || addressing_mode == _64bit;
 }
 
 template<MemOp mem_op> u32 VirtualToPhysicalAddressUserMode32(u64 vaddr, bool& cacheable_area)

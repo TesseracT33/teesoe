@@ -84,8 +84,10 @@ private:
     lo,
     hi,
     pc,
+    can_execute_dword_instrs,
     Jump,
     SignalException<Exception::IntegerOverflow>,
+    SignalException<Exception::ReservedInstruction>,
     SignalException<Exception::Trap>,
 };
 

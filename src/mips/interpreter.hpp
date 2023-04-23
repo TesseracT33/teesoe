@@ -12,8 +12,10 @@ struct Interpreter : public Cpu<GprInt, LoHiInt, PcInt> {
     using Cpu<GprInt, LoHiInt, PcInt>::lo;
     using Cpu<GprInt, LoHiInt, PcInt>::hi;
     using Cpu<GprInt, LoHiInt, PcInt>::pc;
+    using Cpu<GprInt, LoHiInt, PcInt>::dword_op_cond;
     using Cpu<GprInt, LoHiInt, PcInt>::jump;
     using Cpu<GprInt, LoHiInt, PcInt>::integer_overflow_exception;
+    using Cpu<GprInt, LoHiInt, PcInt>::reserved_instruction_exception;
     using Cpu<GprInt, LoHiInt, PcInt>::trap_exception;
 
     void add(u32 rs, u32 rt, u32 rd) const
@@ -191,6 +193,7 @@ struct Interpreter : public Cpu<GprInt, LoHiInt, PcInt> {
 
     void dadd(u32 rs, u32 rt, u32 rd) const
     {
+        if (!dword_op_cond) return reserved_instruction_exception();
         s64 sum;
         bool overflow;
 #if HAS_BUILTIN_ADD_OVERFLOW
@@ -208,6 +211,7 @@ struct Interpreter : public Cpu<GprInt, LoHiInt, PcInt> {
 
     void daddi(u32 rs, u32 rt, s16 imm) const
     {
+        if (!dword_op_cond) return reserved_instruction_exception();
         s64 sum;
         bool overflow;
 #if HAS_BUILTIN_ADD_OVERFLOW
@@ -223,30 +227,75 @@ struct Interpreter : public Cpu<GprInt, LoHiInt, PcInt> {
         }
     }
 
-    void daddiu(u32 rs, u32 rt, s16 imm) const { gpr.set(rt, gpr[rs] + imm); }
+    void daddiu(u32 rs, u32 rt, s16 imm) const
+    {
+        if (!dword_op_cond) return reserved_instruction_exception();
+        gpr.set(rt, gpr[rs] + imm);
+    }
 
-    void daddu(u32 rs, u32 rt, u32 rd) const { gpr.set(rd, gpr[rs] + gpr[rt]); }
+    void daddu(u32 rs, u32 rt, u32 rd) const
+    {
+        if (!dword_op_cond) return reserved_instruction_exception();
+        gpr.set(rd, gpr[rs] + gpr[rt]);
+    }
 
-    void dsll(u32 rt, u32 rd, u32 sa) const { gpr.set(rd, gpr[rt] << sa); }
+    void dsll(u32 rt, u32 rd, u32 sa) const
+    {
+        if (!dword_op_cond) return reserved_instruction_exception();
+        gpr.set(rd, gpr[rt] << sa);
+    }
 
-    void dsll32(u32 rt, u32 rd, u32 sa) const { gpr.set(rd, gpr[rt] << (sa + 32)); }
+    void dsll32(u32 rt, u32 rd, u32 sa) const
+    {
+        if (!dword_op_cond) return reserved_instruction_exception();
+        gpr.set(rd, gpr[rt] << (sa + 32));
+    }
 
-    void dsllv(u32 rs, u32 rt, u32 rd) const { gpr.set(rd, gpr[rt] << (gpr[rs] & 63)); }
+    void dsllv(u32 rs, u32 rt, u32 rd) const
+    {
+        if (!dword_op_cond) return reserved_instruction_exception();
+        gpr.set(rd, gpr[rt] << (gpr[rs] & 63));
+    }
 
-    void dsra(u32 rt, u32 rd, u32 sa) const { gpr.set(rd, gpr[rt] >> sa); }
+    void dsra(u32 rt, u32 rd, u32 sa) const
+    {
+        if (!dword_op_cond) return reserved_instruction_exception();
+        gpr.set(rd, gpr[rt] >> sa);
+    }
 
-    void dsra32(u32 rt, u32 rd, u32 sa) const { gpr.set(rd, gpr[rt] >> (sa + 32)); }
+    void dsra32(u32 rt, u32 rd, u32 sa) const
+    {
+        if (!dword_op_cond) return reserved_instruction_exception();
+        gpr.set(rd, gpr[rt] >> (sa + 32));
+    }
 
-    void dsrav(u32 rs, u32 rt, u32 rd) const { gpr.set(rd, gpr[rt] >> (gpr[rs] & 63)); }
+    void dsrav(u32 rs, u32 rt, u32 rd) const
+    {
+        if (!dword_op_cond) return reserved_instruction_exception();
+        gpr.set(rd, gpr[rt] >> (gpr[rs] & 63));
+    }
 
-    void dsrl(u32 rt, u32 rd, u32 sa) const { gpr.set(rd, u64(gpr[rt]) >> sa); }
+    void dsrl(u32 rt, u32 rd, u32 sa) const
+    {
+        if (!dword_op_cond) return reserved_instruction_exception();
+        gpr.set(rd, u64(gpr[rt]) >> sa);
+    }
 
-    void dsrl32(u32 rt, u32 rd, u32 sa) const { gpr.set(rd, u64(gpr[rt]) >> (sa + 32)); }
+    void dsrl32(u32 rt, u32 rd, u32 sa) const
+    {
+        if (!dword_op_cond) return reserved_instruction_exception();
+        gpr.set(rd, u64(gpr[rt]) >> (sa + 32));
+    }
 
-    void dsrlv(u32 rs, u32 rt, u32 rd) const { gpr.set(rd, u64(gpr[rt]) >> (gpr[rs] & 63)); }
+    void dsrlv(u32 rs, u32 rt, u32 rd) const
+    {
+        if (!dword_op_cond) return reserved_instruction_exception();
+        gpr.set(rd, u64(gpr[rt]) >> (gpr[rs] & 63));
+    }
 
     void dsub(u32 rs, u32 rt, u32 rd) const
     {
+        if (!dword_op_cond) return reserved_instruction_exception();
         s64 sum;
         bool overflow;
 #if HAS_BUILTIN_SUB_OVERFLOW
@@ -262,7 +311,11 @@ struct Interpreter : public Cpu<GprInt, LoHiInt, PcInt> {
         }
     }
 
-    void dsubu(u32 rs, u32 rt, u32 rd) const { gpr.set(rd, gpr[rs] - gpr[rt]); }
+    void dsubu(u32 rs, u32 rt, u32 rd) const
+    {
+        if (!dword_op_cond) return reserved_instruction_exception();
+        gpr.set(rd, gpr[rs] - gpr[rt]);
+    }
 
     void j(u32 instr) const { jump(pc & ~PcInt(0xFFF'FFFF) | instr << 2 & 0xFFF'FFFF); }
 

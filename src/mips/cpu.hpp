@@ -15,15 +15,19 @@ template<std::signed_integral GprInt, std::signed_integral LoHiInt, std::integra
       LoHiInt& lo,
       LoHiInt& hi,
       PcInt& pc,
+      bool const& dword_op_cond,
       JumpHandler<PcInt> jump_handler,
       ExceptionHandler integer_overflow_exception = nullptr,
+      ExceptionHandler reserved_instruction_exception = nullptr,
       ExceptionHandler trap_exception = nullptr)
       : gpr(gpr),
         lo(lo),
         hi(hi),
         pc(pc),
+        dword_op_cond(dword_op_cond),
         jump(jump_handler),
         integer_overflow_exception(integer_overflow_exception),
+        reserved_instruction_exception(reserved_instruction_exception),
         trap_exception(trap_exception)
     {
     }
@@ -35,8 +39,9 @@ template<std::signed_integral GprInt, std::signed_integral LoHiInt, std::integra
     LoHiInt& lo;
     LoHiInt& hi;
     PcInt& pc;
+    bool const& dword_op_cond;
     JumpHandler<PcInt> const jump;
-    ExceptionHandler const integer_overflow_exception, trap_exception;
+    ExceptionHandler const integer_overflow_exception, reserved_instruction_exception, trap_exception;
 };
 
 } // namespace mips

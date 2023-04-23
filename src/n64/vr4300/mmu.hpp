@@ -41,6 +41,8 @@ void tlbp();
 inline VirtualToPhysicalAddressFun active_virtual_to_physical_fun_read;
 inline VirtualToPhysicalAddressFun active_virtual_to_physical_fun_write;
 
+inline bool can_execute_dword_instrs;
+
 inline u32 last_physical_address_on_load;
 /* Used for logging. Set when memory is read during an instruction fetch. */
 inline u32 last_instr_fetch_phys_addr;

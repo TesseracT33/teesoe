@@ -34,6 +34,7 @@ inline uint p_cycle_counter;
 inline uint instructions_until_jump;
 inline u32 jump_addr;
 inline s32 lo_dummy, hi_dummy;
+constexpr bool can_execute_dword_instrs_dummy{};
 
 inline ::mips::Gpr<s32> gpr;
 

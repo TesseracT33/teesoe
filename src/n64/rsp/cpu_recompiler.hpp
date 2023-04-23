@@ -38,6 +38,7 @@ protected:
     lo_dummy,
     hi_dummy,
     pc,
+    can_execute_dword_instrs_dummy,
     Jump,
 };
 

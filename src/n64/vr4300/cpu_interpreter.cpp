@@ -160,6 +160,7 @@ void Interpreter::break_() const
 
 void Interpreter::ddiv(u32 rs, u32 rt) const
 {
+    if (!can_execute_dword_instrs) return SignalException<Exception::ReservedInstruction>();
     s64 op1 = gpr[rs];
     s64 op2 = gpr[rt];
     if (op2 == 0) { /* Peter Lemon N64 CPUTest>CPU>DDIV */
@@ -177,6 +178,7 @@ void Interpreter::ddiv(u32 rs, u32 rt) const
 
 void Interpreter::ddivu(u32 rs, u32 rt) const
 {
+    if (!can_execute_dword_instrs) return SignalException<Exception::ReservedInstruction>();
     u64 op1 = u64(gpr[rs]);
     u64 op2 = u64(gpr[rt]);
     if (op2 == 0) {
@@ -222,6 +224,7 @@ void Interpreter::divu(u32 rs, u32 rt) const
 
 void Interpreter::dmult(u32 rs, u32 rt) const
 {
+    if (!can_execute_dword_instrs) return SignalException<Exception::ReservedInstruction>();
 #if INT128_AVAILABLE
     s128 prod = s128(gpr[rs]) * s128(gpr[rt]);
     lo = prod & s64(-1);
@@ -236,6 +239,7 @@ void Interpreter::dmult(u32 rs, u32 rt) const
 
 void Interpreter::dmultu(u32 rs, u32 rt) const
 {
+    if (!can_execute_dword_instrs) return SignalException<Exception::ReservedInstruction>();
 #if INT128_AVAILABLE
     u128 prod = u128(gpr[rs]) * u128(gpr[rt]);
     lo = prod & u64(-1);
@@ -297,6 +301,7 @@ void Interpreter::lbu(u32 rs, u32 rt, s16 imm) const
 
 void Interpreter::ld(u32 rs, u32 rt, s16 imm) const
 {
+    if (!can_execute_dword_instrs) return SignalException<Exception::ReservedInstruction>();
     s64 val = ReadVirtual<s64>(gpr[rs] + imm);
     if (!exception_occurred) {
         gpr.set(rt, val);
@@ -305,6 +310,7 @@ void Interpreter::ld(u32 rs, u32 rt, s16 imm) const
 
 void Interpreter::ldl(u32 rs, u32 rt, s16 imm) const
 {
+    if (!can_execute_dword_instrs) return SignalException<Exception::ReservedInstruction>();
     s64 addr = gpr[rs] + imm;
     s64 val = ReadVirtual<s64, Alignment::UnalignedLeft>(addr);
     if (!exception_occurred) {
@@ -317,6 +323,7 @@ void Interpreter::ldl(u32 rs, u32 rt, s16 imm) const
 
 void Interpreter::ldr(u32 rs, u32 rt, s16 imm) const
 {
+    if (!can_execute_dword_instrs) return SignalException<Exception::ReservedInstruction>();
     s64 addr = gpr[rs] + imm;
     u64 val = ReadVirtual<s64, Alignment::UnalignedRight>(addr);
     if (!exception_occurred) {

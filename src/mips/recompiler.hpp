@@ -19,12 +19,22 @@ struct Recompiler : public Cpu<GprInt, LoHiInt, PcInt> {
       LoHiInt& lo,
       LoHiInt& hi,
       PcInt& pc,
+      bool const& dword_op_cond,
       JumpHandler<PcInt> jump_handler,
       ExceptionHandler integer_overflow_exception = nullptr,
+      ExceptionHandler reserved_instruction_exception = nullptr,
       ExceptionHandler trap_exception = nullptr)
       : jit(jit),
         c(jit.compiler),
-        Cpu<GprInt, LoHiInt, PcInt>(gpr, lo, hi, pc, jump_handler, integer_overflow_exception, trap_exception)
+        Cpu<GprInt, LoHiInt, PcInt>(gpr,
+          lo,
+          hi,
+          pc,
+          dword_op_cond,
+          jump_handler,
+          integer_overflow_exception,
+          reserved_instruction_exception,
+          trap_exception)
     {
     }
 
@@ -32,8 +42,10 @@ struct Recompiler : public Cpu<GprInt, LoHiInt, PcInt> {
     using Cpu<GprInt, LoHiInt, PcInt>::lo;
     using Cpu<GprInt, LoHiInt, PcInt>::hi;
     using Cpu<GprInt, LoHiInt, PcInt>::pc;
+    using Cpu<GprInt, LoHiInt, PcInt>::dword_op_cond;
     using Cpu<GprInt, LoHiInt, PcInt>::jump;
     using Cpu<GprInt, LoHiInt, PcInt>::integer_overflow_exception;
+    using Cpu<GprInt, LoHiInt, PcInt>::reserved_instruction_exception;
     using Cpu<GprInt, LoHiInt, PcInt>::trap_exception;
     using Cpu<GprInt, LoHiInt, PcInt>::mips32;
     using Cpu<GprInt, LoHiInt, PcInt>::mips64;
@@ -149,8 +161,9 @@ struct Recompiler : public Cpu<GprInt, LoHiInt, PcInt> {
 
     void dadd(u32 rs, u32 rt, u32 rd) const
     {
-        asmjit::x86::Gp v0 = get_gpr(rs), v1 = get_gpr(rt);
+        // TODO: check dword_op_cond. Possibly compile for it being true/false, then invalidate if it changes?
         asmjit::Label l_noexception = c.newLabel();
+        asmjit::x86::Gp v0 = get_gpr(rs), v1 = get_gpr(rt);
         c.add(v0, v1);
         c.jno(l_noexception);
         call(c, integer_overflow_exception);
