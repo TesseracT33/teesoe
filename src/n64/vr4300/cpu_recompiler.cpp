@@ -58,6 +58,7 @@ void Recompiler::ddiv(u32 rs, u32 rt) const
     c.mov(lo_ptr(), rax);
     c.mov(hi_ptr(), rdx);
     c.bind(l_end);
+    jit.cycles += 68;
 }
 
 void Recompiler::ddivu(u32 rs, u32 rt) const
@@ -76,6 +77,7 @@ void Recompiler::ddivu(u32 rs, u32 rt) const
     c.mov(lo_ptr(), rax);
     c.mov(hi_ptr(), rdx);
     c.bind(l_end);
+    jit.cycles += 68;
 }
 
 void Recompiler::div(u32 rs, u32 rt) const
@@ -107,6 +109,7 @@ void Recompiler::div(u32 rs, u32 rt) const
     set_lo32(asmjit::x86::eax);
     set_hi32(asmjit::x86::edx);
     c.bind(l_end);
+    jit.cycles += 36;
 }
 
 void Recompiler::divu(u32 rs, u32 rt) const
@@ -125,6 +128,7 @@ void Recompiler::divu(u32 rs, u32 rt) const
     set_lo32(asmjit::x86::eax);
     set_hi32(asmjit::x86::edx);
     c.bind(l_end);
+    jit.cycles += 36;
 }
 
 void Recompiler::dmult(u32 rs, u32 rt) const
@@ -401,6 +405,7 @@ template<bool unsig> void Recompiler::multiply32(u32 rs, u32 rt) const
     else c.imul(asmjit::x86::eax, v);
     set_lo32(asmjit::x86::eax);
     set_hi32(asmjit::x86::edx);
+    jit.cycles += 4;
 }
 
 template<bool unsig> void Recompiler::multiply64(u32 rs, u32 rt) const
@@ -411,6 +416,7 @@ template<bool unsig> void Recompiler::multiply64(u32 rs, u32 rt) const
     else c.imul(rax, v);
     c.mov(lo_ptr(), rax);
     c.mov(hi_ptr(), rdx);
+    jit.cycles += 7;
 }
 
 template<std::integral Int> void Recompiler::store(u32 rs, u32 rt, s16 imm) const

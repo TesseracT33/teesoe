@@ -172,6 +172,7 @@ void Interpreter::ddiv(u32 rs, u32 rt) const
         lo = op1 / op2;
         hi = op1 % op2;
     }
+    AdvancePipeline(68);
 }
 
 void Interpreter::ddivu(u32 rs, u32 rt) const
@@ -185,6 +186,7 @@ void Interpreter::ddivu(u32 rs, u32 rt) const
         lo = op1 / op2;
         hi = op1 % op2;
     }
+    AdvancePipeline(68);
 }
 
 void Interpreter::div(u32 rs, u32 rt) const
@@ -201,6 +203,7 @@ void Interpreter::div(u32 rs, u32 rt) const
         lo = op1 / op2;
         hi = op1 % op2;
     }
+    AdvancePipeline(36);
 }
 
 void Interpreter::divu(u32 rs, u32 rt) const
@@ -214,6 +217,7 @@ void Interpreter::divu(u32 rs, u32 rt) const
         lo = s32(op1 / op2);
         hi = s32(op1 % op2);
     }
+    AdvancePipeline(36);
 }
 
 void Interpreter::dmult(u32 rs, u32 rt) const
@@ -227,6 +231,7 @@ void Interpreter::dmult(u32 rs, u32 rt) const
 #else
 #error DMULT unimplemented on targets where INT128 or MSVC _mul128 is unavailable
 #endif
+    AdvancePipeline(7);
 }
 
 void Interpreter::dmultu(u32 rs, u32 rt) const
@@ -240,6 +245,7 @@ void Interpreter::dmultu(u32 rs, u32 rt) const
 #else
 #error DMULTU unimplemented on targets where UINT128 or MSVC _umul128 is unavailable
 #endif
+    AdvancePipeline(7);
 }
 
 void Interpreter::j(u32 instr) const
@@ -402,6 +408,7 @@ void Interpreter::mult(u32 rs, u32 rt) const
     s64 prod = s64(s32(gpr[rs])) * s64(s32(gpr[rt]));
     lo = s32(prod);
     hi = prod >> 32;
+    AdvancePipeline(4);
 }
 
 void Interpreter::multu(u32 rs, u32 rt) const
@@ -409,6 +416,7 @@ void Interpreter::multu(u32 rs, u32 rt) const
     u64 prod = u64(u32(gpr[rs])) * u64(u32(gpr[rt]));
     lo = s32(prod);
     hi = s32(prod >> 32);
+    AdvancePipeline(4);
 }
 
 void Interpreter::sb(u32 rs, u32 rt, s16 imm) const
