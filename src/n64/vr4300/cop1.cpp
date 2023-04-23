@@ -42,7 +42,6 @@ template<> struct FmtToType<Fmt::Int64> {
 
 enum class ComputeInstr1Op {
     ABS,
-    MOV,
     NEG,
     SQRT,
 };
@@ -126,14 +125,17 @@ struct FCR31 {
 
 /* Floating point control registers. Only #0 and #31 are "valid", and #0 is read-only. */
 struct FPUControl {
-    u32 Get(size_t index) const;
-    void Set(size_t index, u32 value);
+    u32 Get(u32 idx) const;
+    void Set(u32 idx, u32 value);
 } static fpu_control;
 
 /* General-purpose floating point registers. */
 struct FGR {
-    template<FpuNum T> T Get(size_t index) const;
-    template<FpuNum T> void Set(size_t index, T data);
+    template<FpuNum T> T GetFs(u32 idx) const;
+    template<FpuNum T> T GetFt(u32 idx) const;
+    template<FpuNum T> T GetMoveLoadStore(u32 idx) const;
+    template<FpuNum T> void Set(u32 idx, T data);
+    template<FpuNum T> void SetMoveLoadStore(u32 idx, T data);
 
 private:
     std::array<s64, 32> fpr;
@@ -158,16 +160,16 @@ private:
     "NGT",
 };
 
-u32 FPUControl::Get(size_t index) const
+u32 FPUControl::Get(u32 idx) const
 {
-    if (index == 31) return std::bit_cast<u32>(fcr31);
-    if (index == 0) return 0xA00;
+    if (idx == 31) return std::bit_cast<u32>(fcr31);
+    if (idx == 0) return 0xA00;
     return 0; /* Only #0 and #31 are "valid". */
 }
 
-void FPUControl::Set(size_t index, u32 data)
+void FPUControl::Set(u32 idx, u32 data)
 {
-    if (index != 31) return;
+    if (idx != 31) return;
     static constexpr u32 mask = 0x183'FFFF;
     fcr31 = std::bit_cast<FCR31>(data & mask | std::bit_cast<u32>(fcr31) & ~mask);
     auto new_rounding_mode = [&] {
@@ -183,28 +185,71 @@ void FPUControl::Set(size_t index, u32 data)
     TestExceptions<false>();
 }
 
-template<FpuNum T> T FGR::Get(size_t index) const
+/// 32 bit operations in 64 bit mode:
+/// - LWC1 and MTC1 leave the upper 32 bit as-is
+/// - MOV.S copies the upper 32 bits over (it might be identical to MOV.D)
+/// - Everything else clears the upper 32 bits to 0
+///
+/// - For all operations, retrieving Fs clears bit0 of the register index if !status.fr
+///
+/// - For Load/Store/Move instructions, if !status.fr, clear bit0 of the register index
+/// - For 32-bit such instructions, if !status.fr and bit0 of the register index is set, access the upper word of the
+/// register instead of the lower as usual.
+template<FpuNum T> T FGR::GetFs(u32 idx) const
 {
+    if (!cop0.status.fr) idx &= ~1;
     if constexpr (sizeof(T) == 4) {
-        u32 data = [&] {
-            if (cop0.status.fr || !(index & 1)) return u32(fpr[index]);
-            else return u32(fpr[index & ~1] >> 32);
-        }();
-        return std::bit_cast<T>(data);
+        return std::bit_cast<T>(u32(fpr[idx]));
     } else {
-        if (!cop0.status.fr) index &= ~1;
-        return std::bit_cast<T>(fpr[index]);
+        return std::bit_cast<T>(fpr[idx]);
     }
 }
 
-template<FpuNum T> void FGR::Set(size_t index, T value)
+template<FpuNum T> T FGR::GetFt(u32 idx) const
 {
     if constexpr (sizeof(T) == 4) {
-        if (cop0.status.fr || !(index & 1)) std::memcpy(&fpr[index], &value, 4);
-        else std::memcpy((u8*)(&fpr[index & ~1]) + 4, &value, 4);
+        return std::bit_cast<T>(u32(fpr[idx]));
     } else {
-        if (!cop0.status.fr) index &= ~1;
-        fpr[index] = std::bit_cast<s64>(value);
+        return std::bit_cast<T>(fpr[idx]);
+    }
+}
+
+template<FpuNum T> T FGR::GetMoveLoadStore(u32 idx) const
+{
+    if constexpr (sizeof(T) == 4) {
+        u32 data = [this, idx] {
+            if (cop0.status.fr || !(idx & 1)) return u32(fpr[idx]);
+            else return u32(fpr[idx & ~1] >> 32);
+        }();
+        return std::bit_cast<T>(data);
+    } else {
+        if (!cop0.status.fr) idx &= ~1;
+        return std::bit_cast<T>(fpr[idx]);
+    }
+}
+
+template<FpuNum T> void FGR::Set(u32 idx, T value)
+{
+    u8* dst = reinterpret_cast<u8*>(&fpr[idx]);
+    if constexpr (sizeof(T) == 4) {
+        std::memcpy(dst, &value, 4);
+        std::memset(dst + 4, 0, 4);
+    } else {
+        std::memcpy(dst, &value, 8);
+    }
+}
+
+template<FpuNum T> void FGR::SetMoveLoadStore(u32 idx, T value)
+{
+    if constexpr (sizeof(T) == 4) {
+        if (cop0.status.fr || !(idx & 1)) {
+            std::memcpy(&fpr[idx], &value, 4);
+        } else {
+            std::memcpy(reinterpret_cast<u8*>(&fpr[idx & ~1]) + 4, &value, 4);
+        }
+    } else {
+        if (!cop0.status.fr) idx &= ~1;
+        fpr[idx] = std::bit_cast<s64>(value);
     }
 }
 
@@ -512,8 +557,8 @@ template<Fmt fmt> void c(u32 fs, u32 ft, u8 cond)
                 return !signal_fpu_exc;
             } else return true;
         };
-        Float op1 = fpr.Get<Float>(fs);
-        Float op2 = fpr.Get<Float>(ft);
+        Float op1 = fpr.GetFs<Float>(fs);
+        Float op2 = fpr.GetFt<Float>(ft);
         if (std::isnan(op1) || std::isnan(op2)) {
             if (!IsValidInput(op1)) {
                 AdvancePipeline(1);
@@ -569,7 +614,7 @@ void dctc1()
 void dmfc1(u32 fs, u32 rt)
 {
     if (cop0.status.cu1) {
-        gpr.set(rt, fpr.Get<s64>(fs));
+        gpr.set(rt, fpr.GetMoveLoadStore<s64>(fs));
         AdvancePipeline(1);
     } else {
         SignalCoprocessorUnusableException(1);
@@ -579,7 +624,7 @@ void dmfc1(u32 fs, u32 rt)
 void dmtc1(u32 fs, u32 rt)
 {
     if (cop0.status.cu1) {
-        fpr.Set<s64>(fs, s64(gpr[rt]));
+        fpr.SetMoveLoadStore(fs, s64(gpr[rt]));
         AdvancePipeline(1);
     } else {
         SignalCoprocessorUnusableException(1);
@@ -591,7 +636,7 @@ void ldc1(u32 base, u32 ft, s16 imm)
     if (cop0.status.cu1) {
         s64 val = ReadVirtual<s64>(gpr[base] + imm);
         if (!exception_occurred) {
-            fpr.Set(ft, val);
+            fpr.SetMoveLoadStore(ft, val);
         }
         AdvancePipeline(1);
     } else {
@@ -604,7 +649,7 @@ void lwc1(u32 base, u32 ft, s16 imm)
     if (cop0.status.cu1) {
         s32 val = ReadVirtual<s32>(gpr[base] + imm);
         if (!exception_occurred) {
-            fpr.Set(ft, val);
+            fpr.SetMoveLoadStore<s32>(ft, val);
         }
         AdvancePipeline(1);
     } else {
@@ -615,7 +660,7 @@ void lwc1(u32 base, u32 ft, s16 imm)
 void mfc1(u32 fs, u32 rt)
 {
     if (FpuUsable()) {
-        gpr.set(rt, u64(fpr.Get<s32>(fs)));
+        gpr.set(rt, u64(fpr.GetMoveLoadStore<s32>(fs)));
         AdvancePipeline(1);
     }
 }
@@ -623,7 +668,7 @@ void mfc1(u32 fs, u32 rt)
 void mtc1(u32 fs, u32 rt)
 {
     if (FpuUsable()) {
-        fpr.Set<s32>(fs, s32(gpr[rt]));
+        fpr.SetMoveLoadStore(fs, s32(gpr[rt]));
         AdvancePipeline(1);
     }
 }
@@ -631,7 +676,7 @@ void mtc1(u32 fs, u32 rt)
 void sdc1(u32 base, u32 ft, s16 imm)
 {
     if (cop0.status.cu1) {
-        WriteVirtual<8>(gpr[base] + imm, fpr.Get<s64>(ft));
+        WriteVirtual<8>(gpr[base] + imm, fpr.GetMoveLoadStore<s64>(ft));
         AdvancePipeline(1);
     } else {
         SignalCoprocessorUnusableException(1);
@@ -641,7 +686,7 @@ void sdc1(u32 base, u32 ft, s16 imm)
 void swc1(u32 base, u32 ft, s16 imm)
 {
     if (cop0.status.cu1) {
-        WriteVirtual<4>(gpr[base] + imm, fpr.Get<s32>(ft));
+        WriteVirtual<4>(gpr[base] + imm, fpr.GetMoveLoadStore<s32>(ft));
         AdvancePipeline(1);
     } else {
         SignalCoprocessorUnusableException(1);
@@ -802,7 +847,11 @@ template<Fmt fmt> void div(u32 fs, u32 ft, u32 fd)
 template<Fmt fmt> void mov(u32 fs, u32 fd)
 {
     if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
-        Compute<ComputeInstr1Op::MOV, typename FmtToType<fmt>::type>(fs, fd);
+        if (cop0.status.cu1) {
+            fpr.Set<f64>(fd, fpr.GetFs<f64>(fs));
+        } else {
+            SignalCoprocessorUnusableException(1);
+        }
     } else {
         OnInvalidFormat();
     }
@@ -847,25 +896,15 @@ template<Fmt fmt> void sub(u32 fs, u32 ft, u32 fd)
 template<ComputeInstr1Op instr, std::floating_point Float> void Compute(u32 fs, u32 fd)
 {
     using enum ComputeInstr1Op;
-    if constexpr (instr == MOV) {
-        if (!cop0.status.cu1) {
-            SignalCoprocessorUnusableException(1);
-            return;
-        }
-    } else if (!FpuUsable()) return;
-    Float op = fpr.Get<Float>(fs);
-    if constexpr (instr != MOV) {
-        if (!IsValidInput(op)) {
-            AdvancePipeline(2);
-            return;
-        }
+    if (!FpuUsable()) return;
+    Float op = fpr.GetFs<Float>(fs);
+    if (!IsValidInput(op)) {
+        AdvancePipeline(2);
+        return;
     }
     Float result = [op] {
         if constexpr (instr == ABS) {
             return std::abs(op);
-        }
-        if constexpr (instr == MOV) {
-            return op;
         }
         if constexpr (instr == NEG) {
             return -op;
@@ -875,12 +914,8 @@ template<ComputeInstr1Op instr, std::floating_point Float> void Compute(u32 fs, 
             return std::sqrt(op);
         }
     }();
-    if constexpr (instr == MOV) {
+    if (!GetAndTestExceptions() && IsValidOutput(result)) {
         fpr.Set<Float>(fd, result);
-    } else {
-        if (!GetAndTestExceptions() && IsValidOutput(result)) {
-            fpr.Set<Float>(fd, result);
-        }
     }
 }
 
@@ -888,12 +923,12 @@ template<ComputeInstr2Op instr, std::floating_point Float> void Compute(u32 fs, 
 {
     using enum ComputeInstr2Op;
     if (!FpuUsable()) return;
-    Float op1 = fpr.Get<Float>(fs);
+    Float op1 = fpr.GetFs<Float>(fs);
     if (!IsValidInput(op1)) {
         AdvancePipeline(1);
         return;
     }
-    Float op2 = fpr.Get<Float>(ft);
+    Float op2 = fpr.GetFt<Float>(ft);
     if (!IsValidInput(op2)) {
         AdvancePipeline(1);
         return;
@@ -926,7 +961,7 @@ template<RoundInstr instr, FpuNum From, FpuNum To> void Round(u32 fs, u32 fd)
     using enum RoundInstr;
     if (!FpuUsable()) return;
     AdvancePipeline(4);
-    From source = fpr.Get<From>(fs);
+    From source = fpr.GetFs<From>(fs);
     if (!IsValidInputCvtRound<To>(source)) return;
     To result = To([source] {
         if constexpr (instr == ROUND) return std::nearbyint(source);
@@ -968,7 +1003,7 @@ template<FpuNum From, FpuNum To> static void Convert(u32 fs, u32 fd)
         return;
     }
 
-    From source = fpr.Get<From>(fs);
+    From source = fpr.GetFs<From>(fs);
     if constexpr (std::floating_point<From> && std::floating_point<To>) {
         if (!IsValidInput(source)) return;
     }
@@ -994,16 +1029,6 @@ template<FpuNum From, FpuNum To> static void Convert(u32 fs, u32 fd)
     }
     fpr.Set<To>(fd, result);
 }
-
-template s32 FGR::Get<s32>(size_t) const;
-template s64 FGR::Get<s64>(size_t) const;
-template f32 FGR::Get<f32>(size_t) const;
-template f64 FGR::Get<f64>(size_t) const;
-
-template void FGR::Set<s32>(size_t, s32);
-template void FGR::Set<s64>(size_t, s64);
-template void FGR::Set<f32>(size_t, f32);
-template void FGR::Set<f64>(size_t, f64);
 
 #define INST_FMT_SPEC(instr, ...)                   \
     template void instr<Fmt::Float32>(__VA_ARGS__); \
