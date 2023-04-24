@@ -32,7 +32,6 @@ void ClearInterruptPending(ExternalInterruptSource);
 void DiscardBranch();
 u64 GetElapsedCycles();
 void InitRun(bool hle_pif);
-void Jump(u64 target_address);
 void OnBranchNotTaken();
 void NotifyIllegalInstrCode(u32 instr_code);
 void PowerOn();
@@ -41,6 +40,7 @@ u64 RunInterpreter(u64 cpu_cycles);
 u64 RunRecompiler(u64 cpu_cycles);
 void SetInterruptPending(ExternalInterruptSource);
 void SignalInterruptFalse();
+void TakeBranch(u64 target_address);
 
 inline bool in_branch_delay_slot_taken, in_branch_delay_slot_not_taken;
 inline bool ll_bit; /* Read from / written to by load linked and store conditional instructions. */

@@ -505,7 +505,9 @@ void bc1f(s16 imm)
     if (!FpuUsable()) return;
     s64 offset = s64(imm) << 2;
     if (!fcr31.c) {
-        Jump(pc + offset);
+        TakeBranch(pc + offset);
+    } else {
+        OnBranchNotTaken();
     }
 }
 
@@ -514,9 +516,9 @@ void bc1fl(s16 imm)
     if (!FpuUsable()) return;
     s64 offset = s64(imm) << 2;
     if (!fcr31.c) {
-        Jump(pc + offset);
+        TakeBranch(pc + offset);
     } else {
-        pc += 4;
+        DiscardBranch();
     }
 }
 
@@ -525,7 +527,9 @@ void bc1t(s16 imm)
     if (!FpuUsable()) return;
     s64 offset = s64(imm) << 2;
     if (fcr31.c) {
-        Jump(pc + offset);
+        TakeBranch(pc + offset);
+    } else {
+        OnBranchNotTaken();
     }
 }
 
@@ -534,9 +538,9 @@ void bc1tl(s16 imm)
     if (!FpuUsable()) return;
     s64 offset = s64(imm) << 2;
     if (fcr31.c) {
-        Jump(pc + offset);
+        TakeBranch(pc + offset);
     } else {
-        pc += 4;
+        DiscardBranch();
     }
 }
 

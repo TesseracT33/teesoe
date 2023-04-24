@@ -24,7 +24,7 @@ constexpr std::array right_load_mask = {
 void Interpreter::beq(u32 rs, u32 rt, s16 imm) const
 {
     if (gpr[rs] == gpr[rt]) {
-        Jump(pc + (imm << 2));
+        TakeBranch(pc + (imm << 2));
     } else {
         OnBranchNotTaken();
     }
@@ -33,7 +33,7 @@ void Interpreter::beq(u32 rs, u32 rt, s16 imm) const
 void Interpreter::beql(u32 rs, u32 rt, s16 imm) const
 {
     if (gpr[rs] == gpr[rt]) {
-        Jump(pc + (imm << 2));
+        TakeBranch(pc + (imm << 2));
     } else {
         DiscardBranch();
     }
@@ -42,7 +42,7 @@ void Interpreter::beql(u32 rs, u32 rt, s16 imm) const
 void Interpreter::bgez(u32 rs, s16 imm) const
 {
     if (gpr[rs] >= 0) {
-        Jump(pc + (imm << 2));
+        TakeBranch(pc + (imm << 2));
     } else {
         OnBranchNotTaken();
     }
@@ -52,7 +52,7 @@ void Interpreter::bgezal(u32 rs, s16 imm) const
 {
     bool in_delay_slot = in_branch_delay_slot_taken || in_branch_delay_slot_not_taken;
     if (gpr[rs] >= 0) {
-        Jump(pc + (imm << 2));
+        TakeBranch(pc + (imm << 2));
     } else {
         OnBranchNotTaken();
     }
@@ -62,17 +62,18 @@ void Interpreter::bgezal(u32 rs, s16 imm) const
 void Interpreter::bgezall(u32 rs, s16 imm) const
 {
     if (gpr[rs] >= 0) {
-        Jump(pc + (imm << 2));
+        TakeBranch(pc + (imm << 2));
+        gpr.set(31, pc + 4);
     } else {
         DiscardBranch();
+        gpr.set(31, pc);
     }
-    gpr.set(31, pc + 4);
 }
 
 void Interpreter::bgezl(u32 rs, s16 imm) const
 {
     if (gpr[rs] >= 0) {
-        Jump(pc + (imm << 2));
+        TakeBranch(pc + (imm << 2));
     } else {
         DiscardBranch();
     }
@@ -81,7 +82,7 @@ void Interpreter::bgezl(u32 rs, s16 imm) const
 void Interpreter::bgtz(u32 rs, s16 imm) const
 {
     if (gpr[rs] > 0) {
-        Jump(pc + (imm << 2));
+        TakeBranch(pc + (imm << 2));
     } else {
         OnBranchNotTaken();
     }
@@ -90,7 +91,7 @@ void Interpreter::bgtz(u32 rs, s16 imm) const
 void Interpreter::bgtzl(u32 rs, s16 imm) const
 {
     if (gpr[rs] > 0) {
-        Jump(pc + (imm << 2));
+        TakeBranch(pc + (imm << 2));
     } else {
         DiscardBranch();
     }
@@ -99,7 +100,7 @@ void Interpreter::bgtzl(u32 rs, s16 imm) const
 void Interpreter::blez(u32 rs, s16 imm) const
 {
     if (gpr[rs] <= 0) {
-        Jump(pc + (imm << 2));
+        TakeBranch(pc + (imm << 2));
     } else {
         OnBranchNotTaken();
     }
@@ -108,7 +109,7 @@ void Interpreter::blez(u32 rs, s16 imm) const
 void Interpreter::blezl(u32 rs, s16 imm) const
 {
     if (gpr[rs] <= 0) {
-        Jump(pc + (imm << 2));
+        TakeBranch(pc + (imm << 2));
     } else {
         DiscardBranch();
     }
@@ -117,7 +118,7 @@ void Interpreter::blezl(u32 rs, s16 imm) const
 void Interpreter::bltz(u32 rs, s16 imm) const
 {
     if (gpr[rs] < 0) {
-        Jump(pc + (imm << 2));
+        TakeBranch(pc + (imm << 2));
     } else {
         OnBranchNotTaken();
     }
@@ -127,7 +128,7 @@ void Interpreter::bltzal(u32 rs, s16 imm) const
 {
     gpr.set(31, pc + 4);
     if (gpr[rs] < 0) {
-        Jump(pc + (imm << 2));
+        TakeBranch(pc + (imm << 2));
     } else {
         OnBranchNotTaken();
     }
@@ -137,7 +138,7 @@ void Interpreter::bltzall(u32 rs, s16 imm) const
 {
     gpr.set(31, pc + 4);
     if (gpr[rs] < 0) {
-        Jump(pc + (imm << 2));
+        TakeBranch(pc + (imm << 2));
     } else {
         DiscardBranch();
     }
@@ -146,7 +147,7 @@ void Interpreter::bltzall(u32 rs, s16 imm) const
 void Interpreter::bltzl(u32 rs, s16 imm) const
 {
     if (gpr[rs] < 0) {
-        Jump(pc + (imm << 2));
+        TakeBranch(pc + (imm << 2));
     } else {
         DiscardBranch();
     }
@@ -155,7 +156,7 @@ void Interpreter::bltzl(u32 rs, s16 imm) const
 void Interpreter::bne(u32 rs, u32 rt, s16 imm) const
 {
     if (gpr[rs] != gpr[rt]) {
-        Jump(pc + (imm << 2));
+        TakeBranch(pc + (imm << 2));
     } else {
         OnBranchNotTaken();
     }
@@ -164,7 +165,7 @@ void Interpreter::bne(u32 rs, u32 rt, s16 imm) const
 void Interpreter::bnel(u32 rs, u32 rt, s16 imm) const
 {
     if (gpr[rs] != gpr[rt]) {
-        Jump(pc + (imm << 2));
+        TakeBranch(pc + (imm << 2));
     } else {
         DiscardBranch();
     }
@@ -272,7 +273,7 @@ void Interpreter::dmultu(u32 rs, u32 rt) const
 void Interpreter::j(u32 instr) const
 {
     if (!in_branch_delay_slot_taken) {
-        Jump(pc & 0xFFFF'FFFF'F000'0000 | instr << 2 & 0xFFF'FFFF);
+        TakeBranch(pc & 0xFFFF'FFFF'F000'0000 | instr << 2 & 0xFFF'FFFF);
     }
 }
 
@@ -280,9 +281,7 @@ void Interpreter::jal(u32 instr) const
 {
     gpr.set(31, 4 + (in_branch_delay_slot_taken ? jump_addr : pc));
     if (!in_branch_delay_slot_taken) {
-        Jump(pc & 0xFFFF'FFFF'F000'0000 | instr << 2 & 0xFFF'FFFF);
-    } else if (!in_branch_delay_slot_not_taken) {
-        OnBranchNotTaken();
+        TakeBranch(pc & 0xFFFF'FFFF'F000'0000 | instr << 2 & 0xFFF'FFFF);
     }
 }
 
@@ -291,18 +290,14 @@ void Interpreter::jalr(u32 rs, u32 rd) const
     s64 target = gpr[rs];
     gpr.set(rd, 4 + (in_branch_delay_slot_taken ? jump_addr : pc));
     if (!in_branch_delay_slot_taken) {
-        Jump(target);
-    } else if (!in_branch_delay_slot_not_taken) {
-        OnBranchNotTaken();
+        TakeBranch(target);
     }
 }
 
 void Interpreter::jr(u32 rs) const
 {
     if (!in_branch_delay_slot_taken) {
-        Jump(gpr[rs]);
-    } else if (!in_branch_delay_slot_not_taken) {
-        OnBranchNotTaken();
+        TakeBranch(gpr[rs]);
     }
 }
 

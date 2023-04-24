@@ -85,7 +85,7 @@ private:
     hi,
     pc,
     can_execute_dword_instrs,
-    Jump,
+    TakeBranch,
     SignalException<Exception::IntegerOverflow>,
     SignalException<Exception::ReservedInstruction>,
     SignalException<Exception::Trap>,

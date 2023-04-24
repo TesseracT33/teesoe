@@ -135,14 +135,6 @@ void JitInstructionEpilogueFirstBlockInstruction()
     c.add(Mem(pc), 4);
 }
 
-void Jump(u64 target_address)
-{
-    in_branch_delay_slot_taken = true;
-    in_branch_delay_slot_not_taken = false;
-    branch_state = BranchState::DelaySlotTaken;
-    jump_addr = target_address;
-}
-
 void JumpRecompiler()
 { // Assumption: target_address is in rax
   // TODO
@@ -263,6 +255,14 @@ void SetInterruptPending(ExternalInterruptSource interrupt)
 void SignalInterruptFalse()
 {
     interrupt = false;
+}
+
+void TakeBranch(u64 target_address)
+{
+    in_branch_delay_slot_taken = true;
+    in_branch_delay_slot_not_taken = false;
+    branch_state = BranchState::DelaySlotTaken;
+    jump_addr = target_address;
 }
 
 } // namespace n64::vr4300

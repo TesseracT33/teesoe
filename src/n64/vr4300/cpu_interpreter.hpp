@@ -68,7 +68,7 @@ struct Interpreter : public mips::Interpreter<s64, s64, u64> {
     hi,
     pc,
     can_execute_dword_instrs,
-    Jump,
+    TakeBranch,
     SignalException<Exception::IntegerOverflow>,
     SignalException<Exception::ReservedInstruction>,
     SignalException<Exception::Trap>,
