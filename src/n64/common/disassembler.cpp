@@ -251,8 +251,8 @@ template<Cpu cpu, CpuImpl cpu_impl, bool make_string> void cop2(u32 instr)
         case 1: COP_VR4300(dmfc2, RT); break;
         case 2: COP_VR4300(cfc2, RT); break;
         case 3: COP_VR4300(dcfc2); break;
-        case 4: COP_VR4300(mfc2, RT); break;
-        case 5: COP_VR4300(dmfc2, RT); break;
+        case 4: COP_VR4300(mtc2, RT); break;
+        case 5: COP_VR4300(dmtc2, RT); break;
         case 6: COP_VR4300(ctc2, RT); break;
         case 7: COP_VR4300(dctc2); break;
         default:
