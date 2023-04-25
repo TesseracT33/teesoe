@@ -164,39 +164,29 @@ template<std::signed_integral Int> void StoreUpToDword(u32 base, u32 vt, u32 e, 
 
 s32 Rcp(s32 input)
 {
+    s32 sinput = input;
     s32 mask = input >> 31;
     input ^= mask;
-    if (input > -0x8000) {
-        input -= mask;
-    }
-    if (input == 0) {
-        return 0x7FFF'FFFF;
-    } else if (input == -0x8000) {
-        return 0xFFFF'0000;
-    } else {
-        u32 shift = std::countl_zero(u32(input));
-        u32 index = (u64(input) << shift & 0x7FC0'0000) >> 22;
-        s32 result = (0x10000 | rcp_rom[index]) << 14;
-        return result >> 31 - shift ^ mask;
-    }
+    if (sinput > -32768) input -= mask;
+    if (input == 0) return 0x7FFF'FFFF;
+    if (sinput == -32768) return -65536;
+    u32 shift = std::countl_zero(u32(input));
+    u32 index = (u64(input) << shift & 0x7FC0'0000) >> 22;
+    s32 result = (0x10000 | rcp_rom[index]) << 14;
+    return result >> 31 - shift ^ mask;
 }
 
 s32 Rsq(s32 input)
 {
-    if (input == 0) {
-        return 0x7FFF'FFFF;
-    } else if (input == -32768) {
-        return 0xFFFF'0000;
-    } else {
-        u32 unsigned_input = u32(std::abs(input));
-        u32 lshift = std::countl_zero(unsigned_input) + 1;
-        u32 rshift = (32 - lshift) >> 1;
-        u32 index = (unsigned_input << lshift) >> 24;
-        u32 rom = rsq_rom[(index | ((lshift & 1) << 8))];
-        u32 result = ((0x10000 | rom) << 14) >> rshift;
-        if (unsigned_input != input) result = ~result;
-        return result;
-    }
+    if (input == 0) return 0x7FFF'FFFF;
+    if (input == 0xFFFF8000) return 0xFFFF0000;
+    if (input > 0xFFFF8000) --input;
+    s32 mask = input >> 31;
+    input ^= mask;
+    u32 lshift = std::countl_zero(u32(input)) + 1;
+    u32 rshift = 32 - lshift >> 1;
+    u32 index = u32(input) << lshift >> 24 | (lshift & 1) << 8;
+    return (0x400'00000 | rsq_rom[index] << 14) >> rshift ^ mask;
 }
 
 template<> void cfc2<Interpreter>(u32 rt, u32 vs)
