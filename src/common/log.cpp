@@ -16,6 +16,35 @@ static std::ofstream file_log;
 static std::string prev_file_output;
 static u64 file_output_repeat_counter;
 
+void file_out(std::string_view output)
+{
+    if constexpr (enable_file_logging) {
+        if (!file_log.is_open()) {
+            return;
+        }
+        if (output == prev_file_output) {
+            ++file_output_repeat_counter;
+        } else {
+            if (file_output_repeat_counter > 0) {
+                file_log << "<<< Repeated " << file_output_repeat_counter << " time(s). >>>\n";
+                file_output_repeat_counter = 0;
+            }
+            prev_file_output = output;
+            file_log << output << '\n';
+        }
+    }
+}
+
+Status init_file_log()
+{
+    if constexpr (enable_file_logging) {
+        file_log.open(log_path.data());
+        return file_log.is_open() ? status_ok() : status_failure("Failed to open log file");
+    } else {
+        return status_ok();
+    }
+}
+
 void log(std::string_view output)
 {
     std_out(output);
@@ -43,25 +72,6 @@ void log_fatal(std::string_view output /*, std::source_location loc*/)
     file_out(shown_output);
 }
 
-void file_out(std::string_view output)
-{
-    if constexpr (enable_file_logging) {
-        if (!file_log.is_open()) {
-            return;
-        }
-        if (output == prev_file_output) {
-            ++file_output_repeat_counter;
-        } else {
-            if (file_output_repeat_counter > 0) {
-                file_log << "<<< Repeated " << file_output_repeat_counter << " time(s). >>>\n";
-                file_output_repeat_counter = 0;
-            }
-            prev_file_output = output;
-            file_log << output << '\n';
-        }
-    }
-}
-
 void log_info(std::string_view output)
 {
     std::string shown_output = std::format("[INFO] {}", output);
@@ -69,14 +79,11 @@ void log_info(std::string_view output)
     file_out(shown_output);
 }
 
-Status init_file_log()
+void log_warn(std::string_view output)
 {
-    if constexpr (enable_file_logging) {
-        file_log.open(log_path.data());
-        return file_log.is_open() ? status_ok() : status_failure("Failed to open log file");
-    } else {
-        return status_ok();
-    }
+    std::string shown_output = std::format("[WARN] {}", output);
+    std_out(shown_output);
+    file_out(shown_output);
 }
 
 void std_out(std::string_view output)
@@ -84,9 +91,9 @@ void std_out(std::string_view output)
     std::cout << output << '\n';
 }
 
-void log_warn(std::string_view output)
+void tear_down_log()
 {
-    std::string shown_output = std::format("[WARN] {}", output);
-    std_out(shown_output);
-    file_out(shown_output);
+    if (file_log) {
+        std::flush(file_log);
+    }
 }

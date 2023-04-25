@@ -45,5 +45,7 @@ int main(int argc, char* argv[])
 
     frontend::gui::Run(start_game_immediately);
 
+    tear_down_log();
+
     return EXIT_SUCCESS;
 }
