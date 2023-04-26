@@ -32,8 +32,9 @@ void AllocateSram()
 
 size_t GetNumberOfBytesUntilRomEnd(u32 addr)
 {
-    static constexpr u32 addr_rom_start = 0x1000'0000;
-    return original_rom_size - (addr - addr_rom_start) % original_rom_size;
+    static constexpr u32 rom_end = 0xFC0'0000;
+    addr &= rom_end - 1;
+    return addr < original_rom_size ? original_rom_size - addr : 0;
 }
 
 u8* GetPointerToRom(u32 addr)
