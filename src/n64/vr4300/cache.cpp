@@ -264,6 +264,7 @@ template<size_t access_size, typename... MaskT> void WriteCacheableArea(u32 padd
             std::memcpy(&existing, cache_dst + 4, 4);
             std::memcpy(reinterpret_cast<u8*>(&existing) + 4, cache_dst, 4);
         }
+        to_write &= (..., mask);
         to_write |= existing & (..., ~mask);
     }
     if constexpr (access_size <= 4) {
