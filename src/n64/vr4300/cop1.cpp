@@ -85,6 +85,10 @@ template<std::signed_integral Int> static bool IsValidInputCvtRound(std::floatin
 static bool IsValidOutput(std::floating_point auto& f);
 static void OnInvalidFormat();
 template<RoundInstr, FpuNum, FpuNum> static void Round(u32 fs, u32 fd);
+template<std::signed_integral Int> Int Round(f32 f);
+template<std::signed_integral Int> Int Round(f64 f);
+template<std::signed_integral Int> Int RoundNearest(f32 f);
+template<std::signed_integral Int> Int RoundNearest(f64 f);
 static bool SignalDivZero();
 static bool SignalInexactOp();
 static bool SignalInvalidOp();
@@ -172,7 +176,7 @@ void FPUControl::Set(u32 idx, u32 data)
     if (idx != 31) return;
     static constexpr u32 mask = 0x183'FFFF;
     fcr31 = std::bit_cast<FCR31>(data & mask | std::bit_cast<u32>(fcr31) & ~mask);
-    auto new_rounding_mode = [&] {
+    auto new_rounding_mode = [] {
         switch (fcr31.rm) {
         case 0: return FE_TONEAREST; /* RN */
         case 1: return FE_TOWARDZERO; /* RZ */
@@ -310,27 +314,21 @@ bool IsValidInput(std::floating_point auto f)
 
 template<std::signed_integral Int> bool IsValidInputCvtRound(std::floating_point auto f)
 {
-    auto classify = std::fpclassify(f);
-    if (classify == FP_INFINITE || classify == FP_NAN || classify == FP_SUBNORMAL) {
+    if (one_of(std::fpclassify(f), FP_INFINITE, FP_NAN, FP_SUBNORMAL)) {
         SignalUnimplementedOp();
         SignalException<Exception::FloatingPoint>();
         return false;
     }
-    if constexpr (sizeof(Int) == 4) {
-        if (f >= 0x1p+31 || f < -0x1p+31) {
-            SignalUnimplementedOp();
-            SignalException<Exception::FloatingPoint>();
-            return false;
-        }
-        return true;
-    } else {
-        if (f >= 0x1p+53 || f < -0x1p+53) {
-            SignalUnimplementedOp();
-            SignalException<Exception::FloatingPoint>();
-            return false;
-        }
-        return true;
+    bool unimpl = [f] {
+        if constexpr (sizeof(Int) == 4) return f >= 0x1p+31 || f < -0x1p+31;
+        if constexpr (sizeof(Int) == 8) return f >= 0x1p+53 || f <= -0x1p+53;
+    }();
+    if (unimpl) {
+        SignalUnimplementedOp();
+        SignalException<Exception::FloatingPoint>();
+        return false;
     }
+    return true;
 }
 
 bool IsValidOutput(std::floating_point auto& f)
@@ -363,6 +361,34 @@ void OnInvalidFormat()
     AdvancePipeline(1);
     SignalUnimplementedOp();
     SignalException<Exception::FloatingPoint>();
+}
+
+template<std::signed_integral Int> Int Round(f32 f)
+{ // TODO: can't do this with std::round or similar?
+    auto t = _mm_set_ss(f);
+    t = _mm_round_ss(t, t, _MM_FROUND_CUR_DIRECTION);
+    return static_cast<Int>(_mm_cvtss_f32(t));
+}
+
+template<std::signed_integral Int> Int Round(f64 f)
+{
+    auto t = _mm_set_sd(f);
+    t = _mm_round_sd(t, t, _MM_FROUND_CUR_DIRECTION);
+    return static_cast<Int>(_mm_cvtsd_f64(t));
+}
+
+template<std::signed_integral Int> Int RoundNearest(f32 f)
+{ // TODO: more or less efficient to change rounding modes and use std::nearbyint?
+    __m128 t = _mm_set_ss(f);
+    t = _mm_round_ss(t, t, _MM_FROUND_TO_NEAREST_INT);
+    return static_cast<Int>(_mm_cvtss_f32(t));
+}
+
+template<std::signed_integral Int> Int RoundNearest(f64 f)
+{
+    __m128d t = _mm_set_sd(f);
+    t = _mm_round_sd(t, t, _MM_FROUND_TO_NEAREST_INT);
+    return static_cast<Int>(_mm_cvtsd_f64(t));
 }
 
 bool SignalDivZero()
@@ -699,23 +725,19 @@ void swc1(u32 base, u32 ft, s16 imm)
 
 template<Fmt fmt> void ceil_l(u32 fs, u32 fd)
 {
-    if constexpr (fmt == Fmt::Invalid) {
+    if constexpr (fmt == Fmt::Invalid || !one_of(fmt, Fmt::Float32, Fmt::Float64)) {
         OnInvalidFormat();
-    } else if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
-        Round<RoundInstr::CEIL, typename FmtToType<fmt>::type, s64>(fs, fd);
     } else {
-        // Result is undefined
+        Round<RoundInstr::CEIL, typename FmtToType<fmt>::type, s64>(fs, fd);
     }
 }
 
 template<Fmt fmt> void ceil_w(u32 fs, u32 fd)
 {
-    if constexpr (fmt == Fmt::Invalid) {
+    if constexpr (fmt == Fmt::Invalid || !one_of(fmt, Fmt::Float32, Fmt::Float64)) {
         OnInvalidFormat();
-    } else if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
-        Round<RoundInstr::CEIL, typename FmtToType<fmt>::type, s32>(fs, fd);
     } else {
-        // Result is undefined
+        Round<RoundInstr::CEIL, typename FmtToType<fmt>::type, s32>(fs, fd);
     }
 }
 
@@ -730,7 +752,7 @@ template<Fmt fmt> void cvt_d(u32 fs, u32 fd)
 
 template<Fmt fmt> void cvt_l(u32 fs, u32 fd)
 {
-    if constexpr (fmt == Fmt::Invalid) {
+    if constexpr (fmt == Fmt::Invalid || !one_of(fmt, Fmt::Float32, Fmt::Float64)) {
         OnInvalidFormat();
     } else {
         Convert<typename FmtToType<fmt>::type, s64>(fs, fd);
@@ -748,7 +770,7 @@ template<Fmt fmt> void cvt_s(u32 fs, u32 fd)
 
 template<Fmt fmt> void cvt_w(u32 fs, u32 fd)
 {
-    if constexpr (fmt == Fmt::Invalid) {
+    if constexpr (fmt == Fmt::Invalid || !one_of(fmt, Fmt::Float32, Fmt::Float64)) {
         OnInvalidFormat();
     } else {
         Convert<typename FmtToType<fmt>::type, s32>(fs, fd);
@@ -757,67 +779,55 @@ template<Fmt fmt> void cvt_w(u32 fs, u32 fd)
 
 template<Fmt fmt> void floor_l(u32 fs, u32 fd)
 {
-    if constexpr (fmt == Fmt::Invalid) {
+    if constexpr (fmt == Fmt::Invalid || !one_of(fmt, Fmt::Float32, Fmt::Float64)) {
         OnInvalidFormat();
-    } else if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
-        Round<RoundInstr::FLOOR, typename FmtToType<fmt>::type, s64>(fs, fd);
     } else {
-        // Result is undefined
+        Round<RoundInstr::FLOOR, typename FmtToType<fmt>::type, s64>(fs, fd);
     }
 }
 
 template<Fmt fmt> void floor_w(u32 fs, u32 fd)
 {
-    if constexpr (fmt == Fmt::Invalid) {
+    if constexpr (fmt == Fmt::Invalid || !one_of(fmt, Fmt::Float32, Fmt::Float64)) {
         OnInvalidFormat();
-    } else if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
-        Round<RoundInstr::FLOOR, typename FmtToType<fmt>::type, s32>(fs, fd);
     } else {
-        // Result is undefined
+        Round<RoundInstr::FLOOR, typename FmtToType<fmt>::type, s32>(fs, fd);
     }
 }
 
 template<Fmt fmt> void round_l(u32 fs, u32 fd)
 {
-    if constexpr (fmt == Fmt::Invalid) {
+    if constexpr (fmt == Fmt::Invalid || !one_of(fmt, Fmt::Float32, Fmt::Float64)) {
         OnInvalidFormat();
-    } else if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
-        Round<RoundInstr::ROUND, typename FmtToType<fmt>::type, s64>(fs, fd);
     } else {
-        // Result is undefined
+        Round<RoundInstr::ROUND, typename FmtToType<fmt>::type, s64>(fs, fd);
     }
 }
 
 template<Fmt fmt> void round_w(u32 fs, u32 fd)
 {
-    if constexpr (fmt == Fmt::Invalid) {
+    if constexpr (fmt == Fmt::Invalid || !one_of(fmt, Fmt::Float32, Fmt::Float64)) {
         OnInvalidFormat();
-    } else if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
-        Round<RoundInstr::ROUND, typename FmtToType<fmt>::type, s32>(fs, fd);
     } else {
-        // Result is undefined
+        Round<RoundInstr::ROUND, typename FmtToType<fmt>::type, s32>(fs, fd);
     }
 }
 
 template<Fmt fmt> void trunc_l(u32 fs, u32 fd)
 {
-    if constexpr (fmt == Fmt::Invalid) {
+    if constexpr (fmt == Fmt::Invalid || !one_of(fmt, Fmt::Float32, Fmt::Float64)) {
         OnInvalidFormat();
-    } else if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
-        Round<RoundInstr::TRUNC, typename FmtToType<fmt>::type, s64>(fs, fd);
     } else {
-        // Result is undefined
+        Round<RoundInstr::TRUNC, typename FmtToType<fmt>::type, s64>(fs, fd);
     }
 }
 
 template<Fmt fmt> void trunc_w(u32 fs, u32 fd)
 {
-    if constexpr (fmt == Fmt::Invalid) {
+    if constexpr (fmt == Fmt::Invalid || !one_of(fmt, Fmt::Float32, Fmt::Float64)) {
         OnInvalidFormat();
-    } else if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
-        Round<RoundInstr::TRUNC, typename FmtToType<fmt>::type, s32>(fs, fd);
     } else {
-        // Result is undefined
+        Round<RoundInstr::TRUNC, typename FmtToType<fmt>::type, s32>(fs, fd);
     }
 }
 
@@ -960,33 +970,6 @@ template<ComputeInstr2Op instr, std::floating_point Float> void Compute(u32 fs, 
     }
 }
 
-template<RoundInstr instr, FpuNum From, FpuNum To> void Round(u32 fs, u32 fd)
-{
-    using enum RoundInstr;
-    if (!FpuUsable()) return;
-    AdvancePipeline(4);
-    From source = fpr.GetFs<From>(fs);
-    if (!IsValidInputCvtRound<To>(source)) return;
-    To result = To([source] {
-        if constexpr (instr == ROUND) return std::nearbyint(source);
-        if constexpr (instr == TRUNC) return std::trunc(source);
-        if constexpr (instr == CEIL) return std::ceil(source);
-        if constexpr (instr == FLOOR) return std::floor(source);
-    }());
-    if constexpr (std::same_as<To, s32>) {
-        if (GetAndTestExceptionsConvFloatToWord()) return;
-    } else {
-        if (GetAndTestExceptions()) return;
-    }
-    if constexpr (instr == ROUND || instr == TRUNC) {
-        if (fs != fd && SignalInexactOp()) {
-            SignalException<Exception::FloatingPoint>();
-            return;
-        }
-    }
-    fpr.Set<To>(fd, result);
-}
-
 template<FpuNum From, FpuNum To> static void Convert(u32 fs, u32 fd)
 {
     if (!FpuUsable()) return;
@@ -1022,7 +1005,11 @@ template<FpuNum From, FpuNum To> static void Convert(u32 fs, u32 fd)
         }
     }
 
-    To result = To(source);
+    To result = [source] {
+        if constexpr (std::integral<To> && std::floating_point<From>) return Round<To>(source);
+        else return static_cast<To>(source);
+    }();
+
     if constexpr (std::same_as<To, s32>) {
         if (GetAndTestExceptionsConvFloatToWord()) return;
     } else {
@@ -1030,6 +1017,31 @@ template<FpuNum From, FpuNum To> static void Convert(u32 fs, u32 fd)
     }
     if constexpr (std::floating_point<To>) {
         if (!IsValidOutput(result)) return;
+    }
+    fpr.Set<To>(fd, result);
+}
+
+template<RoundInstr instr, FpuNum From, FpuNum To> void Round(u32 fs, u32 fd)
+{
+    using enum RoundInstr;
+    if (!FpuUsable()) return;
+    AdvancePipeline(4);
+    From source = fpr.GetFs<From>(fs);
+    if (!IsValidInputCvtRound<To>(source)) return;
+    To result = To([source] {
+        if constexpr (instr == ROUND) return RoundNearest<To>(source);
+        if constexpr (instr == TRUNC) return std::trunc(source);
+        if constexpr (instr == CEIL) return std::ceil(source);
+        if constexpr (instr == FLOOR) return std::floor(source);
+    }());
+    if constexpr (std::same_as<To, s32>) {
+        if (GetAndTestExceptionsConvFloatToWord()) return;
+    } else {
+        if (GetAndTestExceptions()) return;
+    }
+    if (source != From(result) && SignalInexactOp()) {
+        SignalException<Exception::FloatingPoint>();
+        return;
     }
     fpr.Set<To>(fd, result);
 }
