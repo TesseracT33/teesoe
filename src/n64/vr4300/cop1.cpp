@@ -725,19 +725,19 @@ void swc1(u32 base, u32 ft, s16 imm)
 
 template<Fmt fmt> void ceil_l(u32 fs, u32 fd)
 {
-    if constexpr (fmt == Fmt::Invalid || !one_of(fmt, Fmt::Float32, Fmt::Float64)) {
-        OnInvalidFormat();
-    } else {
+    if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
         Round<RoundInstr::CEIL, typename FmtToType<fmt>::type, s64>(fs, fd);
+    } else {
+        OnInvalidFormat();
     }
 }
 
 template<Fmt fmt> void ceil_w(u32 fs, u32 fd)
 {
-    if constexpr (fmt == Fmt::Invalid || !one_of(fmt, Fmt::Float32, Fmt::Float64)) {
-        OnInvalidFormat();
-    } else {
+    if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
         Round<RoundInstr::CEIL, typename FmtToType<fmt>::type, s32>(fs, fd);
+    } else {
+        OnInvalidFormat();
     }
 }
 
@@ -752,10 +752,10 @@ template<Fmt fmt> void cvt_d(u32 fs, u32 fd)
 
 template<Fmt fmt> void cvt_l(u32 fs, u32 fd)
 {
-    if constexpr (fmt == Fmt::Invalid || !one_of(fmt, Fmt::Float32, Fmt::Float64)) {
-        OnInvalidFormat();
-    } else {
+    if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
         Convert<typename FmtToType<fmt>::type, s64>(fs, fd);
+    } else {
+        OnInvalidFormat();
     }
 }
 
@@ -770,64 +770,64 @@ template<Fmt fmt> void cvt_s(u32 fs, u32 fd)
 
 template<Fmt fmt> void cvt_w(u32 fs, u32 fd)
 {
-    if constexpr (fmt == Fmt::Invalid || !one_of(fmt, Fmt::Float32, Fmt::Float64)) {
-        OnInvalidFormat();
-    } else {
+    if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
         Convert<typename FmtToType<fmt>::type, s32>(fs, fd);
+    } else {
+        OnInvalidFormat();
     }
 }
 
 template<Fmt fmt> void floor_l(u32 fs, u32 fd)
 {
-    if constexpr (fmt == Fmt::Invalid || !one_of(fmt, Fmt::Float32, Fmt::Float64)) {
-        OnInvalidFormat();
-    } else {
+    if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
         Round<RoundInstr::FLOOR, typename FmtToType<fmt>::type, s64>(fs, fd);
+    } else {
+        OnInvalidFormat();
     }
 }
 
 template<Fmt fmt> void floor_w(u32 fs, u32 fd)
 {
-    if constexpr (fmt == Fmt::Invalid || !one_of(fmt, Fmt::Float32, Fmt::Float64)) {
-        OnInvalidFormat();
-    } else {
+    if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
         Round<RoundInstr::FLOOR, typename FmtToType<fmt>::type, s32>(fs, fd);
+    } else {
+        OnInvalidFormat();
     }
 }
 
 template<Fmt fmt> void round_l(u32 fs, u32 fd)
 {
-    if constexpr (fmt == Fmt::Invalid || !one_of(fmt, Fmt::Float32, Fmt::Float64)) {
-        OnInvalidFormat();
-    } else {
+    if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
         Round<RoundInstr::ROUND, typename FmtToType<fmt>::type, s64>(fs, fd);
+    } else {
+        OnInvalidFormat();
     }
 }
 
 template<Fmt fmt> void round_w(u32 fs, u32 fd)
 {
-    if constexpr (fmt == Fmt::Invalid || !one_of(fmt, Fmt::Float32, Fmt::Float64)) {
-        OnInvalidFormat();
-    } else {
+    if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
         Round<RoundInstr::ROUND, typename FmtToType<fmt>::type, s32>(fs, fd);
+    } else {
+        OnInvalidFormat();
     }
 }
 
 template<Fmt fmt> void trunc_l(u32 fs, u32 fd)
 {
-    if constexpr (fmt == Fmt::Invalid || !one_of(fmt, Fmt::Float32, Fmt::Float64)) {
-        OnInvalidFormat();
-    } else {
+    if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
         Round<RoundInstr::TRUNC, typename FmtToType<fmt>::type, s64>(fs, fd);
+    } else {
+        OnInvalidFormat();
     }
 }
 
 template<Fmt fmt> void trunc_w(u32 fs, u32 fd)
 {
-    if constexpr (fmt == Fmt::Invalid || !one_of(fmt, Fmt::Float32, Fmt::Float64)) {
-        OnInvalidFormat();
-    } else {
+    if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
         Round<RoundInstr::TRUNC, typename FmtToType<fmt>::type, s32>(fs, fd);
+    } else {
+        OnInvalidFormat();
     }
 }
 
