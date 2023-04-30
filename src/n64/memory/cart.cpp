@@ -87,6 +87,13 @@ Status LoadSram(std::filesystem::path const& sram_path)
     return status_ok();
 }
 
+u8 ReadDma(u32 addr)
+{
+    u8 ret;
+    std::memcpy(&ret, GetPointerToRom(addr), 1);
+    return ret;
+}
+
 template<std::signed_integral Int> Int ReadRom(u32 addr)
 {
     std::optional<u32> pi_latch = pi::IoBusy();

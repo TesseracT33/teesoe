@@ -53,7 +53,7 @@ struct {
     u32 dummy0, dummy1, dummy2;
 } static pi;
 
-static size_t dma_len;
+static u32 cart_addr_end, dram_addr_end;
 
 template<DmaType> static void InitDma(DmaType type);
 static void OnDmaFinish();
@@ -63,56 +63,44 @@ template<DmaType type> void InitDma()
 {
     pi.status.dma_busy = 1;
     pi.status.dma_completed = 0;
-
-    u8* rdram_ptr = rdram::GetPointerToMemory(pi.dram_addr);
-    u8* cart_ptr = cart::GetPointerToRom(pi.cart_addr);
-    size_t bytes_until_rdram_end = rdram::GetNumberOfBytesUntilMemoryEnd(pi.dram_addr);
-    size_t bytes_until_cart_end = cart::GetNumberOfBytesUntilRomEnd(pi.cart_addr);
-    dma_len = std::min(bytes_until_rdram_end, bytes_until_cart_end);
+    u32 dma_len = pi.wr_len + 1;
     if constexpr (type == DmaType::CartToRdram) {
-        dma_len = std::min(dma_len, size_t(pi.wr_len + 1));
-        // TODO: temporary workaround to make nm64 work. If cart and rdram are both in LE, making a simple dma to rdram
-        // does not work if either addr is not work-aligned. E.g.: given cart addr 0x0032e6a6 and aligned rdram:
-        // - cart BE, rdram BE
-        //     cart 0x0032e6a4 : ffff0000 00120000 00100028
-        //     rdram                 0000 00120000 00100028
-        // - cart LE, rdram LE
-        //     cart 0x0032e6a4 : 0000ffff 00001200 28001000
-        //     rdram           :     ffff 00001200 28001000
-        // The two first two bytes copied are incorrect. Temporarily, make cart BE and use the below..
-        assert(!(dma_len & 3));
-        assert(!(pi.dram_addr & 3));
-        for (size_t i = 0; i < dma_len; i += 4) {
-            u32 val;
-            std::memcpy(&val, cart_ptr + i, 4);
-            val = std::byteswap(val);
-            std::memcpy(rdram_ptr + i, &val, 4);
-        }
-        //// See https://n64brew.dev/wiki/Peripheral_Interface#Unaligned_DMA_transfer for behaviour when addr is
-        /// unaligned
-        // static constexpr size_t block_size = 128;
-        // size_t num_bytes_first_block = block_size - (pi.dram_addr & (block_size - 1));
-        // if (num_bytes_first_block > (pi.dram_addr & 7)) {
-        //     std::memcpy(rdram_ptr, cart_ptr, std::min(dma_len, num_bytes_first_block - (pi.dram_addr & 7)));
-        // }
-        // if (dma_len > num_bytes_first_block) {
-        //     std::memcpy(rdram_ptr + num_bytes_first_block,
-        //       cart_ptr + num_bytes_first_block,
-        //       dma_len - num_bytes_first_block);
-        // }
         if constexpr (log_dma) {
             log(
               std::format("DMA: from cart ROM ${:X} to RDRAM ${:X}: ${:X} bytes", pi.cart_addr, pi.dram_addr, dma_len));
         }
+
+        u32 cart_addr = pi.cart_addr;
+        u32 dram_addr = pi.dram_addr;
+
+        if (!(cart_addr & 7) && !(dram_addr & 7) && !(dma_len & 3)) { // simple case
+            for (u32 i = 0; i < dma_len; i += 4) {
+                rdram::Write<4>(dram_addr, cart::ReadRom<s32>(cart_addr));
+                cart_addr += 4;
+                dram_addr += 4;
+            }
+        } else {
+            cart_addr &= ~1;
+            dram_addr &= ~1;
+            const u32 offset = pi.dram_addr & 7;
+            static constexpr u32 block_size = 128;
+            assert(dma_len >= offset); // TODO: what if dma_len < offset?
+            u32 num_bytes_first_block = std::min(dma_len, block_size) - offset;
+            for (u32 i = 0; i < num_bytes_first_block; ++i) {
+                rdram::Write<1>(dram_addr++, cart::ReadDma(cart_addr++));
+            }
+            dma_len -= std::min(dma_len, block_size);
+            if (dma_len) {
+                dram_addr += offset;
+                for (u32 i = 0; i < dma_len; ++i) {
+                    rdram::Write<1>(dram_addr++, cart::ReadDma(cart_addr++));
+                }
+            }
+        }
+        cart_addr_end = cart_addr;
+        dram_addr_end = dram_addr;
     } else { /* RDRAM to cart */
-        /* TODO: when I wrote this code, I forgot we can't write to ROM. But it seems we can write to SRAM/FLASH.
-            I do not yet know the behavior */
-        // dma_len = std::min(dma_len, size_t(pi.rd_len + 1));
-        // std::memcpy(cart_ptr, rdram_ptr, dma_len);
-        // if constexpr (log_dma) {
-        //	LogDMA(std::format("From RDRAM ${:X} to cart ROM ${:X}: ${:X} bytes",
-        //		pi.dram_addr, pi.cart_addr, dma_len));
-        // }
+        /* TODO: it seems we can write to SRAM/FLASH. */
         log_warn("Attempted DMA from RDRAM to Cart, but this is unimplemented.");
         OnDmaFinish();
         return;
@@ -144,8 +132,8 @@ void OnDmaFinish()
     pi.status.dma_busy = 0;
     pi.status.dma_completed = 1;
     mi::RaiseInterrupt(mi::InterruptType::PI);
-    pi.dram_addr = (pi.dram_addr + dma_len) & 0xFF'FFFF;
-    pi.cart_addr = (pi.cart_addr + dma_len) & 0xFF'FFFF;
+    pi.cart_addr = cart_addr_end;
+    pi.dram_addr = dram_addr_end & 0xFF'FFFF;
 }
 
 u32 ReadReg(u32 addr)
@@ -153,7 +141,11 @@ u32 ReadReg(u32 addr)
     static_assert(sizeof(pi) >> 2 == 0x10);
     u32 offset = addr >> 2 & 0xF;
     u32 ret;
-    std::memcpy(&ret, (u32*)(&pi) + offset, 4);
+    if ((offset & 0xE) == 2) { // PI_RD_LEN, PI_WR_LEN
+        ret = 0x7F;
+    } else {
+        std::memcpy(&ret, (u32*)(&pi) + offset, 4);
+    }
     if constexpr (log_io_pi) {
         log(std::format("PI: {} => ${:08X}", RegOffsetToStr(offset), ret));
     }
@@ -207,9 +199,9 @@ void WriteReg(u32 addr, u32 data)
     }
 
     switch (offset) {
-    case Register::DramAddr: pi.dram_addr = data & 0xFF'FFFF; break;
+    case Register::DramAddr: pi.dram_addr = data & 0xFF'FFFE; break;
 
-    case Register::CartAddr: pi.cart_addr = data & 0xFF'FFFF; break;
+    case Register::CartAddr: pi.cart_addr = data; break;
 
     case Register::RdLen:
         pi.rd_len = data;
