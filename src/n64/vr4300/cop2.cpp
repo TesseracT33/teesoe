@@ -18,7 +18,7 @@ void cfc2(u32 rt)
         gpr.set(rt, s32(cop2_latch));
 
     } else {
-        SignalCoprocessorUnusableException(2);
+        CoprocessorUnusableException(2);
     }
 }
 
@@ -27,25 +27,25 @@ void ctc2(u32 rt)
     if (cop0.status.cu2) {
         cop2_latch = gpr[rt];
     } else {
-        SignalCoprocessorUnusableException(2);
+        CoprocessorUnusableException(2);
     }
 }
 
 void dcfc2()
 {
     if (cop0.status.cu2) {
-        SignalException<Exception::ReservedInstructionCop2>();
+        ReservedInstructionCop2Exception();
     } else {
-        SignalCoprocessorUnusableException(2);
+        CoprocessorUnusableException(2);
     }
 }
 
 void dctc2()
 {
     if (cop0.status.cu2) {
-        SignalException<Exception::ReservedInstructionCop2>();
+        ReservedInstructionCop2Exception();
     } else {
-        SignalCoprocessorUnusableException(2);
+        CoprocessorUnusableException(2);
     }
 }
 
@@ -54,7 +54,7 @@ void dmfc2(u32 rt)
     if (cop0.status.cu2) {
         gpr.set(rt, cop2_latch);
     } else {
-        SignalCoprocessorUnusableException(2);
+        CoprocessorUnusableException(2);
     }
 }
 
@@ -63,7 +63,7 @@ void dmtc2(u32 rt)
     if (cop0.status.cu2) {
         cop2_latch = gpr[rt];
     } else {
-        SignalCoprocessorUnusableException(2);
+        CoprocessorUnusableException(2);
     }
 }
 
@@ -72,7 +72,7 @@ void mfc2(u32 rt)
     if (cop0.status.cu2) {
         gpr.set(rt, s32(cop2_latch));
     } else {
-        SignalCoprocessorUnusableException(2);
+        CoprocessorUnusableException(2);
     }
 }
 
@@ -81,7 +81,7 @@ void mtc2(u32 rt)
     if (cop0.status.cu2) {
         cop2_latch = gpr[rt];
     } else {
-        SignalCoprocessorUnusableException(2);
+        CoprocessorUnusableException(2);
     }
 }
 

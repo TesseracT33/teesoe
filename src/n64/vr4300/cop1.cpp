@@ -274,7 +274,7 @@ bool FpuUsable()
         ClearAllExceptions();
         return true;
     } else {
-        SignalCoprocessorUnusableException(1);
+        CoprocessorUnusableException(1);
         return false;
     }
 }
@@ -296,7 +296,7 @@ bool IsValidInput(std::floating_point auto f)
     case FP_NAN: {
         bool signal_fpu_exc = IsQuietNan(f) ? SignalInvalidOp() : SignalUnimplementedOp();
         if (signal_fpu_exc) {
-            SignalException<Exception::FloatingPoint>();
+            FloatingPointException();
             return false;
         } else {
             return true;
@@ -305,7 +305,7 @@ bool IsValidInput(std::floating_point auto f)
 
     case FP_SUBNORMAL:
         SignalUnimplementedOp();
-        SignalException<Exception::FloatingPoint>();
+        FloatingPointException();
         return false;
 
     default: return true;
@@ -316,7 +316,7 @@ template<std::signed_integral Int> bool IsValidInputCvtRound(std::floating_point
 {
     if (one_of(std::fpclassify(f), FP_INFINITE, FP_NAN, FP_SUBNORMAL)) {
         SignalUnimplementedOp();
-        SignalException<Exception::FloatingPoint>();
+        FloatingPointException();
         return false;
     }
     bool unimpl = [f] {
@@ -325,7 +325,7 @@ template<std::signed_integral Int> bool IsValidInputCvtRound(std::floating_point
     }();
     if (unimpl) {
         SignalUnimplementedOp();
-        SignalException<Exception::FloatingPoint>();
+        FloatingPointException();
         return false;
     }
     return true;
@@ -342,7 +342,7 @@ bool IsValidOutput(std::floating_point auto& f)
     case FP_SUBNORMAL:
         if (!fcr31.fs || fcr31.enable_underflow || fcr31.enable_inexact) {
             SignalUnimplementedOp();
-            SignalException<Exception::FloatingPoint>();
+            FloatingPointException();
             return false;
         } else {
             SignalUnderflow();
@@ -360,7 +360,7 @@ void OnInvalidFormat()
     if (!FpuUsable()) return;
     AdvancePipeline(1);
     SignalUnimplementedOp();
-    SignalException<Exception::FloatingPoint>();
+    FloatingPointException();
 }
 
 template<std::signed_integral Int> Int Round(f32 f)
@@ -456,7 +456,7 @@ template<bool update_flags> bool TestExceptions()
         fcr31 = std::bit_cast<FCR31>(fcr31_u32);
     }
     if ((enables & causes) || fcr31.cause_unimplemented) {
-        SignalException<Exception::FloatingPoint>();
+        FloatingPointException();
         return true;
     } else {
         return false;
@@ -469,7 +469,7 @@ bool GetAndTestExceptions()
     bool underflow = std::fetestexcept(FE_UNDERFLOW);
     if (underflow && (!fcr31.fs || fcr31.enable_underflow || fcr31.enable_inexact)) {
         fcr31.cause_unimplemented = 1;
-        SignalException<Exception::FloatingPoint>();
+        FloatingPointException();
         return true;
     }
 
@@ -487,13 +487,13 @@ bool GetAndTestExceptionsConvFloatToWord()
     bool invalid = std::fetestexcept(FE_INVALID);
     if (invalid) {
         fcr31.cause_unimplemented = 1;
-        SignalException<Exception::FloatingPoint>();
+        FloatingPointException();
         return true;
     }
     bool underflow = std::fetestexcept(FE_UNDERFLOW);
     if (underflow && (!fcr31.fs || fcr31.enable_underflow || fcr31.enable_inexact)) {
         fcr31.cause_unimplemented = 1;
-        SignalException<Exception::FloatingPoint>();
+        FloatingPointException();
         return true;
     }
     fcr31.cause_invalid |= invalid;
@@ -583,7 +583,7 @@ template<Fmt fmt> void c(u32 fs, u32 ft, u8 cond)
         auto IsValidInput = [cond](std::floating_point auto f) {
             if (std::isnan(f) && ((cond & 8) || IsQuietNan(f))) {
                 bool signal_fpu_exc = SignalInvalidOp();
-                if (signal_fpu_exc) SignalException<Exception::FloatingPoint>();
+                if (signal_fpu_exc) FloatingPointException();
                 return !signal_fpu_exc;
             } else return true;
         };
@@ -610,7 +610,7 @@ void cfc1(u32 fs, u32 rt)
     if (cop0.status.cu1) {
         gpr.set(rt, s32(fpu_control.Get(fs)));
     } else {
-        SignalCoprocessorUnusableException(1);
+        CoprocessorUnusableException(1);
     }
 }
 
@@ -619,7 +619,7 @@ void ctc1(u32 fs, u32 rt)
     if (cop0.status.cu1) {
         fpu_control.Set(fs, u32(gpr[rt]));
     } else {
-        SignalCoprocessorUnusableException(1);
+        CoprocessorUnusableException(1);
     }
 }
 
@@ -627,7 +627,7 @@ void dcfc1()
 {
     if (FpuUsable()) {
         SignalUnimplementedOp();
-        SignalException<Exception::FloatingPoint>();
+        FloatingPointException();
         AdvancePipeline(1);
     }
 }
@@ -636,7 +636,7 @@ void dctc1()
 {
     if (FpuUsable()) {
         SignalUnimplementedOp();
-        SignalException<Exception::FloatingPoint>();
+        FloatingPointException();
         AdvancePipeline(1);
     }
 }
@@ -647,7 +647,7 @@ void dmfc1(u32 fs, u32 rt)
         gpr.set(rt, fpr.GetMoveLoadStore<s64>(fs));
         AdvancePipeline(1);
     } else {
-        SignalCoprocessorUnusableException(1);
+        CoprocessorUnusableException(1);
     }
 }
 
@@ -657,7 +657,7 @@ void dmtc1(u32 fs, u32 rt)
         fpr.SetMoveLoadStore(fs, s64(gpr[rt]));
         AdvancePipeline(1);
     } else {
-        SignalCoprocessorUnusableException(1);
+        CoprocessorUnusableException(1);
     }
 }
 
@@ -670,7 +670,7 @@ void ldc1(u32 base, u32 ft, s16 imm)
         }
         AdvancePipeline(1);
     } else {
-        SignalCoprocessorUnusableException(1);
+        CoprocessorUnusableException(1);
     }
 }
 
@@ -683,7 +683,7 @@ void lwc1(u32 base, u32 ft, s16 imm)
         }
         AdvancePipeline(1);
     } else {
-        SignalCoprocessorUnusableException(1);
+        CoprocessorUnusableException(1);
     }
 }
 
@@ -709,7 +709,7 @@ void sdc1(u32 base, u32 ft, s16 imm)
         WriteVirtual<8>(gpr[base] + imm, fpr.GetMoveLoadStore<s64>(ft));
         AdvancePipeline(1);
     } else {
-        SignalCoprocessorUnusableException(1);
+        CoprocessorUnusableException(1);
     }
 }
 
@@ -719,7 +719,7 @@ void swc1(u32 base, u32 ft, s16 imm)
         WriteVirtual<4>(gpr[base] + imm, fpr.GetMoveLoadStore<s32>(ft));
         AdvancePipeline(1);
     } else {
-        SignalCoprocessorUnusableException(1);
+        CoprocessorUnusableException(1);
     }
 }
 
@@ -864,7 +864,7 @@ template<Fmt fmt> void mov(u32 fs, u32 fd)
         if (cop0.status.cu1) {
             fpr.Set<f64>(fd, fpr.GetFs<f64>(fs));
         } else {
-            SignalCoprocessorUnusableException(1);
+            CoprocessorUnusableException(1);
         }
     } else {
         OnInvalidFormat();
@@ -986,7 +986,7 @@ template<FpuNum From, FpuNum To> static void Convert(u32 fs, u32 fd)
     }
     if constexpr (std::same_as<From, To> || std::integral<From> && std::integral<To>) {
         SignalUnimplementedOp();
-        SignalException<Exception::FloatingPoint>();
+        FloatingPointException();
         return;
     }
 
@@ -1000,7 +1000,7 @@ template<FpuNum From, FpuNum To> static void Convert(u32 fs, u32 fd)
     if constexpr (std::same_as<From, s64> && std::floating_point<To>) {
         if (source >= s64(0x0080'0000'0000'0000) || source < s64(0xFF80'0000'0000'0000)) {
             SignalUnimplementedOp();
-            SignalException<Exception::FloatingPoint>();
+            FloatingPointException();
             return;
         }
     }
@@ -1040,7 +1040,7 @@ template<RoundInstr instr, FpuNum From, FpuNum To> void Round(u32 fs, u32 fd)
         if (GetAndTestExceptions()) return;
     }
     if (source != From(result) && SignalInexactOp()) {
-        SignalException<Exception::FloatingPoint>();
+        FloatingPointException();
         return;
     }
     fpr.Set<To>(fd, result);

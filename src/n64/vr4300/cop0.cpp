@@ -238,11 +238,11 @@ void dmfc0(u32 rt, u32 rd)
 {
     if (operating_mode != OperatingMode::Kernel) {
         if (!cop0.status.cu0) {
-            SignalCoprocessorUnusableException(0);
+            CoprocessorUnusableException(0);
             return;
         }
         if (addressing_mode == AddressingMode::_32bit) {
-            SignalException<Exception::ReservedInstruction>();
+            ReservedInstructionException();
             return;
         }
     }
@@ -253,11 +253,11 @@ void dmtc0(u32 rt, u32 rd)
 {
     if (operating_mode != OperatingMode::Kernel) {
         if (!cop0.status.cu0) {
-            SignalCoprocessorUnusableException(0);
+            CoprocessorUnusableException(0);
             return;
         }
         if (addressing_mode == AddressingMode::_32bit) {
-            SignalException<Exception::ReservedInstruction>();
+            ReservedInstructionException();
             return;
         }
     }
@@ -267,7 +267,7 @@ void dmtc0(u32 rt, u32 rd)
 void eret()
 {
     if (operating_mode != OperatingMode::Kernel && !cop0.status.cu0) {
-        SignalCoprocessorUnusableException(0);
+        CoprocessorUnusableException(0);
         return;
     }
     if (cop0.status.erl == 0) {
@@ -283,7 +283,10 @@ void eret()
        Then, there is no need to check if the pc is misaligned every time an instruction is fetched
        (this is one of the few places where the pc can be set to a misaligned value). */
     if (pc & 3) {
-        SignalAddressErrorException<MemOp::InstrFetch>(pc);
+        AddressErrorException<MemOp::InstrFetch>(pc);
+    } else {
+        ResetBranch();
+        exception_occurred = true; // stop pc from being incremented by 4 directly after. TODO: add a new BranchState?
     }
     SetActiveVirtualToPhysicalFunctions();
 }
@@ -291,7 +294,7 @@ void eret()
 void mfc0(u32 rt, u32 rd)
 {
     if (operating_mode != OperatingMode::Kernel && !cop0.status.cu0) {
-        SignalCoprocessorUnusableException(0);
+        CoprocessorUnusableException(0);
     } else {
         gpr.set(rt, s32(cop0.Get(rd)));
     }
@@ -300,7 +303,7 @@ void mfc0(u32 rt, u32 rd)
 void mtc0(u32 rt, u32 rd)
 {
     if (operating_mode != OperatingMode::Kernel && !cop0.status.cu0) {
-        SignalCoprocessorUnusableException(0);
+        CoprocessorUnusableException(0);
     } else {
         cop0.Set(rd, s32(gpr[rt]));
     }

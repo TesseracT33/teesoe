@@ -36,6 +36,7 @@ void OnBranchNotTaken();
 void NotifyIllegalInstrCode(u32 instr_code);
 void PowerOn();
 void Reset();
+void ResetBranch();
 u64 RunInterpreter(u64 cpu_cycles);
 u64 RunRecompiler(u64 cpu_cycles);
 void SetInterruptPending(ExternalInterruptSource);

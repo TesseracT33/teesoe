@@ -5,34 +5,26 @@
 
 namespace n64::vr4300 {
 
-enum class Exception {
-    AddressError,
-    Breakpoint,
-    BusError,
-    ColdReset,
-    CoprocessorUnusable,
-    FloatingPoint,
-    IntegerOverflow,
-    Interrupt,
-    Nmi,
-    ReservedInstruction,
-    ReservedInstructionCop2,
-    SoftReset,
-    Syscall,
-    TlbInvalid,
-    TlbMiss,
-    TlbModification,
-    Trap,
-    Watch,
-    XtlbMiss
-};
-
-void HandleException();
-template<Exception exception, MemOp mem_op = MemOp::Read> void SignalException();
-template<MemOp mem_op> void SignalAddressErrorException(u64 bad_virt_addr);
-void SignalCoprocessorUnusableException(int co);
+template<MemOp> void AddressErrorException(u64 bad_vaddr);
+void BreakpointException();
+template<MemOp> void BusErrorException();
+void ColdResetException();
+void CoprocessorUnusableException(int cop);
+void FloatingPointException();
+void IntegerOverflowException();
+void InterruptException();
+void NmiException();
+void ReservedInstructionException();
+void ReservedInstructionCop2Exception();
+void SoftResetException();
+void SyscallException();
+template<MemOp> void TlbInvalidException(u64 bad_vaddr);
+template<MemOp> void TlbMissException(u64 bad_vaddr);
+void TlbModificationException(u64 bad_vaddr);
+void TrapException();
+void WatchException();
+template<MemOp> void XtlbMissException(u64 bad_vaddr);
 
 inline bool exception_occurred;
-inline u64 exception_bad_vaddr;
 
 } // namespace n64::vr4300

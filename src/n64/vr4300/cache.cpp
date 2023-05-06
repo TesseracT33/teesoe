@@ -50,7 +50,7 @@ void cache(u32 rs, u32 rt, s16 imm)
     /* The below makes everything crash and burn */
 #if 0
 		if (!cop0.status.cu0 || operating_mode != OperatingMode::Kernel) {
-			SignalException<Exception::CoprocessorUnusable>();
+			CoprocessorUnusableException(0);
 			AdvancePipeline(cycles);
 			return;
 		}

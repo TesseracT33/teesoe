@@ -50,7 +50,7 @@ void CheckInterrupts()
             log(
               std::format("INTERRUPT; cause.ip = ${:02X}; status.im = ${:02X}", u8(cop0.cause.ip), u8(cop0.status.im)));
         }
-        SignalException<Exception::Interrupt>();
+        InterruptException();
     }
 }
 
@@ -75,7 +75,6 @@ u64 GetElapsedCycles()
 void InitializeRegisters()
 {
     std::memset(&gpr, 0, sizeof(gpr));
-    // std::memset(&fpr, 0, sizeof(fpr));
     gpr.set(29, 0xFFFF'FFFF'A400'1FF0);
     cop0.SetRaw(Cop0Reg::index, 0x3F);
     cop0.SetRaw(Cop0Reg::config, 0x7006'E463);
@@ -107,8 +106,7 @@ void InitRun(bool hle_pif)
         }
         pc = 0xFFFF'FFFF'A400'0040;
     } else {
-        SignalException<Exception::ColdReset>();
-        HandleException();
+        ColdResetException();
     }
 }
 
@@ -159,7 +157,6 @@ void OnBranchNotTaken()
 void PowerOn()
 {
     exception_occurred = false;
-
     InitializeRegisters();
     InitCop1();
     InitializeMMU();
@@ -169,41 +166,46 @@ void PowerOn()
 void Reset()
 {
     exception_occurred = false;
+    ResetBranch();
+    SoftResetException();
+}
+
+void ResetBranch()
+{
     in_branch_delay_slot_taken = in_branch_delay_slot_not_taken = false;
     branch_state = BranchState::NoBranch;
-    SignalException<Exception::SoftReset>();
-    HandleException();
 }
 
 u64 RunInterpreter(u64 cpu_cycles)
 {
     p_cycle_counter = 0;
     while (p_cycle_counter < cpu_cycles) {
-        u32 instr = FetchInstruction(pc);
-        // TODO: check exceptions. Should also use old pc in exception handler since pc is not incremented yet.
-        pc += 4;
-        disassembler::exec_cpu<CpuImpl::Interpreter>(instr);
         AdvancePipeline(1);
-        if (exception_occurred) {
+        exception_occurred = false;
+        u32 instr = FetchInstruction(pc);
+        if (exception_occurred) continue;
+        disassembler::exec_cpu<CpuImpl::Interpreter>(instr);
+        if (exception_occurred) continue;
+        switch (branch_state) {
+        case BranchState::DelaySlotNotTaken:
+            pc += 4;
             branch_state = BranchState::NoBranch;
-            HandleException();
-        } else {
-            switch (branch_state) {
-            case BranchState::DelaySlotNotTaken: branch_state = BranchState::NoBranch; break;
-            case BranchState::DelaySlotTaken: branch_state = BranchState::Perform; break;
-            case BranchState::NoBranch: in_branch_delay_slot_not_taken = false; break;
-            case BranchState::Perform:
-                pc = jump_addr;
-                branch_state = BranchState::NoBranch;
-                in_branch_delay_slot_taken = false;
-                if (jump_addr & 3) {
-                    pc += 4; // compensate for the fact that we skip the instruction fetch
-                    SignalAddressErrorException<MemOp::InstrFetch>(jump_addr);
-                    HandleException();
-                }
-                break;
-            default: std::unreachable();
-            }
+            break;
+        case BranchState::DelaySlotTaken:
+            pc += 4;
+            branch_state = BranchState::Perform;
+            break;
+        case BranchState::NoBranch:
+            pc += 4;
+            in_branch_delay_slot_not_taken = false;
+            break;
+        case BranchState::Perform:
+            pc = jump_addr;
+            branch_state = BranchState::NoBranch;
+            in_branch_delay_slot_taken = false;
+            if (pc & 3) AddressErrorException<MemOp::InstrFetch>(pc);
+            break;
+        default: std::unreachable();
         }
     }
     return p_cycle_counter - cpu_cycles;
@@ -211,6 +213,7 @@ u64 RunInterpreter(u64 cpu_cycles)
 
 u64 RunRecompiler(u64 cpu_cycles)
 {
+    // TODO: made change in interpreter to increment pc after instr execution
     auto exec_block = [](Jit::Block* block) {
         block->func();
         AdvancePipeline(block->cycles);

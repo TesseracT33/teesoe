@@ -86,9 +86,9 @@ private:
     pc,
     can_execute_dword_instrs,
     TakeBranch,
-    SignalException<Exception::IntegerOverflow>,
-    SignalException<Exception::ReservedInstruction>,
-    SignalException<Exception::Trap>,
+    IntegerOverflowException,
+    ReservedInstructionException,
+    TrapException,
 };
 
 } // namespace n64::vr4300

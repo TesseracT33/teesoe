@@ -24,7 +24,7 @@ constexpr std::array right_load_mask = {
 void Interpreter::beq(u32 rs, u32 rt, s16 imm) const
 {
     if (gpr[rs] == gpr[rt]) {
-        TakeBranch(pc + (imm << 2));
+        TakeBranch(pc + 4 + (imm << 2));
     } else {
         OnBranchNotTaken();
     }
@@ -33,7 +33,7 @@ void Interpreter::beq(u32 rs, u32 rt, s16 imm) const
 void Interpreter::beql(u32 rs, u32 rt, s16 imm) const
 {
     if (gpr[rs] == gpr[rt]) {
-        TakeBranch(pc + (imm << 2));
+        TakeBranch(pc + 4 + (imm << 2));
     } else {
         DiscardBranch();
     }
@@ -42,7 +42,7 @@ void Interpreter::beql(u32 rs, u32 rt, s16 imm) const
 void Interpreter::bgez(u32 rs, s16 imm) const
 {
     if (gpr[rs] >= 0) {
-        TakeBranch(pc + (imm << 2));
+        TakeBranch(pc + 4 + (imm << 2));
     } else {
         OnBranchNotTaken();
     }
@@ -52,28 +52,28 @@ void Interpreter::bgezal(u32 rs, s16 imm) const
 {
     bool in_delay_slot = in_branch_delay_slot_taken || in_branch_delay_slot_not_taken;
     if (gpr[rs] >= 0) {
-        TakeBranch(pc + (imm << 2));
+        TakeBranch(pc + 4 + (imm << 2));
     } else {
         OnBranchNotTaken();
     }
-    gpr.set(31, 4 + (in_delay_slot ? jump_addr : pc));
+    gpr.set(31, 4 + (in_delay_slot ? jump_addr : pc + 4));
 }
 
 void Interpreter::bgezall(u32 rs, s16 imm) const
 {
     if (gpr[rs] >= 0) {
-        TakeBranch(pc + (imm << 2));
-        gpr.set(31, pc + 4);
+        TakeBranch(pc + 4 + (imm << 2));
+        gpr.set(31, pc + 8);
     } else {
         DiscardBranch();
-        gpr.set(31, pc);
+        gpr.set(31, pc + 4);
     }
 }
 
 void Interpreter::bgezl(u32 rs, s16 imm) const
 {
     if (gpr[rs] >= 0) {
-        TakeBranch(pc + (imm << 2));
+        TakeBranch(pc + 4 + (imm << 2));
     } else {
         DiscardBranch();
     }
@@ -82,7 +82,7 @@ void Interpreter::bgezl(u32 rs, s16 imm) const
 void Interpreter::bgtz(u32 rs, s16 imm) const
 {
     if (gpr[rs] > 0) {
-        TakeBranch(pc + (imm << 2));
+        TakeBranch(pc + 4 + (imm << 2));
     } else {
         OnBranchNotTaken();
     }
@@ -91,7 +91,7 @@ void Interpreter::bgtz(u32 rs, s16 imm) const
 void Interpreter::bgtzl(u32 rs, s16 imm) const
 {
     if (gpr[rs] > 0) {
-        TakeBranch(pc + (imm << 2));
+        TakeBranch(pc + 4 + (imm << 2));
     } else {
         DiscardBranch();
     }
@@ -100,7 +100,7 @@ void Interpreter::bgtzl(u32 rs, s16 imm) const
 void Interpreter::blez(u32 rs, s16 imm) const
 {
     if (gpr[rs] <= 0) {
-        TakeBranch(pc + (imm << 2));
+        TakeBranch(pc + 4 + (imm << 2));
     } else {
         OnBranchNotTaken();
     }
@@ -109,7 +109,7 @@ void Interpreter::blez(u32 rs, s16 imm) const
 void Interpreter::blezl(u32 rs, s16 imm) const
 {
     if (gpr[rs] <= 0) {
-        TakeBranch(pc + (imm << 2));
+        TakeBranch(pc + 4 + (imm << 2));
     } else {
         DiscardBranch();
     }
@@ -118,7 +118,7 @@ void Interpreter::blezl(u32 rs, s16 imm) const
 void Interpreter::bltz(u32 rs, s16 imm) const
 {
     if (gpr[rs] < 0) {
-        TakeBranch(pc + (imm << 2));
+        TakeBranch(pc + 4 + (imm << 2));
     } else {
         OnBranchNotTaken();
     }
@@ -126,9 +126,9 @@ void Interpreter::bltz(u32 rs, s16 imm) const
 
 void Interpreter::bltzal(u32 rs, s16 imm) const
 {
-    gpr.set(31, pc + 4);
+    gpr.set(31, pc + 8);
     if (gpr[rs] < 0) {
-        TakeBranch(pc + (imm << 2));
+        TakeBranch(pc + 4 + (imm << 2));
     } else {
         OnBranchNotTaken();
     }
@@ -136,9 +136,9 @@ void Interpreter::bltzal(u32 rs, s16 imm) const
 
 void Interpreter::bltzall(u32 rs, s16 imm) const
 {
-    gpr.set(31, pc + 4);
+    gpr.set(31, pc + 8);
     if (gpr[rs] < 0) {
-        TakeBranch(pc + (imm << 2));
+        TakeBranch(pc + 4 + (imm << 2));
     } else {
         DiscardBranch();
     }
@@ -147,7 +147,7 @@ void Interpreter::bltzall(u32 rs, s16 imm) const
 void Interpreter::bltzl(u32 rs, s16 imm) const
 {
     if (gpr[rs] < 0) {
-        TakeBranch(pc + (imm << 2));
+        TakeBranch(pc + 4 + (imm << 2));
     } else {
         DiscardBranch();
     }
@@ -156,7 +156,7 @@ void Interpreter::bltzl(u32 rs, s16 imm) const
 void Interpreter::bne(u32 rs, u32 rt, s16 imm) const
 {
     if (gpr[rs] != gpr[rt]) {
-        TakeBranch(pc + (imm << 2));
+        TakeBranch(pc + 4 + (imm << 2));
     } else {
         OnBranchNotTaken();
     }
@@ -165,7 +165,7 @@ void Interpreter::bne(u32 rs, u32 rt, s16 imm) const
 void Interpreter::bnel(u32 rs, u32 rt, s16 imm) const
 {
     if (gpr[rs] != gpr[rt]) {
-        TakeBranch(pc + (imm << 2));
+        TakeBranch(pc + 4 + (imm << 2));
     } else {
         DiscardBranch();
     }
@@ -173,12 +173,12 @@ void Interpreter::bnel(u32 rs, u32 rt, s16 imm) const
 
 void Interpreter::break_() const
 {
-    SignalException<Exception::Breakpoint>();
+    BreakpointException();
 }
 
 void Interpreter::ddiv(u32 rs, u32 rt) const
 {
-    if (!can_execute_dword_instrs) return SignalException<Exception::ReservedInstruction>();
+    if (!can_execute_dword_instrs) return ReservedInstructionException();
     s64 op1 = gpr[rs];
     s64 op2 = gpr[rt];
     if (op2 == 0) { /* Peter Lemon N64 CPUTest>CPU>DDIV */
@@ -196,7 +196,7 @@ void Interpreter::ddiv(u32 rs, u32 rt) const
 
 void Interpreter::ddivu(u32 rs, u32 rt) const
 {
-    if (!can_execute_dword_instrs) return SignalException<Exception::ReservedInstruction>();
+    if (!can_execute_dword_instrs) return ReservedInstructionException();
     u64 op1 = u64(gpr[rs]);
     u64 op2 = u64(gpr[rt]);
     if (op2 == 0) {
@@ -242,7 +242,7 @@ void Interpreter::divu(u32 rs, u32 rt) const
 
 void Interpreter::dmult(u32 rs, u32 rt) const
 {
-    if (!can_execute_dword_instrs) return SignalException<Exception::ReservedInstruction>();
+    if (!can_execute_dword_instrs) return ReservedInstructionException();
 #if INT128_AVAILABLE
     s128 prod = s128(gpr[rs]) * s128(gpr[rt]);
     lo = prod & s64(-1);
@@ -257,7 +257,7 @@ void Interpreter::dmult(u32 rs, u32 rt) const
 
 void Interpreter::dmultu(u32 rs, u32 rt) const
 {
-    if (!can_execute_dword_instrs) return SignalException<Exception::ReservedInstruction>();
+    if (!can_execute_dword_instrs) return ReservedInstructionException();
 #if INT128_AVAILABLE
     u128 prod = u128(gpr[rs]) * u128(gpr[rt]);
     lo = prod & u64(-1);
@@ -273,22 +273,22 @@ void Interpreter::dmultu(u32 rs, u32 rt) const
 void Interpreter::j(u32 instr) const
 {
     if (!in_branch_delay_slot_taken) {
-        TakeBranch(pc & 0xFFFF'FFFF'F000'0000 | instr << 2 & 0xFFF'FFFF);
+        TakeBranch((pc + 4) & 0xFFFF'FFFF'F000'0000 | instr << 2 & 0xFFF'FFFF);
     }
 }
 
 void Interpreter::jal(u32 instr) const
 {
-    gpr.set(31, 4 + (in_branch_delay_slot_taken ? jump_addr : pc));
+    gpr.set(31, 4 + (in_branch_delay_slot_taken ? jump_addr : pc + 4));
     if (!in_branch_delay_slot_taken) {
-        TakeBranch(pc & 0xFFFF'FFFF'F000'0000 | instr << 2 & 0xFFF'FFFF);
+        TakeBranch((pc + 4) & 0xFFFF'FFFF'F000'0000 | instr << 2 & 0xFFF'FFFF);
     }
 }
 
 void Interpreter::jalr(u32 rs, u32 rd) const
 {
     s64 target = gpr[rs];
-    gpr.set(rd, 4 + (in_branch_delay_slot_taken ? jump_addr : pc));
+    gpr.set(rd, 4 + (in_branch_delay_slot_taken ? jump_addr : pc + 4));
     if (!in_branch_delay_slot_taken) {
         TakeBranch(target);
     }
@@ -319,7 +319,7 @@ void Interpreter::lbu(u32 rs, u32 rt, s16 imm) const
 
 void Interpreter::ld(u32 rs, u32 rt, s16 imm) const
 {
-    if (!can_execute_dword_instrs) return SignalException<Exception::ReservedInstruction>();
+    if (!can_execute_dword_instrs) return ReservedInstructionException();
     s64 val = ReadVirtual<s64>(gpr[rs] + imm);
     if (!exception_occurred) {
         gpr.set(rt, val);
@@ -328,7 +328,7 @@ void Interpreter::ld(u32 rs, u32 rt, s16 imm) const
 
 void Interpreter::ldl(u32 rs, u32 rt, s16 imm) const
 {
-    if (!can_execute_dword_instrs) return SignalException<Exception::ReservedInstruction>();
+    if (!can_execute_dword_instrs) return ReservedInstructionException();
     s64 addr = gpr[rs] + imm;
     s64 val = ReadVirtual<s64, Alignment::UnalignedLeft>(addr);
     if (!exception_occurred) {
@@ -341,7 +341,7 @@ void Interpreter::ldl(u32 rs, u32 rt, s16 imm) const
 
 void Interpreter::ldr(u32 rs, u32 rt, s16 imm) const
 {
-    if (!can_execute_dword_instrs) return SignalException<Exception::ReservedInstruction>();
+    if (!can_execute_dword_instrs) return ReservedInstructionException();
     s64 addr = gpr[rs] + imm;
     u64 val = ReadVirtual<s64, Alignment::UnalignedRight>(addr);
     if (!exception_occurred) {
@@ -495,7 +495,7 @@ void Interpreter::sync() const
 
 void Interpreter::syscall() const
 {
-    SignalException<Exception::Syscall>();
+    SyscallException();
 }
 
 void Interpreter::sw(u32 rs, u32 rt, s16 imm) const

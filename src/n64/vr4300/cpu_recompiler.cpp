@@ -25,7 +25,7 @@ constexpr std::array right_load_mask = {
 
 void Recompiler::break_() const
 {
-    call(c, SignalException<Exception::Breakpoint>);
+    call(c, BreakpointException);
     jit.branched = 1;
 }
 
@@ -279,7 +279,7 @@ void Recompiler::sync() const
 
 void Recompiler::syscall() const
 {
-    call(c, SignalException<Exception::Syscall>);
+    call(c, SyscallException);
     jit.branched = 1;
 }
 

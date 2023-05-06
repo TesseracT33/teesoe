@@ -256,8 +256,8 @@ template<Cpu cpu, CpuImpl cpu_impl, bool make_string> void cop2(u32 instr)
         case 6: COP_VR4300(ctc2, RT); break;
         case 7: COP_VR4300(dctc2); break;
         default:
-            vr4300::cop0.status.cu2 ? vr4300::SignalException<vr4300::Exception::ReservedInstructionCop2>()
-                                    : vr4300::SignalCoprocessorUnusableException(2);
+            vr4300::cop0.status.cu2 ? vr4300::ReservedInstructionCop2Exception()
+                                    : vr4300::CoprocessorUnusableException(2);
         }
     } else {
         if (instr & 1 << 25) {
@@ -325,8 +325,7 @@ template<Cpu cpu, CpuImpl cpu_impl, bool make_string> void cop3(u32 instr)
 {
     if constexpr (cpu == Cpu::VR4300) {
         if (instr >> 21 & 31) {
-            vr4300::cop0.status.cu3 ? vr4300::SignalException<vr4300::Exception::ReservedInstruction>()
-                                    : vr4300::SignalCoprocessorUnusableException(3);
+            vr4300::cop0.status.cu3 ? vr4300::ReservedInstructionException() : vr4300::CoprocessorUnusableException(3);
         } else { // MFC3
             reserved_instruction<cpu, make_string>(instr);
         }
@@ -469,7 +468,7 @@ template<Cpu cpu, bool make_string> void reserved_instruction(auto instr)
 {
     if constexpr (make_string) {
     } else if constexpr (cpu == Cpu::VR4300) {
-        vr4300::SignalException<vr4300::Exception::ReservedInstruction>();
+        vr4300::ReservedInstructionException();
     } else {
         rsp::NotifyIllegalInstrCode(instr);
     }
