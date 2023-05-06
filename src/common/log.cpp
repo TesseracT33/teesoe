@@ -88,7 +88,9 @@ void log_warn(std::string_view output)
 
 void std_out(std::string_view output)
 {
-    std::cout << output << '\n';
+    if constexpr (enable_console_logging) {
+        std::cout << output << '\n';
+    }
 }
 
 void tear_down_log()
