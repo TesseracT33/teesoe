@@ -11,22 +11,22 @@
 
 namespace n64::rsp {
 
+static u32 jump_addr;
+static u32 p_cycle_counter;
+
+static u32 FetchInstruction(u32 pc);
+
 void AdvancePipeline(u64 cycles)
 {
     p_cycle_counter += cycles;
 }
 
-void FetchDecodeExecuteInstruction()
+u32 FetchInstruction(u32 pc)
 {
-    if constexpr (log_rsp_instructions) {
-        current_instr_pc = pc;
-    }
     u32 instr;
-    std::memcpy(&instr, &imem[pc], 4); /* TODO: can pc be misaligned? */
+    std::memcpy(&instr, &imem[pc], 4);
     instr = std::byteswap(instr);
-    pc = (pc + 4) & 0xFFF;
-    disassembler::exec_rsp<CpuImpl::Interpreter>(instr);
-    AdvancePipeline(1);
+    return instr;
 }
 
 u8* GetPointerToMemory(u32 addr)
@@ -34,16 +34,9 @@ u8* GetPointerToMemory(u32 addr)
     return mem.data() + (addr & 0x1FFF);
 }
 
-void Jump(u32 target_address)
-{
-    jump_is_pending = true;
-    instructions_until_jump = 1;
-    jump_addr = target_address & 0xFFC;
-}
-
 void Link(u32 reg)
 {
-    gpr.set(reg, 0xFFF & (4 + (in_branch_delay_slot ? jump_addr : pc)));
+    gpr.set(reg, (pc + 8) & 0xFFF);
 }
 
 void NotifyIllegalInstr(std::string_view instr)
@@ -75,21 +68,6 @@ template<std::signed_integral Int> Int ReadDMEM(u32 addr)
     return ret;
 }
 
-template<std::signed_integral Int> Int ReadMemoryCpu(u32 addr)
-{ /* CPU precondition; the address is always aligned */
-    if (addr < 0x0404'0000) {
-        Int ret;
-        std::memcpy(&ret, mem.data() + (addr & 0x1FFF), sizeof(Int));
-        return std::byteswap(ret);
-    } else if constexpr (sizeof(Int) == 4) {
-        return ReadReg(addr);
-    } else {
-        log_warn(
-          std::format("Attempted to read RSP memory region at address ${:08X} for sized int {}", addr, sizeof(Int)));
-        return {};
-    }
-}
-
 u64 RdpReadCommand(u32 addr)
 { // The address is aligned to 8 bytes
     u32 words[2];
@@ -99,42 +77,52 @@ u64 RdpReadCommand(u32 addr)
     return std::bit_cast<u64>(words);
 }
 
-u64 Run(u64 rsp_cycles_to_run)
+u64 RunInterpreter(u64 rsp_cycles)
 {
-    if (sp.status.halted) {
-        return 0;
-    }
-    auto Instr = [rsp_cycles_to_run] {
+    if (sp.status.halted) return 0;
+    auto Instr = [] {
+        AdvancePipeline(1);
+        u32 instr = FetchInstruction(pc);
+        disassembler::exec_rsp<CpuImpl::Interpreter>(instr);
         if (jump_is_pending) {
-            if (instructions_until_jump-- == 0) {
-                pc = jump_addr;
-                jump_is_pending = false;
-                in_branch_delay_slot = false;
-            } else {
-                in_branch_delay_slot = true;
-            }
+            pc = jump_addr;
+            jump_is_pending = in_branch_delay_slot = false;
+            return;
         }
-        FetchDecodeExecuteInstruction();
+        if (in_branch_delay_slot) {
+            jump_is_pending = true;
+        }
+        pc = (pc + 4) & 0xFFC;
     };
     p_cycle_counter = 0;
     if (sp.status.sstep) {
         Instr();
         sp.status.halted = true;
-        return p_cycle_counter <= rsp_cycles_to_run ? 0 : p_cycle_counter - rsp_cycles_to_run;
     } else {
-        while (p_cycle_counter < rsp_cycles_to_run) {
+        while (p_cycle_counter < rsp_cycles && !sp.status.halted) {
             Instr();
-            if (sp.status.halted) {
-                if (jump_is_pending) { // note for future refactors: this makes rsp::op_break::BREAKWithinDelay pass
-                    pc = jump_addr;
-                    jump_is_pending = false;
-                    in_branch_delay_slot = false;
-                }
-                return p_cycle_counter <= rsp_cycles_to_run ? 0 : p_cycle_counter - rsp_cycles_to_run;
-            }
         }
-        return p_cycle_counter - rsp_cycles_to_run;
     }
+    if (sp.status.halted) {
+        if (jump_is_pending) { // note for future refactors: this makes rsp::op_break::BREAKWithinDelay pass
+            pc = jump_addr;
+            jump_is_pending = in_branch_delay_slot = false;
+        }
+    }
+    return p_cycle_counter <= rsp_cycles ? 0 : p_cycle_counter - rsp_cycles;
+}
+
+u64 RunRecompiler(u64 rsp_cycles)
+{
+    // TODO
+    return 0;
+}
+
+void TakeBranch(u32 target_address)
+{
+    in_branch_delay_slot = true;
+    jump_is_pending = false;
+    jump_addr = target_address & 0xFFC;
 }
 
 template<std::signed_integral Int> void WriteDMEM(u32 addr, Int data)
@@ -142,22 +130,6 @@ template<std::signed_integral Int> void WriteDMEM(u32 addr, Int data)
     /* Addr may be misaligned and the write can go out of bounds */
     for (size_t i = 0; i < sizeof(Int); ++i) {
         dmem[(addr + i) & 0xFFF] = *((u8*)(&data) + sizeof(Int) - i - 1);
-    }
-}
-
-template<size_t access_size> void WriteMemoryCpu(u32 addr, s64 data)
-{
-    s32 to_write = [&] {
-        if constexpr (access_size == 1) return data << (8 * (3 - (addr & 3)));
-        if constexpr (access_size == 2) return data << (8 * (2 - (addr & 2)));
-        if constexpr (access_size == 4) return data;
-        if constexpr (access_size == 8) return data >> 32;
-    }();
-    if (addr < 0x0404'0000) {
-        to_write = std::byteswap(to_write);
-        std::memcpy(&mem[addr & 0x1FFC], &to_write, 4);
-    } else {
-        WriteReg(addr, to_write);
     }
 }
 
@@ -169,15 +141,5 @@ template void WriteDMEM<s8>(u32, s8);
 template void WriteDMEM<s16>(u32, s16);
 template void WriteDMEM<s32>(u32, s32);
 template void WriteDMEM<s64>(u32, s64);
-
-template s8 ReadMemoryCpu<s8>(u32);
-template s16 ReadMemoryCpu<s16>(u32);
-template s32 ReadMemoryCpu<s32>(u32);
-template s64 ReadMemoryCpu<s64>(u32);
-
-template void WriteMemoryCpu<1>(u32, s64);
-template void WriteMemoryCpu<2>(u32, s64);
-template void WriteMemoryCpu<4>(u32, s64);
-template void WriteMemoryCpu<8>(u32, s64);
 
 } // namespace n64::rsp

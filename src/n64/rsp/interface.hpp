@@ -2,6 +2,8 @@
 
 #include "types.hpp"
 
+#include <concepts>
+
 namespace n64::rsp {
 
 struct Sp {
@@ -20,7 +22,9 @@ struct Sp {
     u32 dma_full, dma_busy, semaphore;
 } inline sp;
 
+template<std::signed_integral Int> Int ReadMemoryCpu(u32 addr);
 u32 ReadReg(u32 addr);
+template<size_t access_size> void WriteMemoryCpu(u32 addr, s64 data);
 void WriteReg(u32 addr, u32 data);
 
 } // namespace n64::rsp

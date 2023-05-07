@@ -32,6 +32,7 @@ void ClearInterruptPending(ExternalInterruptSource);
 void DiscardBranch();
 u64 GetElapsedCycles();
 void InitRun(bool hle_pif);
+void Link(u32 reg);
 void OnBranchNotTaken();
 void NotifyIllegalInstrCode(u32 instr_code);
 void PowerOn();

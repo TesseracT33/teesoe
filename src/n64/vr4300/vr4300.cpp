@@ -142,6 +142,11 @@ void JumpRecompiler()
   // c.
 }
 
+void Link(u32 reg)
+{
+    gpr.set(reg, pc + 8);
+}
+
 void NotifyIllegalInstrCode(u32 instr_code)
 {
     log_error(std::format("Illegal CPU instruction code {:08X} encountered.\n", instr_code));

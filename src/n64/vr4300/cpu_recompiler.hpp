@@ -86,6 +86,7 @@ private:
     pc,
     can_execute_dword_instrs,
     TakeBranch,
+    Link,
     IntegerOverflowException,
     ReservedInstructionException,
     TrapException,

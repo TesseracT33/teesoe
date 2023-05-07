@@ -13,6 +13,7 @@ template<std::signed_integral GprInt, std::signed_integral LoHiInt, std::integra
 struct Recompiler : public Cpu<GprInt, LoHiInt, PcInt> {
     using ExceptionHandler = void (*)();
     template<std::integral Int> using JumpHandler = void (*)(PcInt target);
+    using LinkHandler = void (*)(u32 reg);
 
     consteval Recompiler(Jit& jit,
       Gpr<GprInt>& gpr,
@@ -21,6 +22,7 @@ struct Recompiler : public Cpu<GprInt, LoHiInt, PcInt> {
       PcInt& pc,
       bool const& dword_op_cond,
       JumpHandler<PcInt> jump_handler,
+      LinkHandler link_handler,
       ExceptionHandler integer_overflow_exception = nullptr,
       ExceptionHandler reserved_instruction_exception = nullptr,
       ExceptionHandler trap_exception = nullptr)
@@ -32,6 +34,7 @@ struct Recompiler : public Cpu<GprInt, LoHiInt, PcInt> {
           pc,
           dword_op_cond,
           jump_handler,
+          link_handler,
           integer_overflow_exception,
           reserved_instruction_exception,
           trap_exception)
@@ -44,6 +47,7 @@ struct Recompiler : public Cpu<GprInt, LoHiInt, PcInt> {
     using Cpu<GprInt, LoHiInt, PcInt>::pc;
     using Cpu<GprInt, LoHiInt, PcInt>::dword_op_cond;
     using Cpu<GprInt, LoHiInt, PcInt>::jump;
+    using Cpu<GprInt, LoHiInt, PcInt>::link;
     using Cpu<GprInt, LoHiInt, PcInt>::integer_overflow_exception;
     using Cpu<GprInt, LoHiInt, PcInt>::reserved_instruction_exception;
     using Cpu<GprInt, LoHiInt, PcInt>::trap_exception;

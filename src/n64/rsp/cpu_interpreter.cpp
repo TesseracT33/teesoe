@@ -36,7 +36,7 @@ void Interpreter::jal(u32 instr) const
     if (!in_branch_delay_slot) {
         jump(instr << 2);
     }
-    Link(31);
+    gpr.set(31, (pc + 8) & 0xFFF);
 }
 
 void Interpreter::lb(u32 rs, u32 rt, s16 imm) const

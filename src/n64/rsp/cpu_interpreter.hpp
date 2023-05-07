@@ -34,7 +34,8 @@ struct Interpreter : public mips::Interpreter<s32, s32, u32> {
     hi_dummy,
     pc,
     can_execute_dword_instrs_dummy,
-    Jump,
+    TakeBranch,
+    Link,
 };
 
 } // namespace n64::rsp

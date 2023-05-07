@@ -14,6 +14,7 @@ struct Interpreter : public Cpu<GprInt, LoHiInt, PcInt> {
     using Cpu<GprInt, LoHiInt, PcInt>::pc;
     using Cpu<GprInt, LoHiInt, PcInt>::dword_op_cond;
     using Cpu<GprInt, LoHiInt, PcInt>::jump;
+    using Cpu<GprInt, LoHiInt, PcInt>::link;
     using Cpu<GprInt, LoHiInt, PcInt>::integer_overflow_exception;
     using Cpu<GprInt, LoHiInt, PcInt>::reserved_instruction_exception;
     using Cpu<GprInt, LoHiInt, PcInt>::trap_exception;
@@ -63,14 +64,14 @@ struct Interpreter : public Cpu<GprInt, LoHiInt, PcInt> {
     void beq(u32 rs, u32 rt, s16 imm) const
     {
         if (gpr[rs] == gpr[rt]) {
-            jump(pc + (imm << 2));
+            jump(pc + 4 + (imm << 2));
         }
     }
 
     void beql(u32 rs, u32 rt, s16 imm) const
     {
         if (gpr[rs] == gpr[rt]) {
-            jump(pc + (imm << 2));
+            jump(pc + 4 + (imm << 2));
         } else {
             pc += 4;
         }
@@ -79,32 +80,32 @@ struct Interpreter : public Cpu<GprInt, LoHiInt, PcInt> {
     void bgez(u32 rs, s16 imm) const
     {
         if (gpr[rs] >= 0) {
-            jump(pc + (imm << 2));
+            jump(pc + 4 + (imm << 2));
         }
     }
 
     void bgezal(u32 rs, s16 imm) const
     {
         if (gpr[rs] >= 0) {
-            jump(pc + (imm << 2));
+            jump(pc + 4 + (imm << 2));
         }
-        gpr.set(31, pc + 4);
+        link(31);
     }
 
     void bgezall(u32 rs, s16 imm) const
     {
         if (gpr[rs] >= 0) {
-            jump(pc + (imm << 2));
+            jump(pc + 4 + (imm << 2));
         } else {
             pc += 4;
         }
-        gpr.set(31, pc + 4);
+        link(31);
     }
 
     void bgezl(u32 rs, s16 imm) const
     {
         if (gpr[rs] >= 0) {
-            jump(pc + (imm << 2));
+            jump(pc + 4 + (imm << 2));
         } else {
             pc += 4;
         }
@@ -113,14 +114,14 @@ struct Interpreter : public Cpu<GprInt, LoHiInt, PcInt> {
     void bgtz(u32 rs, s16 imm) const
     {
         if (gpr[rs] > 0) {
-            jump(pc + (imm << 2));
+            jump(pc + 4 + (imm << 2));
         }
     }
 
     void bgtzl(u32 rs, s16 imm) const
     {
         if (gpr[rs] > 0) {
-            jump(pc + (imm << 2));
+            jump(pc + 4 + (imm << 2));
         } else {
             pc += 4;
         }
@@ -129,14 +130,14 @@ struct Interpreter : public Cpu<GprInt, LoHiInt, PcInt> {
     void blez(u32 rs, s16 imm) const
     {
         if (gpr[rs] <= 0) {
-            jump(pc + (imm << 2));
+            jump(pc + 4 + (imm << 2));
         }
     }
 
     void blezl(u32 rs, s16 imm) const
     {
         if (gpr[rs] <= 0) {
-            jump(pc + (imm << 2));
+            jump(pc + 4 + (imm << 2));
         } else {
             pc += 4;
         }
@@ -145,31 +146,32 @@ struct Interpreter : public Cpu<GprInt, LoHiInt, PcInt> {
     void bltz(u32 rs, s16 imm) const
     {
         if (gpr[rs] < 0) {
-            jump(pc + (imm << 2));
+            jump(pc + 4 + (imm << 2));
         }
     }
 
     void bltzal(u32 rs, s16 imm) const
     {
         if (gpr[rs] < 0) {
-            jump(pc + (imm << 2));
+            jump(pc + 4 + (imm << 2));
         }
-        gpr.set(31, pc + 4);
+        link(31);
     }
 
     void bltzall(u32 rs, s16 imm) const
     {
         if (gpr[rs] < 0) {
-            jump(pc + (imm << 2));
+            jump(pc + 4 + (imm << 2));
         } else {
             pc += 4;
         }
+        link(31);
     }
 
     void bltzl(u32 rs, s16 imm) const
     {
         if (gpr[rs] < 0) {
-            jump(pc + (imm << 2));
+            jump(pc + 4 + (imm << 2));
         } else {
             pc += 4;
         }
@@ -178,14 +180,14 @@ struct Interpreter : public Cpu<GprInt, LoHiInt, PcInt> {
     void bne(u32 rs, u32 rt, s16 imm) const
     {
         if (gpr[rs] != gpr[rt]) {
-            jump(pc + (imm << 2));
+            jump(pc + 4 + (imm << 2));
         }
     }
 
     void bnel(u32 rs, u32 rt, s16 imm) const
     {
         if (gpr[rs] != gpr[rt]) {
-            jump(pc + (imm << 2));
+            jump(pc + 4 + (imm << 2));
         } else {
             pc += 4;
         }
@@ -317,18 +319,18 @@ struct Interpreter : public Cpu<GprInt, LoHiInt, PcInt> {
         gpr.set(rd, gpr[rs] - gpr[rt]);
     }
 
-    void j(u32 instr) const { jump(pc & ~PcInt(0xFFF'FFFF) | instr << 2 & 0xFFF'FFFF); }
+    void j(u32 instr) const { jump((pc + 4) & ~PcInt(0xFFF'FFFF) | instr << 2 & 0xFFF'FFFF); }
 
     void jal(u32 instr) const
     {
-        jump(pc & ~PcInt(0xFFF'FFFF) | instr << 2 & 0xFFF'FFFF);
-        gpr.set(31, pc + 4);
+        jump((pc + 4) & ~PcInt(0xFFF'FFFF) | instr << 2 & 0xFFF'FFFF);
+        link(31);
     }
 
     void jalr(u32 rs, u32 rd) const
     {
         jump(gpr[rs]);
-        gpr.set(rd, pc + 4);
+        link(rd);
     }
 
     void jr(u32 rs) const { jump(gpr[rs]); }

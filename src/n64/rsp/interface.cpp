@@ -176,6 +176,21 @@ void OnDmaFinish()
     mi::RaiseInterrupt(mi::InterruptType::SP);
 }
 
+template<std::signed_integral Int> Int ReadMemoryCpu(u32 addr)
+{ /* CPU precondition; the address is always aligned */
+    if (addr < 0x0404'0000) {
+        Int ret;
+        std::memcpy(&ret, mem.data() + (addr & 0x1FFF), sizeof(Int));
+        return std::byteswap(ret);
+    } else if constexpr (sizeof(Int) == 4) {
+        return ReadReg(addr);
+    } else {
+        log_warn(
+          std::format("Attempted to read RSP memory region at address ${:08X} for sized int {}", addr, sizeof(Int)));
+        return {};
+    }
+}
+
 u32 ReadReg(u32 addr)
 {
     if (addr == sp_pc_addr) {
@@ -251,6 +266,22 @@ constexpr std::string_view RegOffsetToStr(u32 reg_offset)
     }
 }
 
+template<size_t access_size> void WriteMemoryCpu(u32 addr, s64 data)
+{
+    s32 to_write = [&] {
+        if constexpr (access_size == 1) return data << (8 * (3 - (addr & 3)));
+        if constexpr (access_size == 2) return data << (8 * (2 - (addr & 2)));
+        if constexpr (access_size == 4) return data;
+        if constexpr (access_size == 8) return data >> 32;
+    }();
+    if (addr < 0x0404'0000) {
+        to_write = std::byteswap(to_write);
+        std::memcpy(&mem[addr & 0x1FFC], &to_write, 4);
+    } else {
+        WriteReg(addr, to_write);
+    }
+}
+
 void WriteReg(u32 addr, u32 data)
 {
     if (addr == sp_pc_addr) {
@@ -269,7 +300,7 @@ void WriteReg(u32 addr, u32 data)
         switch (offset) {
         case DmaSpaddr: sp.dma_spaddr = data & 0x03FF'FFF8; break;
 
-        case DmaRamaddr: sp.dma_ramaddr = data &= 0x03FF'FFF8; break;
+        case DmaRamaddr: sp.dma_ramaddr = data & 0x03FF'FFF8; break;
 
         case DmaRdlen:
             if (sp.status.dma_busy) {
@@ -362,4 +393,15 @@ void WriteReg(u32 addr, u32 data)
         }
     }
 }
+
+template s8 ReadMemoryCpu<s8>(u32);
+template s16 ReadMemoryCpu<s16>(u32);
+template s32 ReadMemoryCpu<s32>(u32);
+template s64 ReadMemoryCpu<s64>(u32);
+
+template void WriteMemoryCpu<1>(u32, s64);
+template void WriteMemoryCpu<2>(u32, s64);
+template void WriteMemoryCpu<4>(u32, s64);
+template void WriteMemoryCpu<8>(u32, s64);
+
 } // namespace n64::rsp

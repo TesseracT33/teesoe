@@ -10,6 +10,7 @@ namespace mips {
 template<std::signed_integral GprInt, std::signed_integral LoHiInt, std::integral PcInt> struct Cpu {
     using ExceptionHandler = void (*)();
     template<std::integral Int> using JumpHandler = void (*)(PcInt target);
+    using LinkHandler = void (*)(u32 reg);
 
     consteval Cpu(Gpr<GprInt>& gpr,
       LoHiInt& lo,
@@ -17,6 +18,7 @@ template<std::signed_integral GprInt, std::signed_integral LoHiInt, std::integra
       PcInt& pc,
       bool const& dword_op_cond,
       JumpHandler<PcInt> jump_handler,
+      LinkHandler link_handler,
       ExceptionHandler integer_overflow_exception = nullptr,
       ExceptionHandler reserved_instruction_exception = nullptr,
       ExceptionHandler trap_exception = nullptr)
@@ -26,6 +28,7 @@ template<std::signed_integral GprInt, std::signed_integral LoHiInt, std::integra
         pc(pc),
         dword_op_cond(dword_op_cond),
         jump(jump_handler),
+        link(link_handler),
         integer_overflow_exception(integer_overflow_exception),
         reserved_instruction_exception(reserved_instruction_exception),
         trap_exception(trap_exception)
@@ -41,6 +44,7 @@ template<std::signed_integral GprInt, std::signed_integral LoHiInt, std::integra
     PcInt& pc;
     bool const& dword_op_cond;
     JumpHandler<PcInt> const jump;
+    LinkHandler const link;
     ExceptionHandler const integer_overflow_exception, reserved_instruction_exception, trap_exception;
 };
 
