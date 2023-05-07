@@ -1,20 +1,26 @@
-cmake_minimum_required(VERSION 3.13)
+cmake_minimum_required(VERSION 3.25)
 
 target_include_directories(teesoe PRIVATE .)
 
-##### SDL #########################
-set(SDL2_DISABLE_SDL2MAIN ON)
-set(SDL2_DISABLE_INSTALL ON)
-set(SDL2_DISABLE_UNINSTALL ON)
-set(SDL_SHARED OFF)
-set(SDL_STATIC ON)
-set(SDL_TEST OFF)
-set(SDL_SHARED_ENABLED_BY_DEFAULT OFF)
-set(SDL_STATIC_ENABLED_BY_DEFAULT ON)
-set(SDL_TEST_ENABLED_BY_DEFAULT OFF)
-add_subdirectory(SDL)
-target_link_libraries(teesoe SDL3-static)
-target_include_directories(teesoe PRIVATE SDL/include/SDL3)
+##### asmjit ####################
+set(ASMJIT_BUILD_TEST OFF)
+set(ASMJIT_STATIC ON)
+set(ASMJIT_BUILD_X86 X64)
+set(ASMJIT_BUILD_ARM ARM64)
+add_subdirectory(asmjit)
+target_link_libraries(teesoe asmjit)
+set_property(TARGET asmjit PROPERTY SYSTEM TRUE)
+
+##### bit7z ####################
+set(BIT7Z_BUILD_DOCS OFF)
+set(BIT7Z_BUILD_TESTS OFF)
+add_subdirectory(bit7z)
+if(MSVC AND CLANG)
+	# prevent clang-cl "argument unused during compilation: /Zc:throwingNew, /Zc:referenceBinding" errors
+	target_compile_options(bit7z64 PRIVATE -Wno-error=unused-command-line-argument)
+endif()
+target_link_libraries(teesoe bit7z64)
+set_property(TARGET bit7z64 PROPERTY SYSTEM TRUE)
 
 ##### imgui #########################
 add_library(imgui STATIC
@@ -33,6 +39,12 @@ target_include_directories(imgui PUBLIC
 )
 target_compile_definitions(imgui PUBLIC VK_NO_PROTOTYPES)
 target_link_libraries(teesoe imgui)
+set_property(TARGET imgui PROPERTY SYSTEM TRUE)
+
+##### nativefiledialog-extended #########################
+add_subdirectory(nativefiledialog-extended)
+target_link_libraries(teesoe nfd)
+set_property(TARGET nfd PROPERTY SYSTEM TRUE)
 
 ##### parallel-rdp-standalone #########################
 add_library(parallel-rdp-standalone STATIC
@@ -84,27 +96,23 @@ if(WIN32)
 	target_compile_definitions(parallel-rdp-standalone PRIVATE VK_USE_PLATFORM_WIN32_KHR)
 endif()
 target_link_libraries(teesoe parallel-rdp-standalone)
+set_property(TARGET parallel-rdp-standalone PROPERTY SYSTEM TRUE)
 
-##### nativefiledialog-extended #########################
-add_subdirectory(nativefiledialog-extended)
-target_link_libraries(teesoe nfd)
+##### SDL #########################
+set(SDL2_DISABLE_SDL2MAIN ON)
+set(SDL2_DISABLE_INSTALL ON)
+set(SDL2_DISABLE_UNINSTALL ON)
+set(SDL_SHARED OFF)
+set(SDL_STATIC ON)
+set(SDL_TEST OFF)
+set(SDL_SHARED_ENABLED_BY_DEFAULT OFF)
+set(SDL_STATIC_ENABLED_BY_DEFAULT ON)
+set(SDL_TEST_ENABLED_BY_DEFAULT OFF)
+add_subdirectory(SDL)
+target_link_libraries(teesoe SDL3-static)
+set_property(TARGET SDL3-static PROPERTY SYSTEM TRUE)
 
 #### yaml-cpp #########################
 add_subdirectory(yaml-cpp)
 target_link_libraries(teesoe yaml-cpp)
-
-##### asmjit ####################
-set(ASMJIT_BUILD_TEST OFF)
-set(ASMJIT_STATIC ON)
-set(ASMJIT_BUILD_X86 X64)
-set(ASMJIT_BUILD_ARM ARM64)
-add_subdirectory(asmjit)
-target_link_libraries(teesoe asmjit)
-
-##### bit7z ####################
-add_subdirectory(bit7z)
-if(MSVC AND CLANG)
-	# prevent clang-cl "argument unused during compilation: /Zc:throwingNew, /Zc:referenceBinding" errors
-	target_compile_options(bit7z64 PRIVATE -Wno-error=unused-command-line-argument)
-endif()
-target_link_libraries(teesoe bit7z64)
+set_property(TARGET yaml-cpp PROPERTY SYSTEM TRUE)

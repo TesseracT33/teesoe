@@ -1,4 +1,4 @@
-﻿cmake_minimum_required(VERSION 3.13)
+﻿cmake_minimum_required(VERSION 3.25)
 
 project(teesoe LANGUAGES C CXX)
 
@@ -8,23 +8,29 @@ add_executable(teesoe)
 
 set_property(TARGET teesoe PROPERTY CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON)
 
-if (${CMAKE_SYSTEM_PROCESSOR} STREQUAL "AMD64" OR ${CMAKE_SYSTEM_PROCESSOR} STREQUAL "x86-64")
+if (${CMAKE_SYSTEM_PROCESSOR} STREQUAL "AMD64" OR ${CMAKE_SYSTEM_PROCESSOR} STREQUAL "x86_64")
 	set(X64 1)
 endif()
 
-if (${CMAKE_SYSTEM_PROCESSOR} STREQUAL "ARM64" OR ${CMAKE_SYSTEM_PROCESSOR} STREQUAL "aarch64")
+if (${CMAKE_SYSTEM_PROCESSOR} STREQUAL "ARM64" OR ${CMAKE_SYSTEM_PROCESSOR} STREQUAL "arm64" 
+		OR ${CMAKE_SYSTEM_PROCESSOR} STREQUAL "aarch64")
 	set(ARM64 1)
 endif()
 
 if (NOT X64 AND NOT ARM64)
-	message(FATAL_ERROR "Unsupported architecture; only x86-64 and arm64 are supported.")
+	message(FATAL_ERROR "Unsupported architecture \"${CMAKE_SYSTEM_PROCESSOR}\"; only x86-64 and arm64 are supported.")
+endif()
+
+if (NOT DEFINED ${CMAKE_BUILD_TYPE})
+	message(WARNING "CMAKE_BUILD_TYPE not specified. Defaulting to \"Release\"")
+	set(CMAKE_BUILD_TYPE "Release")
 endif()
 
 if (${CMAKE_BUILD_TYPE} STREQUAL "Debug")
 	set(DEBUG 1)
 endif()
 
-if (${CMAKE_BUILD_TYPE} STREQUAL "Release")
+if (${CMAKE_BUILD_TYPE} STREQUAL "Release" OR ${CMAKE_BUILD_TYPE} STREQUAL "RelWithDebInfo")
 	set(RELEASE 1)
 endif()
 
@@ -79,7 +85,6 @@ endif()
 if (X64)
 	list(APPEND clang_flags
 		-mavx2
-		-arch:AVX2
 	)
 endif()
 
@@ -137,11 +142,10 @@ list(APPEND msvc_flags
 	/std:c++latest # C++ standard
 	/volatile:iso  # Use iso standard for 'volatile'
 	/W4            # Warning level 4
-	/w14265        # Class has virtual functions, but destructor is not virtual.
-	/w14555        # Expression has no effect; expected expression with side-effect
-	/wd2401        # Ignore "nonstandard extension used: nameless struct/union"
-	/we4289        # Nonstandard extension used: 'variable': for-loop control variable declared in the for-loop is used outside
-                   # the for-loop scope
+	/w14265        # Enable warning "Class has virtual functions, but destructor is not virtual"
+	/w14555        # Enable warning "Expression has no effect; expected expression with side-effect"
+	/we4289        # Treat as an error "Nonstandard extension used: 'variable': for-loop control variable declared in the for-loop is used
+                   # outside the for-loop scope"
 )
 
 if (DEBUG)
@@ -167,16 +171,12 @@ if (X64)
 	)
 endif()
 
-# Correctly replace default /W3 with /W4
-if (MSVC)
-	string(REGEX REPLACE "/W[1-3]" "/W4" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
-endif()
-
 if (CLANG)
 	target_compile_options(teesoe PUBLIC ${clang_flags})
 elseif (GCC)
 	target_compile_options(teesoe PUBLIC ${gcc_flags})
 elseif (MSVC)
+	string(REGEX REPLACE "/W3" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")	
 	target_compile_options(teesoe PUBLIC ${msvc_flags})
 endif()
 
