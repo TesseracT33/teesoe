@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <cassert>
 #include <concepts>
 #include <expected>
 #include <format>
@@ -11,14 +12,22 @@
 
 template<auto... Args> constexpr bool always_false{};
 
-template<std::integral Int> constexpr void clear_bit(Int& num, uint pos)
+template<std::integral Int> constexpr void clear_bit(Int& num, std::integral auto pos)
 {
+    assert(pos >= 0 && pos < sizeof(Int) * 8);
     num &= ~(Int(1) << pos);
 }
 
-template<std::integral Int> [[nodiscard]] constexpr bool get_bit(Int num, uint pos)
+template<std::integral Int> [[nodiscard]] constexpr bool get_bit(Int num, std::integral auto pos)
 {
+    assert(pos >= 0 && pos < sizeof(Int) * 8);
     return num & Int(1) << pos;
+}
+
+[[nodiscard]] inline u8 get_byte(auto& obj, std::integral auto byte_index)
+{
+    assert(byte_index >= 0 && byte_index < sizeof(obj));
+    return reinterpret_cast<u8*>(&obj)[byte_index];
 }
 
 template<typename T, size_t size> [[nodiscard]] constexpr std::array<T, size> make_array_of(T const& value)
@@ -57,9 +66,16 @@ template<typename K, typename V1, typename... V2> [[nodiscard]] constexpr bool o
     return vec;
 }
 
-template<std::integral Int> constexpr void set_bit(Int& num, uint pos)
+template<std::integral Int> constexpr void set_bit(Int& num, std::integral auto pos)
 {
+    assert(pos >= 0 && pos < sizeof(Int) * 8);
     num |= Int(1) << pos;
+}
+
+inline void set_byte(auto& obj, std::integral auto byte_index, u8 value)
+{
+    assert(byte_index >= 0 && byte_index < sizeof(obj));
+    reinterpret_cast<u8*>(&obj)[byte_index] = value;
 }
 
 /* Sign extends 'value' consisting of 'num_bits' bits to the width given by 'Int' */
@@ -97,6 +113,7 @@ template<std::integral Int> [[nodiscard]] constexpr auto to_unsigned(Int val)
 
 template<std::integral Int> constexpr void toggle_bit(Int& num, uint pos)
 {
+    assert(pos >= 0 && pos < sizeof(Int) * 8);
     num ^= ~(Int(1) << pos);
 }
 

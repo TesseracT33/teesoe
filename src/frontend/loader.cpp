@@ -1,6 +1,7 @@
 #include "loader.hpp"
 #include "bit7z/bitfileextractor.hpp"
 #include "frontend/message.hpp"
+#include "gba/gba.hpp"
 #include "gui.hpp"
 #include "log.hpp"
 #include "n64.hpp"
@@ -65,7 +66,7 @@ Status load_core(System system_arg)
     switch (system_arg) {
     case System::CHIP8: core = nullptr; break;
     case System::GB: core = nullptr; break;
-    case System::GBA: core = nullptr; break;
+    case System::GBA: core = std::make_unique<GBA>(); break;
     case System::N64: core = std::make_unique<N64>(); break;
     case System::NES: core = nullptr; break;
     case System::PS2: core = nullptr; break;

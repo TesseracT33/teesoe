@@ -22,4 +22,5 @@ target_include_directories(teesoe PRIVATE
 	common
 )
 
+add_subdirectory(gba)
 add_subdirectory(n64)

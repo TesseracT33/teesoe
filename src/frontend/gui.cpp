@@ -129,9 +129,13 @@ void DrawCoreSettingsWindow()
 {
     if (ImGui::Begin("Core settings", &show_core_settings_window)) {
         static int tab{};
+        if (ImGui::Button("GBA", ImVec2(100.0f, 0.0f))) tab = 1;
+        ImGui::SameLine(0.0, 2.0f);
         if (ImGui::Button("N64", ImVec2(100.0f, 0.0f))) tab = 0;
-        // ImGui::SameLine(0.0, 2.0f);
-        // if (ImGui::Button("Test", ImVec2(100.0f, 0.0f))) tab = 1;
+
+        auto DrawGBA = [] {
+
+        };
 
         auto DrawN64 = [] {
             static int cpu_impl_sel{};
@@ -154,7 +158,8 @@ void DrawCoreSettingsWindow()
         };
 
         switch (tab) {
-        case 0: DrawN64(); break;
+        case 0: DrawGBA(); break;
+        case 1: DrawN64(); break;
         }
 
         if (ImGui::Button("Apply and save")) {
@@ -217,12 +222,13 @@ void DrawGameSelectionWindow()
 
     if (ImGui::Begin("Game selection", &show_game_selection_window)) {
         static int tab{};
-        if (ImGui::Button("N64", ImVec2(100.0f, 0.0f))) tab = 0;
-        // ImGui::SameLine(0.0, 2.0f);
-        // if (ImGui::Button("Test", ImVec2(100.0f, 0.0f))) tab = 1;
+        if (ImGui::Button("GBA", ImVec2(100.0f, 0.0f))) tab = 0;
+        ImGui::SameLine(0.0, 2.0f);
+        if (ImGui::Button("N64", ImVec2(100.0f, 0.0f))) tab = 1;
 
         switch (tab) {
-        case 0: DrawCoreList(System::N64); break;
+        case 0: DrawCoreList(System::GBA); break;
+        case 1: DrawCoreList(System::N64); break;
         }
 
         ImGui::End();
