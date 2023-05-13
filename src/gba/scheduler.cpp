@@ -41,7 +41,8 @@ void AddEvent(EventType type, u64 time_until_fire, EventCallback callback)
             return;
         }
     }
-    events.emplace_back(callback, event_absolute_time, type);
+    // events.emplace_back(callback, event_absolute_time, type);
+    events.push_back(Event{ callback, event_absolute_time, type });
 }
 
 void ChangeEventTime(EventType type, u64 new_time_to_fire)
@@ -79,7 +80,8 @@ void EngageDriver(DriverType type, DriverRunFunc run_func, DriverSuspendFunc sus
             return;
         }
     }
-    drivers.emplace_back(type, run_func, suspend_func);
+    // drivers.emplace_back(type, run_func, suspend_func);
+    drivers.push_back(Driver{ type, run_func, suspend_func });
 }
 
 uint GetDriverPriority(DriverType type)

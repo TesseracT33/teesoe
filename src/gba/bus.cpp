@@ -538,4 +538,8 @@ ENUM_READ_WRITE_TEMPL_SPEC(scheduler::DriverType::Dma1);
 ENUM_READ_WRITE_TEMPL_SPEC(scheduler::DriverType::Dma2);
 ENUM_READ_WRITE_TEMPL_SPEC(scheduler::DriverType::Dma3);
 
+template u8 ReadOpenBus<u8>(u32);
+template u16 ReadOpenBus<u16>(u32);
+template u32 ReadOpenBus<u32>(u32);
+
 } // namespace gba::bus
