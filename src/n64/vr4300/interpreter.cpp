@@ -1,7 +1,8 @@
-#include "cpu_interpreter.hpp"
+#include "interpreter.hpp"
 #include "cop0.hpp"
+#include "disassembler.hpp"
+#include "exceptions.hpp"
 #include "host.hpp"
-#include "memory/memory.hpp"
 #include "mmu.hpp"
 
 #include <array>
@@ -20,6 +21,74 @@ constexpr std::array right_load_mask = {
     0xFF00'0000'0000'0000ull,
     0ull,
 };
+
+void DiscardBranch()
+{
+    pc += 4;
+    in_branch_delay_slot_taken = in_branch_delay_slot_not_taken = false;
+    branch_state = BranchState::NoBranch;
+}
+
+void Link(u32 reg)
+{
+    gpr.set(reg, pc + 8);
+}
+
+void OnBranchNotTaken()
+{
+    in_branch_delay_slot_not_taken = true;
+    in_branch_delay_slot_taken = false;
+    branch_state = BranchState::DelaySlotNotTaken;
+}
+
+void ResetBranch()
+{
+    in_branch_delay_slot_taken = in_branch_delay_slot_not_taken = false;
+    branch_state = BranchState::NoBranch;
+}
+
+u64 RunInterpreter(u64 cpu_cycles)
+{
+    cycle_counter = 0;
+    while (cycle_counter < cpu_cycles) {
+        AdvancePipeline(1);
+        exception_occurred = false;
+        u32 instr = FetchInstruction(pc);
+        if (exception_occurred) continue;
+        disassembler::exec_cpu<CpuImpl::Interpreter>(instr);
+        if (exception_occurred) continue;
+        switch (branch_state) {
+        case BranchState::DelaySlotNotTaken:
+            pc += 4;
+            branch_state = BranchState::NoBranch;
+            break;
+        case BranchState::DelaySlotTaken:
+            pc += 4;
+            branch_state = BranchState::Perform;
+            break;
+        case BranchState::NoBranch:
+            pc += 4;
+            in_branch_delay_slot_not_taken = false;
+            break;
+        case BranchState::Perform:
+            pc = jump_addr;
+            branch_state = BranchState::NoBranch;
+            in_branch_delay_slot_taken = false;
+            if (pc & 3) AddressErrorException<MemOp::InstrFetch>(pc);
+            break;
+        default: std::unreachable();
+        }
+    }
+    return cycle_counter - cpu_cycles;
+}
+
+void TakeBranch(u64 target_address)
+{
+    in_branch_delay_slot_taken = true;
+    in_branch_delay_slot_not_taken = false;
+    branch_state = BranchState::DelaySlotTaken;
+    jump_addr = target_address;
+}
 
 void Interpreter::beq(u32 rs, u32 rt, s16 imm) const
 {

@@ -1,13 +1,34 @@
-#include "cpu_recompiler.hpp"
-#include "interface.hpp"
+#include "recompiler.hpp"
 #include "interface/mi.hpp"
 #include "rdp/rdp.hpp"
 #include "rsp.hpp"
 
-namespace n64::rsp {
-
 using namespace asmjit;
 using namespace asmjit::x86;
+
+namespace n64::rsp {
+
+Status InitRecompiler()
+{
+    return status_unimplemented();
+}
+
+void Invalidate(u32 addr)
+{
+}
+
+void InvalidateRange(u32 addr_lo, u32 addr_hi)
+{
+}
+
+void OnBranchJit()
+{
+}
+
+u64 RunRecompiler(u64 rsp_cycles)
+{
+    return 0;
+}
 
 void Recompiler::add(u32 rs, u32 rt, u32 rd) const
 {
@@ -40,17 +61,17 @@ void Recompiler::j(u32 instr) const
 {
     c.mov(gp[0], instr << 2);
     call(c, jump);
-    jit.branch_hit = 1;
+    on_branch();
 }
 
 void Recompiler::jal(u32 instr) const
 {
     c.mov(gp[0], instr << 2);
     call(c, jump);
-    c.mov(gp[0], pc_ptr());
+    c.mov(gp[0], ptr(pc));
     c.add(gp[0], 4);
     c.mov(gpr_ptr(31), gp[0]);
-    jit.branch_hit = 1;
+    on_branch();
 }
 
 void Recompiler::lb(u32 rs, u32 rt, s16 imm) const

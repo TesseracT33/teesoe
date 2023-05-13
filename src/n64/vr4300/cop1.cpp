@@ -6,6 +6,7 @@
 #include "mmu.hpp"
 #include "util.hpp"
 #include "vr4300.hpp"
+#include "vr4300/interpreter.hpp"
 
 #include <array>
 #include <bit>

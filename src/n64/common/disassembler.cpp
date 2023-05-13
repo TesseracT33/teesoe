@@ -1,15 +1,15 @@
 #include "disassembler.hpp"
-#include "rsp/cpu_interpreter.hpp"
-#include "rsp/cpu_recompiler.hpp"
+#include "rsp/interpreter.hpp"
+#include "rsp/recompiler.hpp"
 #include "rsp/vu.hpp"
 #include "util.hpp"
 #include "vr4300/cache.hpp"
 #include "vr4300/cop0.hpp"
 #include "vr4300/cop1.hpp"
 #include "vr4300/cop2.hpp"
-#include "vr4300/cpu_interpreter.hpp"
-#include "vr4300/cpu_recompiler.hpp"
 #include "vr4300/exceptions.hpp"
+#include "vr4300/interpreter.hpp"
+#include "vr4300/recompiler.hpp"
 
 #include <utility>
 
@@ -126,9 +126,9 @@ template<Cpu cpu, CpuImpl cpu_impl, auto func, typename... Args> void interpr_ji
 template<Cpu cpu, auto impl> void jit_call_interpreter_impl()
 {
     if constexpr (cpu == Cpu::VR4300) {
-        call(vr4300::jit.compiler, impl);
+        call(vr4300::compiler, impl);
     } else {
-        call(rsp::jit.compiler, impl);
+        call(rsp::compiler, impl);
     }
 }
 
@@ -138,9 +138,9 @@ void jit_call_interpreter_impl(Arg first_arg, Args... remaining_args)
     static int r_idx{};
     static auto* const compiler = [] {
         if constexpr (cpu == Cpu::VR4300) {
-            return &vr4300::jit.compiler;
+            return &vr4300::compiler;
         } else {
-            return &rsp::jit.compiler;
+            return &rsp::compiler;
         }
     }();
     compiler->mov(gp[r_idx], first_arg);

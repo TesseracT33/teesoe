@@ -4,6 +4,7 @@
 #include "n64_build_options.hpp"
 #include "util.hpp"
 #include "vr4300.hpp"
+#include "vr4300/interpreter.hpp"
 
 #include <format>
 

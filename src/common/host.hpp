@@ -18,6 +18,18 @@ struct Arch {
 #error Unsupported architecture; only x86-64 and arm64 are supported.
 #endif
 
+#ifdef _WIN32
+struct Os {
+    static constexpr bool windows = 1;
+    static constexpr bool linux = 0;
+} constexpr os;
+#else
+struct Os {
+    static constexpr bool windows = 0;
+    static constexpr bool linux = 1;
+} constexpr os;
+#endif
+
 #ifdef __has_builtin
 #if __has_builtin(__builtin_add_overflow)
 #define HAS_BUILTIN_ADD_OVERFLOW 1

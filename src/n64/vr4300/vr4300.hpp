@@ -1,14 +1,17 @@
 #pragma once
 
-#include "jit/jit.hpp"
 #include "mips/gpr.hpp"
 #include "n64.hpp"
 #include "types.hpp"
 
-#include <string>
-#include <string_view>
-
 namespace n64::vr4300 {
+
+enum class BranchState {
+    DelaySlotNotTaken,
+    DelaySlotTaken,
+    NoBranch,
+    Perform,
+} inline branch_state{ BranchState::NoBranch };
 
 enum class ExternalInterruptSource {
     MI = 1 << 2, /* ip2; MIPS Interface interrupt. Set to 1 when (MI_INTR_REG & MI_INTR_MASK_REG) != 0  */
@@ -29,35 +32,21 @@ void AddInitialEvents();
 void AdvancePipeline(u64 cycles);
 void CheckInterrupts();
 void ClearInterruptPending(ExternalInterruptSource);
-void DiscardBranch();
 u64 GetElapsedCycles();
 void InitRun(bool hle_pif);
-void Link(u32 reg);
-void OnBranchNotTaken();
 void NotifyIllegalInstrCode(u32 instr_code);
 void PowerOn();
 void Reset();
-void ResetBranch();
-u64 RunInterpreter(u64 cpu_cycles);
-u64 RunRecompiler(u64 cpu_cycles);
 void SetInterruptPending(ExternalInterruptSource);
 void SignalInterruptFalse();
-void TakeBranch(u64 target_address);
 
 inline bool in_branch_delay_slot_taken, in_branch_delay_slot_not_taken;
 inline bool ll_bit; /* Read from / written to by load linked and store conditional instructions. */
-inline bool last_instr_was_load = false;
+inline bool last_instr_was_load;
 inline u64 jump_addr;
 inline u64 pc;
 inline s64 lo, hi; /* Contain the result of a double-word multiplication or division. */
-inline u64 p_cycle_counter;
+inline u64 cycle_counter;
 inline ::mips::Gpr<s64> gpr;
-
-// recompiler
-inline Jit jit;
-
-/* Debugging */
-inline std::string_view current_instr_name;
-inline std::string current_instr_log_output;
 
 } // namespace n64::vr4300

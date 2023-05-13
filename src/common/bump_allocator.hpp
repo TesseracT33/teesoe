@@ -9,7 +9,7 @@
 
 class BumpAllocator {
 public:
-    BumpAllocator(size_t size) : memory(size, 0), index(0) {}
+    BumpAllocator(size_t size = 0) : memory(size, 0), index(0) {}
 
     u8* acquire(size_t size)
     {
@@ -21,6 +21,12 @@ public:
         u8* ret = &memory[index];
         index += size;
         return ret;
+    }
+
+    void allocate(size_t size)
+    {
+        memory.resize(size, 0);
+        index = 0;
     }
 
 private:

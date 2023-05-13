@@ -1,12 +1,26 @@
+#pragma once
+
+#include "asmjit/a64.h"
+#include "asmjit/x86.h"
 #include "exceptions.hpp"
-#include "mips/interpreter.hpp"
+#include "host.hpp"
+#include "mips/recompiler.hpp"
+#include "status.hpp"
 #include "types.hpp"
 #include "vr4300.hpp"
 
 namespace n64::vr4300 {
 
-struct Interpreter : public mips::Interpreter<s64, s64, u64> {
-    using mips::Interpreter<s64, s64, u64>::Interpreter;
+Status InitRecompiler();
+void Invalidate(u32 addr);
+void InvalidateRange(u32 addr_lo, u32 addr_hi);
+void OnBranchJit();
+u64 RunRecompiler(u64 cpu_cycles);
+
+inline std::conditional_t<arch.x64, asmjit::x86::Compiler, asmjit::a64::Compiler> compiler;
+
+struct Recompiler : public mips::Recompiler<s64, s64, u64> {
+    using mips::Recompiler<s64, s64, u64>::Recompiler;
 
     void beq(u32 rs, u32 rt, s16 imm) const;
     void beql(u32 rs, u32 rt, s16 imm) const;
@@ -62,14 +76,28 @@ struct Interpreter : public mips::Interpreter<s64, s64, u64> {
     void sw(u32 rs, u32 rt, s16 imm) const;
     void swl(u32 rs, u32 rt, s16 imm) const;
     void swr(u32 rs, u32 rt, s16 imm) const;
-} inline constexpr cpu_interpreter{
+
+private:
+    template<std::integral> void load(u32 rs, u32 rt, s16 imm) const;
+    template<std::integral> void load_left(u32 rs, u32 rt, s16 imm) const;
+    template<std::integral> void load_linked(u32 rs, u32 rt, s16 imm) const;
+    template<std::integral> void load_right(u32 rs, u32 rt, s16 imm) const;
+    template<bool unsig> void multiply32(u32 rs, u32 rt) const;
+    template<bool unsig> void multiply64(u32 rs, u32 rt) const;
+    template<std::integral> void store(u32 rs, u32 rt, s16 imm) const;
+    template<std::integral> void store_conditional(u32 rs, u32 rt, s16 imm) const;
+    template<std::integral> void store_left(u32 rs, u32 rt, s16 imm) const;
+    template<std::integral> void store_right(u32 rs, u32 rt, s16 imm) const;
+} inline constexpr cpu_recompiler{
+    compiler,
     gpr,
     lo,
     hi,
     pc,
     can_execute_dword_instrs,
-    TakeBranch,
-    Link,
+    [](u64) {},
+    [](u32) {},
+    OnBranchJit,
     IntegerOverflowException,
     ReservedInstructionException,
     TrapException,

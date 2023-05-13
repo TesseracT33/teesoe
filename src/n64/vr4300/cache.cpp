@@ -206,22 +206,22 @@ template<std::signed_integral Int, MemOp mem_op> Int ReadCacheableArea(u32 paddr
     if constexpr (mem_op == MemOp::InstrFetch) {
         ICacheLine& cache_line = i_cache[paddr >> 5 & 0x1FF];
         if (cache_line.valid && (paddr & ~0xFFF) == cache_line.ptag) { /* cache hit */
-            p_cycle_counter += cache_hit_read_cycle_delay;
+            cycle_counter += cache_hit_read_cycle_delay;
         } else { /* cache miss */
             FillCacheLine(cache_line, paddr);
-            p_cycle_counter += cache_miss_cycle_delay;
+            cycle_counter += cache_miss_cycle_delay;
         }
         return ReadFromCacheLine(cache_line);
     } else { /* MemOp::Read */
         DCacheLine& cache_line = d_cache[paddr >> 4 & 0x1FF];
         if (cache_line.valid && (paddr & ~0xFFF) == cache_line.ptag) { /* cache hit */
-            p_cycle_counter += cache_hit_read_cycle_delay;
+            cycle_counter += cache_hit_read_cycle_delay;
         } else { /* cache miss */
             if (cache_line.valid && cache_line.dirty) {
                 WritebackCacheLine(cache_line, paddr);
             }
             FillCacheLine(cache_line, paddr);
-            p_cycle_counter += cache_miss_cycle_delay;
+            cycle_counter += cache_miss_cycle_delay;
         }
         return ReadFromCacheLine(cache_line);
     }
@@ -234,13 +234,13 @@ template<size_t access_size, typename... MaskT> void WriteCacheableArea(u32 padd
     DCacheLine& cache_line = d_cache[paddr >> 4 & 0x1FF];
     if (cache_line.valid && (paddr & ~0xFFF) == cache_line.ptag) { /* cache hit */
         cache_line.dirty = true;
-        p_cycle_counter += cache_hit_write_cycle_delay;
+        cycle_counter += cache_hit_write_cycle_delay;
     } else { /* cache miss */
         if (cache_line.valid && cache_line.dirty) {
             WritebackCacheLine(cache_line, paddr);
         }
         FillCacheLine(cache_line, paddr);
-        p_cycle_counter += cache_miss_cycle_delay;
+        cycle_counter += cache_miss_cycle_delay;
     }
     static constexpr bool apply_mask = sizeof...(mask) == 1;
     if constexpr (apply_mask) {

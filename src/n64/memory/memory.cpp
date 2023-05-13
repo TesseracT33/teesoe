@@ -11,7 +11,7 @@
 #include "pif.hpp"
 #include "rdp/rdp.hpp"
 #include "rdram.hpp"
-#include "rsp/interface.hpp"
+#include "rsp/rsp.hpp"
 
 #include <bit>
 #include <format>

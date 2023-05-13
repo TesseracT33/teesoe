@@ -2,8 +2,10 @@
 #include "interface/ai.hpp"
 #include "interface/vi.hpp"
 #include "n64.hpp"
-#include "rsp/rsp.hpp"
-#include "vr4300/vr4300.hpp"
+#include "rsp/interpreter.hpp"
+#include "rsp/recompiler.hpp"
+#include "vr4300/interpreter.hpp"
+#include "vr4300/recompiler.hpp"
 
 #include <vector>
 

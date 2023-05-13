@@ -1,7 +1,6 @@
 cmake_minimum_required (VERSION 3.25)
 
 target_sources(teesoe PRIVATE
-	
 	common/disassembler.cpp
 	common/n64.cpp
 	common/scheduler.cpp
@@ -21,9 +20,8 @@ target_sources(teesoe PRIVATE
 	rdp/parallel_rdp_wrapper.cpp
 	rdp/rdp.cpp
 
-	rsp/cpu_interpreter.cpp
-	rsp/cpu_recompiler.cpp
-	rsp/interface.cpp
+	rsp/interpreter.cpp
+	rsp/recompiler.cpp
 	rsp/rsp.cpp
 	rsp/vu_interpreter.cpp
 	rsp/vu_recompiler.cpp
@@ -32,10 +30,10 @@ target_sources(teesoe PRIVATE
 	vr4300/cop0.cpp
 	vr4300/cop1.cpp
 	vr4300/cop2.cpp
-	vr4300/cpu_interpreter.cpp
-	vr4300/cpu_recompiler.cpp
 	vr4300/exceptions.cpp
+	vr4300/interpreter.cpp
 	vr4300/mmu.cpp
+	vr4300/recompiler.cpp
 	vr4300/vr4300.cpp
 )
 

@@ -1,10 +1,45 @@
-#include "cpu_interpreter.hpp"
-#include "interface.hpp"
+#include "interpreter.hpp"
+#include "disassembler.hpp"
 #include "interface/mi.hpp"
 #include "rdp/rdp.hpp"
 #include "rsp.hpp"
 
 namespace n64::rsp {
+
+u64 RunInterpreter(u64 rsp_cycles)
+{
+    if (sp.status.halted) return 0;
+    auto Instr = [] {
+        AdvancePipeline(1);
+        u32 instr = FetchInstruction(pc);
+        disassembler::exec_rsp<CpuImpl::Interpreter>(instr);
+        if (jump_is_pending) {
+            pc = jump_addr;
+            jump_is_pending = in_branch_delay_slot = false;
+            return;
+        }
+        if (in_branch_delay_slot) {
+            jump_is_pending = true;
+        }
+        pc = (pc + 4) & 0xFFC;
+    };
+    cycle_counter = 0;
+    if (sp.status.sstep) {
+        Instr();
+        sp.status.halted = true;
+    } else {
+        while (cycle_counter < rsp_cycles && !sp.status.halted) {
+            Instr();
+        }
+    }
+    if (sp.status.halted) {
+        if (jump_is_pending) { // note for future refactors: this makes rsp::op_break::BREAKWithinDelay pass
+            pc = jump_addr;
+            jump_is_pending = in_branch_delay_slot = false;
+        }
+    }
+    return cycle_counter <= rsp_cycles ? 0 : cycle_counter - rsp_cycles;
+}
 
 void Interpreter::add(u32 rs, u32 rt, u32 rd) const
 {

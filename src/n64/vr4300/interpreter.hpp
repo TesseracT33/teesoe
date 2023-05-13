@@ -1,32 +1,42 @@
+#pragma once
+
 #include "exceptions.hpp"
-#include "mips/recompiler.hpp"
+#include "mips/interpreter.hpp"
+#include "mmu.hpp"
 #include "types.hpp"
 #include "vr4300.hpp"
 
-#include <concepts>
-
 namespace n64::vr4300 {
 
-struct Recompiler : public mips::Recompiler<s64, s64, u64> {
-    using mips::Recompiler<s64, s64, u64>::Recompiler;
+void AddInitialEvents();
+void CheckInterrupts();
+void DiscardBranch();
+u64 GetElapsedCycles();
+void Link(u32 reg);
+void OnBranchNotTaken();
+void ResetBranch();
+u64 RunInterpreter(u64 cpu_cycles);
+void TakeBranch(u64 target_address);
 
-    // TODO
-    // void beq(u32 rs, u32 rt, s16 imm) const;
-    // void beql(u32 rs, u32 rt, s16 imm) const;
-    // void bgez(u32 rs, s16 imm) const;
-    // void bgezal(u32 rs, s16 imm) const;
-    // void bgezall(u32 rs, s16 imm) const;
-    // void bgezl(u32 rs, s16 imm) const;
-    // void bgtz(u32 rs, s16 imm) const;
-    // void bgtzl(u32 rs, s16 imm) const;
-    // void blez(u32 rs, s16 imm) const;
-    // void blezl(u32 rs, s16 imm) const;
-    // void bltz(u32 rs, s16 imm) const;
-    // void bltzal(u32 rs, s16 imm) const;
-    // void bltzall(u32 rs, s16 imm) const;
-    // void bltzl(u32 rs, s16 imm) const;
-    // void bne(u32 rs, u32 rt, s16 imm) const;
-    // void bnel(u32 rs, u32 rt, s16 imm) const;
+struct Interpreter : public mips::Interpreter<s64, s64, u64> {
+    using mips::Interpreter<s64, s64, u64>::Interpreter;
+
+    void beq(u32 rs, u32 rt, s16 imm) const;
+    void beql(u32 rs, u32 rt, s16 imm) const;
+    void bgez(u32 rs, s16 imm) const;
+    void bgezal(u32 rs, s16 imm) const;
+    void bgezall(u32 rs, s16 imm) const;
+    void bgezl(u32 rs, s16 imm) const;
+    void bgtz(u32 rs, s16 imm) const;
+    void bgtzl(u32 rs, s16 imm) const;
+    void blez(u32 rs, s16 imm) const;
+    void blezl(u32 rs, s16 imm) const;
+    void bltz(u32 rs, s16 imm) const;
+    void bltzal(u32 rs, s16 imm) const;
+    void bltzall(u32 rs, s16 imm) const;
+    void bltzl(u32 rs, s16 imm) const;
+    void bne(u32 rs, u32 rt, s16 imm) const;
+    void bnel(u32 rs, u32 rt, s16 imm) const;
     void break_() const;
     void ddiv(u32 rs, u32 rt) const;
     void ddivu(u32 rs, u32 rt) const;
@@ -65,21 +75,7 @@ struct Recompiler : public mips::Recompiler<s64, s64, u64> {
     void sw(u32 rs, u32 rt, s16 imm) const;
     void swl(u32 rs, u32 rt, s16 imm) const;
     void swr(u32 rs, u32 rt, s16 imm) const;
-
-private:
-    template<std::integral> void load(u32 rs, u32 rt, s16 imm) const;
-    template<std::integral> void load_left(u32 rs, u32 rt, s16 imm) const;
-    template<std::integral> void load_linked(u32 rs, u32 rt, s16 imm) const;
-    template<std::integral> void load_right(u32 rs, u32 rt, s16 imm) const;
-    template<bool unsig> void multiply32(u32 rs, u32 rt) const;
-    template<bool unsig> void multiply64(u32 rs, u32 rt) const;
-    template<std::integral> void store(u32 rs, u32 rt, s16 imm) const;
-    template<std::integral> void store_conditional(u32 rs, u32 rt, s16 imm) const;
-    template<std::integral> void store_left(u32 rs, u32 rt, s16 imm) const;
-    template<std::integral> void store_right(u32 rs, u32 rt, s16 imm) const;
-
-} inline constexpr cpu_recompiler{
-    jit,
+} inline constexpr cpu_interpreter{
     gpr,
     lo,
     hi,
