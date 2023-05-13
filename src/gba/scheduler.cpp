@@ -32,7 +32,9 @@ void AddEvent(EventType type, u64 time_until_fire, EventCallback callback)
     u64 event_absolute_time = global_time + time_until_fire;
     for (auto it = events.begin(); it != events.end(); ++it) {
         if (event_absolute_time < it->time) {
-            events.emplace(it, callback, event_absolute_time, type);
+            // events.emplace(it, callback, event_absolute_time, type);
+            // TODO: emplace unsupported in clang-cl due to _MSVC_LANG being defined as 2014 something :thisisfine:
+            events.insert(it, Event{ callback, event_absolute_time, type });
             if (it == events.begin()) {
                 drivers.front().suspend_function();
             }
@@ -68,7 +70,9 @@ void EngageDriver(DriverType type, DriverRunFunc run_func, DriverSuspendFunc sus
 {
     for (auto it = drivers.begin(); it != drivers.end(); ++it) {
         if (GetDriverPriority(it->type) < GetDriverPriority(type)) {
-            drivers.emplace(it, type, run_func, suspend_func);
+            // drivers.emplace(it, type, run_func, suspend_func);
+            //  TODO: emplace unsupported in clang-cl due to _MSVC_LANG being defined as 2014 something :thisisfine:
+            drivers.insert(it, Driver{ type, run_func, suspend_func });
             if (it == drivers.begin()) {
                 (++it)->suspend_function();
             }

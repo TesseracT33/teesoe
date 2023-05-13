@@ -983,9 +983,6 @@ void WaveChannel::Trigger()
     wave_pos = 0;
 }
 
-template PulseChannel<true>;
-template PulseChannel<false>;
-
 template u8 ReadReg<u8>(u32);
 template s8 ReadReg<s8>(u32);
 template u16 ReadReg<u16>(u32);
