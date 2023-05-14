@@ -57,26 +57,15 @@ u64 RunInterpreter(u64 cpu_cycles)
         if (exception_occurred) continue;
         disassembler::exec_cpu<CpuImpl::Interpreter>(instr);
         if (exception_occurred) continue;
-        switch (branch_state) {
-        case BranchState::DelaySlotNotTaken:
-            pc += 4;
-            branch_state = BranchState::NoBranch;
-            break;
-        case BranchState::DelaySlotTaken:
-            pc += 4;
-            branch_state = BranchState::Perform;
-            break;
-        case BranchState::NoBranch:
-            pc += 4;
-            in_branch_delay_slot_not_taken = false;
-            break;
-        case BranchState::Perform:
-            pc = jump_addr;
-            branch_state = BranchState::NoBranch;
+        if (branch_state == BranchState::Perform) {
             in_branch_delay_slot_taken = false;
+            branch_state = BranchState::NoBranch;
+            pc = jump_addr;
             if (pc & 3) AddressErrorException<MemOp::InstrFetch>(pc);
-            break;
-        default: std::unreachable();
+        } else {
+            in_branch_delay_slot_not_taken &= branch_state != BranchState::NoBranch;
+            branch_state = branch_state == BranchState::DelaySlotTaken ? BranchState::Perform : BranchState::NoBranch;
+            pc += 4;
         }
     }
     return cycle_counter - cpu_cycles;
@@ -349,9 +338,7 @@ void Interpreter::j(u32 instr) const
 void Interpreter::jal(u32 instr) const
 {
     gpr.set(31, 4 + (in_branch_delay_slot_taken ? jump_addr : pc + 4));
-    if (!in_branch_delay_slot_taken) {
-        TakeBranch((pc + 4) & 0xFFFF'FFFF'F000'0000 | instr << 2 & 0xFFF'FFFF);
-    }
+    j(instr);
 }
 
 void Interpreter::jalr(u32 rs, u32 rd) const
