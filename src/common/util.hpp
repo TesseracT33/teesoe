@@ -10,6 +10,20 @@
 #include <type_traits>
 #include <vector>
 
+#if defined NDEBUG
+#if defined __GNUC__ && !defined __clang__
+#define ASSUME(x) [[assume(x)]]
+#elif defined __clang__
+#define ASSUME(x) __builtin_assume(x)
+#elif defined _MSC_VER
+#define ASSUME(x) __assume(x)
+#else
+#define ASSUME(x)
+#endif
+#else
+#define ASSUME(x) assert(x)
+#endif
+
 template<auto... Args> constexpr bool always_false{};
 
 template<std::integral Int> constexpr void clear_bit(Int& num, std::integral auto pos)
