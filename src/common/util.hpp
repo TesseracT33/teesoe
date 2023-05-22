@@ -11,10 +11,10 @@
 #include <vector>
 
 #if defined NDEBUG
-#if defined __GNUC__ && !defined __clang__
-#define ASSUME(x) [[assume(x)]]
-#elif defined __clang__
+#if defined __clang__
 #define ASSUME(x) __builtin_assume(x)
+#elif defined __GNUC__
+#define ASSUME(x) [[assume(x)]]
 #elif defined _MSC_VER
 #define ASSUME(x) __assume(x)
 #else
@@ -159,6 +159,26 @@ template<> struct SizeToUInt<8> {
 template<> struct SizeToUInt<16> {
     using type = u128;
 };
+
+constexpr size_t operator""_KiB(unsigned long long x)
+{
+    return 1024ULL * x;
+}
+
+constexpr size_t operator""_MiB(unsigned long long x)
+{
+    return 1024_KiB * x;
+}
+
+constexpr size_t operator""_GiB(unsigned long long x)
+{
+    return 1024_MiB * x;
+}
+
+constexpr size_t operator""_TiB(unsigned long long x)
+{
+    return 1024_GiB * x;
+}
 
 /////////// Tests /////////////
 static_assert(one_of(0, 0));
