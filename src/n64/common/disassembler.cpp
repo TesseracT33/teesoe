@@ -9,7 +9,10 @@
 #include "vr4300/cop2.hpp"
 #include "vr4300/exceptions.hpp"
 #include "vr4300/interpreter.hpp"
-#include "vr4300/recompiler.hpp"
+#include "vr4300/x64/cop0.hpp"
+#include "vr4300/x64/cop1.hpp"
+#include "vr4300/x64/cop2.hpp"
+#include "vr4300/x64/cpu.hpp"
 
 #include <utility>
 
@@ -64,21 +67,23 @@
         }                                                                               \
     }
 
-#define CPU(instr, ...)                                       \
-    {                                                         \
-        if constexpr (cpu == Cpu::VR4300) {                   \
-            if constexpr (cpu_impl == CpuImpl::Interpreter) { \
-                vr4300::cpu_interpreter.instr(__VA_ARGS__);   \
-            } else {                                          \
-                vr4300::cpu_recompiler.instr(__VA_ARGS__);    \
-            }                                                 \
-        } else {                                              \
-            if constexpr (cpu_impl == CpuImpl::Interpreter) { \
-                rsp::cpu_interpreter.instr(__VA_ARGS__);      \
-            } else {                                          \
-                rsp::cpu_recompiler.instr(__VA_ARGS__);       \
-            }                                                 \
-        }                                                     \
+#define CPU(instr, ...)                                             \
+    {                                                               \
+        if constexpr (cpu == Cpu::VR4300) {                         \
+            if constexpr (cpu_impl == CpuImpl::Interpreter) {       \
+                vr4300::cpu_interpreter.instr(__VA_ARGS__);         \
+            } else if constexpr (arch.a64) {                        \
+                /*vr4300::a64::cpu_recompiler.instr(__VA_ARGS__);*/ \
+            } else {                                                \
+                vr4300::x64::cpu_recompiler.instr(__VA_ARGS__);     \
+            }                                                       \
+        } else {                                                    \
+            if constexpr (cpu_impl == CpuImpl::Interpreter) {       \
+                rsp::cpu_interpreter.instr(__VA_ARGS__);            \
+            } else {                                                \
+                rsp::cpu_recompiler.instr(__VA_ARGS__);             \
+            }                                                       \
+        }                                                           \
     }
 
 #define CPU_RSP(instr, ...)                               \
@@ -90,17 +95,19 @@
         }                                                 \
     }
 
-#define CPU_VR4300(instr, ...)                                \
-    {                                                         \
-        if constexpr (cpu == Cpu::VR4300) {                   \
-            if constexpr (cpu_impl == CpuImpl::Interpreter) { \
-                vr4300::cpu_interpreter.instr(__VA_ARGS__);   \
-            } else {                                          \
-                vr4300::cpu_recompiler.instr(__VA_ARGS__);    \
-            }                                                 \
-        } else {                                              \
-            rsp::NotifyIllegalInstr(#instr);                  \
-        }                                                     \
+#define CPU_VR4300(instr, ...)                                      \
+    {                                                               \
+        if constexpr (cpu == Cpu::VR4300) {                         \
+            if constexpr (cpu_impl == CpuImpl::Interpreter) {       \
+                vr4300::cpu_interpreter.instr(__VA_ARGS__);         \
+            } else if constexpr (arch.a64) {                        \
+                /*vr4300::a64::cpu_recompiler.instr(__VA_ARGS__);*/ \
+            } else {                                                \
+                vr4300::x64::cpu_recompiler.instr(__VA_ARGS__);     \
+            }                                                       \
+        } else {                                                    \
+            rsp::NotifyIllegalInstr(#instr);                        \
+        }                                                           \
     }
 
 namespace n64::disassembler {
@@ -143,7 +150,7 @@ void jit_call_interpreter_impl(Arg first_arg, Args... remaining_args)
             return &rsp::compiler;
         }
     }();
-    compiler->mov(gp[r_idx], first_arg);
+    compiler->mov(host_gpr_arg[r_idx], first_arg);
     if (sizeof...(remaining_args)) {
         r_idx++;
         jit_call_interpreter_impl<cpu, impl>(remaining_args...);
@@ -213,7 +220,7 @@ template<Cpu cpu, CpuImpl cpu_impl, bool make_string> void cop1(u32 instr)
     }
     default: {
         if ((instr & 0x30) == 0x30) {
-            COP1_FMT(c, FS, FT, COND);
+            COP1_FMT(compare, FS, FT, COND);
         } else {
             switch (instr & 63) {
             case 0x00: COP1_FMT(add, FS, FT, FD); break;

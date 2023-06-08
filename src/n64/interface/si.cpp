@@ -5,6 +5,7 @@
 #include "mi.hpp"
 #include "n64_build_options.hpp"
 #include "scheduler.hpp"
+#include "vr4300/recompiler.hpp"
 
 #include <bit>
 #include <cstring>
@@ -53,12 +54,13 @@ template<DmaType type> void InitDma()
         if constexpr (log_dma) {
             log(std::format("DMA: from PIF ${:X} to RDRAM ${:X}: ${:X} bytes", si.pif_addr_rd64b, si.dram_addr, 64));
         }
+        auto dram_start = si.dram_addr;
         for (int i = 0; i < 16; ++i) {
             rdram::Write<4>(si.dram_addr, pif::ReadMemory<s32>(si.pif_addr_rd64b));
             si.dram_addr += 4;
             si.pif_addr_rd64b += 4;
         }
-
+        vr4300::InvalidateRange(dram_start, si.dram_addr);
     } else { /* RDRAM to PIF */
         if constexpr (log_dma) {
             log(std::format("DMA: from RDRAM ${:X} to PIF ${:X}: ${:X} bytes", si.dram_addr, si.pif_addr_wr64b, 64));

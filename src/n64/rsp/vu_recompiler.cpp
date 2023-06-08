@@ -54,7 +54,7 @@ Mem vpr_ptr(u32 idx)
 // void call_interpreter_impl(Arg first_arg, Args... remaining_args)
 //{
 //     static int r_idx{};
-//     c.mov(gp[r_idx], first_arg);
+//     c.mov(host_gpr_arg[r_idx], first_arg);
 //     if (sizeof...(remaining_args)) {
 //         r_idx++;
 //         jit_call_interpreter_impl<cpu, impl>(remaining_args...);
@@ -90,10 +90,10 @@ template<> void mtc2<Recompiler>(u32 rt, u32 vs, u32 e)
 
 template<> void lbv<Recompiler>(u32 base, u32 vt, u32 e, s32 offset)
 {
-    c.mov(gp[0], base);
-    c.mov(gp[1], vt);
-    c.mov(gp[2], e);
-    c.mov(gp[3], offset);
+    c.mov(host_gpr_arg[0], base);
+    c.mov(host_gpr_arg[1], vt);
+    c.mov(host_gpr_arg[2], e);
+    c.mov(host_gpr_arg[3], offset);
     call(c, lbv<Interpreter>);
 }
 

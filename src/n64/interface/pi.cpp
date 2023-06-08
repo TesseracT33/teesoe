@@ -5,6 +5,7 @@
 #include "mi.hpp"
 #include "n64_build_options.hpp"
 #include "scheduler.hpp"
+#include "vr4300/recompiler.hpp"
 
 #include <algorithm>
 #include <cassert>
@@ -98,7 +99,8 @@ template<DmaType type> void InitDma()
             }
         }
         cart_addr_end = cart_addr;
-        dram_addr_end = dram_addr;
+        dram_addr_end = dram_addr & 0xFF'FFFF;
+        vr4300::InvalidateRange(pi.dram_addr, dram_addr_end);
     } else { /* RDRAM to cart */
         /* TODO: it seems we can write to SRAM/FLASH. */
         log_warn("Attempted DMA from RDRAM to Cart, but this is unimplemented.");
@@ -133,7 +135,7 @@ void OnDmaFinish()
     pi.status.dma_completed = 1;
     mi::RaiseInterrupt(mi::InterruptType::PI);
     pi.cart_addr = cart_addr_end;
-    pi.dram_addr = dram_addr_end & 0xFF'FFFF;
+    pi.dram_addr = dram_addr_end;
 }
 
 u32 ReadReg(u32 addr)

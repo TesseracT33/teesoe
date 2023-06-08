@@ -1,7 +1,5 @@
 #pragma once
 
-#include "asmjit/a64.h"
-#include "asmjit/x86.h"
 #include "mips/recompiler.hpp"
 #include "rsp.hpp"
 #include "status.hpp"
@@ -12,10 +10,15 @@ namespace n64::rsp {
 Status InitRecompiler();
 void Invalidate(u32 addr);
 void InvalidateRange(u32 addr_lo, u32 addr_hi);
+void LinkJit(u32 reg);
 void OnBranchJit();
 u64 RunRecompiler(u64 cpu_cycles);
+void TakeBranchJit(asmjit::x86::Gp target);
 
-inline std::conditional_t<arch.x64, asmjit::x86::Compiler, asmjit::a64::Compiler> compiler;
+inline AsmjitCompiler compiler;
+inline mips::RegisterAllocator reg_alloc{ gpr.view(), compiler };
+inline u32 jit_pc;
+inline bool branch_hit;
 
 struct Recompiler : public mips::Recompiler<s32, s32, u32> {
     using mips::Recompiler<s32, s32, u32>::Recompiler;
@@ -43,14 +46,14 @@ protected:
     template<std::integral> void store(u32 rs, u32 rt, s16 imm) const;
 } inline constexpr cpu_recompiler{
     compiler,
-    gpr,
+    reg_alloc,
     lo_dummy,
     hi_dummy,
-    pc,
-    can_execute_dword_instrs_dummy,
-    TakeBranch,
-    Link,
-    OnBranchJit,
+    jit_pc,
+    branch_hit,
+    branch_hit, // DUMMY
+    TakeBranchJit,
+    LinkJit,
 };
 
 } // namespace n64::rsp

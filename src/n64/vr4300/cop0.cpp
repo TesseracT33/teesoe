@@ -15,8 +15,6 @@
 
 namespace n64::vr4300 {
 
-static u32 last_cop0_write;
-
 void Cop0Registers::OnWriteToCause()
 {
     CheckInterrupts();

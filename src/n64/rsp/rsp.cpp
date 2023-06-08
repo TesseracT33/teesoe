@@ -7,6 +7,7 @@
 #include "rdp/rdp.hpp"
 #include "scheduler.hpp"
 #include "util.hpp"
+#include "vr4300/recompiler.hpp"
 
 #include <algorithm>
 #include <bit>
@@ -131,6 +132,8 @@ template<DmaType dma_type> void InitDma()
         }
     };
 
+    auto dram_start = sp.dma_ramaddr;
+
     /* The DMA engine allows to transfer multiple "rows" of data in RDRAM, separated by a "skip" value. This allows for
        instance to transfer a rectangular portion of a larger image, by specifying the size of each row of the
        selection portion, the number of rows, and a "skip" value that corresponds to the bytes between the end of a row
@@ -158,6 +161,12 @@ template<DmaType dma_type> void InitDma()
             bytes_to_copy -= bytes_to_copy_this_row;
             sp.dma_ramaddr += skip; // TODO: ensure no overflow
         }
+    }
+
+    if constexpr (dma_type == DmaType::RdToSp) {
+        // TODO invalidate
+    } else {
+        vr4300::InvalidateRange(dram_start, sp.dma_ramaddr);
     }
 }
 

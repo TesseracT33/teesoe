@@ -1,23 +1,49 @@
 #pragma once
 
-#include "cpu.hpp"
+#include "gpr.hpp"
 #include "host.hpp"
+#include "types.hpp"
+
+#include <concepts>
 
 namespace mips {
 
-template<std::signed_integral GprInt, std::signed_integral LoHiInt, std::integral PcInt>
-struct Interpreter : public Cpu<GprInt, LoHiInt, PcInt> {
-    using Cpu<GprInt, LoHiInt, PcInt>::Cpu;
-    using Cpu<GprInt, LoHiInt, PcInt>::gpr;
-    using Cpu<GprInt, LoHiInt, PcInt>::lo;
-    using Cpu<GprInt, LoHiInt, PcInt>::hi;
-    using Cpu<GprInt, LoHiInt, PcInt>::pc;
-    using Cpu<GprInt, LoHiInt, PcInt>::dword_op_cond;
-    using Cpu<GprInt, LoHiInt, PcInt>::jump;
-    using Cpu<GprInt, LoHiInt, PcInt>::link;
-    using Cpu<GprInt, LoHiInt, PcInt>::integer_overflow_exception;
-    using Cpu<GprInt, LoHiInt, PcInt>::reserved_instruction_exception;
-    using Cpu<GprInt, LoHiInt, PcInt>::trap_exception;
+template<std::signed_integral GprInt, std::signed_integral LoHiInt, std::integral PcInt> struct Interpreter {
+    using ExceptionHandler = void (*)();
+    using LinkHandler = void (*)(u32 reg);
+    template<std::integral Int> using TakeBranchHandler = void (*)(PcInt target);
+
+    consteval Interpreter(Gpr<GprInt>& gpr,
+      LoHiInt& lo,
+      LoHiInt& hi,
+      PcInt& pc,
+      bool const& dword_op_cond,
+      TakeBranchHandler<PcInt> take_branch_handler,
+      LinkHandler link_handler,
+      ExceptionHandler integer_overflow_exception = nullptr,
+      ExceptionHandler reserved_instruction_exception = nullptr,
+      ExceptionHandler trap_exception = nullptr)
+      : gpr(gpr),
+        lo(lo),
+        hi(hi),
+        pc(pc),
+        dword_op_cond(dword_op_cond),
+        take_branch(take_branch_handler),
+        link(link_handler),
+        integer_overflow_exception(integer_overflow_exception),
+        reserved_instruction_exception(reserved_instruction_exception),
+        trap_exception(trap_exception)
+    {
+    }
+
+    Gpr<GprInt>& gpr;
+    LoHiInt& lo;
+    LoHiInt& hi;
+    PcInt& pc;
+    bool const& dword_op_cond;
+    TakeBranchHandler<PcInt> const take_branch;
+    LinkHandler const link;
+    ExceptionHandler const integer_overflow_exception, reserved_instruction_exception, trap_exception;
 
     void add(u32 rs, u32 rt, u32 rd) const
     {
@@ -64,132 +90,57 @@ struct Interpreter : public Cpu<GprInt, LoHiInt, PcInt> {
     void beq(u32 rs, u32 rt, s16 imm) const
     {
         if (gpr[rs] == gpr[rt]) {
-            jump(pc + 4 + (imm << 2));
+            take_branch(pc + 4 + (imm << 2));
         }
     }
-
-    void beql(u32 rs, u32 rt, s16 imm) const
-    {
-        if (gpr[rs] == gpr[rt]) {
-            jump(pc + 4 + (imm << 2));
-        } else {
-            pc += 4;
-        }
-    }
-
     void bgez(u32 rs, s16 imm) const
     {
         if (gpr[rs] >= 0) {
-            jump(pc + 4 + (imm << 2));
+            take_branch(pc + 4 + (imm << 2));
         }
     }
 
     void bgezal(u32 rs, s16 imm) const
     {
         if (gpr[rs] >= 0) {
-            jump(pc + 4 + (imm << 2));
+            take_branch(pc + 4 + (imm << 2));
         }
         link(31);
-    }
-
-    void bgezall(u32 rs, s16 imm) const
-    {
-        if (gpr[rs] >= 0) {
-            jump(pc + 4 + (imm << 2));
-        } else {
-            pc += 4;
-        }
-        link(31);
-    }
-
-    void bgezl(u32 rs, s16 imm) const
-    {
-        if (gpr[rs] >= 0) {
-            jump(pc + 4 + (imm << 2));
-        } else {
-            pc += 4;
-        }
     }
 
     void bgtz(u32 rs, s16 imm) const
     {
         if (gpr[rs] > 0) {
-            jump(pc + 4 + (imm << 2));
-        }
-    }
-
-    void bgtzl(u32 rs, s16 imm) const
-    {
-        if (gpr[rs] > 0) {
-            jump(pc + 4 + (imm << 2));
-        } else {
-            pc += 4;
+            take_branch(pc + 4 + (imm << 2));
         }
     }
 
     void blez(u32 rs, s16 imm) const
     {
         if (gpr[rs] <= 0) {
-            jump(pc + 4 + (imm << 2));
-        }
-    }
-
-    void blezl(u32 rs, s16 imm) const
-    {
-        if (gpr[rs] <= 0) {
-            jump(pc + 4 + (imm << 2));
-        } else {
-            pc += 4;
+            take_branch(pc + 4 + (imm << 2));
         }
     }
 
     void bltz(u32 rs, s16 imm) const
     {
         if (gpr[rs] < 0) {
-            jump(pc + 4 + (imm << 2));
+            take_branch(pc + 4 + (imm << 2));
         }
     }
 
     void bltzal(u32 rs, s16 imm) const
     {
         if (gpr[rs] < 0) {
-            jump(pc + 4 + (imm << 2));
+            take_branch(pc + 4 + (imm << 2));
         }
         link(31);
-    }
-
-    void bltzall(u32 rs, s16 imm) const
-    {
-        if (gpr[rs] < 0) {
-            jump(pc + 4 + (imm << 2));
-        } else {
-            pc += 4;
-        }
-        link(31);
-    }
-
-    void bltzl(u32 rs, s16 imm) const
-    {
-        if (gpr[rs] < 0) {
-            jump(pc + 4 + (imm << 2));
-        } else {
-            pc += 4;
-        }
     }
 
     void bne(u32 rs, u32 rt, s16 imm) const
     {
         if (gpr[rs] != gpr[rt]) {
-            jump(pc + 4 + (imm << 2));
-        }
-    }
-
-    void bnel(u32 rs, u32 rt, s16 imm) const
-    {
-        if (gpr[rs] != gpr[rt]) {
-            jump(pc + 4 + (imm << 2));
-        } else {
-            pc += 4;
+            take_branch(pc + 4 + (imm << 2));
         }
     }
 
@@ -319,21 +270,21 @@ struct Interpreter : public Cpu<GprInt, LoHiInt, PcInt> {
         gpr.set(rd, gpr[rs] - gpr[rt]);
     }
 
-    void j(u32 instr) const { jump((pc + 4) & ~PcInt(0xFFF'FFFF) | instr << 2 & 0xFFF'FFFF); }
+    void j(u32 instr) const { take_branch((pc + 4) & ~PcInt(0xFFF'FFFF) | instr << 2 & 0xFFF'FFFF); }
 
     void jal(u32 instr) const
     {
-        jump((pc + 4) & ~PcInt(0xFFF'FFFF) | instr << 2 & 0xFFF'FFFF);
+        take_branch((pc + 4) & ~PcInt(0xFFF'FFFF) | instr << 2 & 0xFFF'FFFF);
         link(31);
     }
 
     void jalr(u32 rs, u32 rd) const
     {
-        jump(gpr[rs]);
+        take_branch(gpr[rs]);
         link(rd);
     }
 
-    void jr(u32 rs) const { jump(gpr[rs]); }
+    void jr(u32 rs) const { take_branch(gpr[rs]); }
 
     void lui(u32 rt, s16 imm) const { gpr.set(rt, imm << 16); }
 

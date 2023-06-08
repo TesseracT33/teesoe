@@ -43,12 +43,12 @@ u64 RunInterpreter(u64 rsp_cycles)
 
 void Interpreter::add(u32 rs, u32 rt, u32 rd) const
 {
-    gpr.set(rd, gpr[rs] + gpr[rt]);
+    addu(rs, rt, rd);
 }
 
 void Interpreter::addi(u32 rs, u32 rt, s16 imm) const
 {
-    gpr.set(rt, gpr[rs] + imm);
+    addiu(rs, rt, imm);
 }
 
 void Interpreter::break_() const
@@ -62,14 +62,14 @@ void Interpreter::break_() const
 void Interpreter::j(u32 instr) const
 {
     if (!in_branch_delay_slot) {
-        jump(instr << 2);
+        take_branch(instr << 2);
     }
 }
 
 void Interpreter::jal(u32 instr) const
 {
     if (!in_branch_delay_slot) {
-        jump(instr << 2);
+        take_branch(instr << 2);
     }
     gpr.set(31, (pc + 8) & 0xFFF);
 }
@@ -128,7 +128,7 @@ void Interpreter::sh(u32 rs, u32 rt, s16 imm) const
 
 void Interpreter::sub(u32 rs, u32 rt, u32 rd) const
 {
-    gpr.set(rd, gpr[rs] - gpr[rt]);
+    subu(rs, rt, rd);
 }
 
 void Interpreter::sw(u32 rs, u32 rt, s16 imm) const

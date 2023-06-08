@@ -37,8 +37,6 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "GNU")
 	set(GCC 1)
 endif()
 
-message("_________ ${DEBUG}")
-
 list(APPEND clang_flags
 	-std=c++2b
 	-Wall

@@ -8,32 +8,34 @@
 
 namespace n64::vr4300 {
 
-enum Cop0Reg {
-    index = 0,
-    random = 1,
-    entry_lo_0 = 2,
-    entry_lo_1 = 3,
-    context = 4,
-    page_mask = 5,
-    wired = 6,
-    bad_v_addr = 8,
-    count = 9,
-    entry_hi = 10,
-    compare = 11,
-    status = 12,
-    cause = 13,
-    epc = 14,
-    pr_id = 15,
-    config = 16,
-    ll_addr = 17,
-    watch_lo = 18,
-    watch_hi = 19,
-    x_context = 20,
-    parity_error = 26,
-    cache_error = 27,
-    tag_lo = 28,
-    tag_hi = 29,
-    error_epc = 30
+struct Cop0Reg {
+    enum {
+        index = 0,
+        random = 1,
+        entry_lo_0 = 2,
+        entry_lo_1 = 3,
+        context = 4,
+        page_mask = 5,
+        wired = 6,
+        bad_v_addr = 8,
+        count = 9,
+        entry_hi = 10,
+        compare = 11,
+        status = 12,
+        cause = 13,
+        epc = 14,
+        pr_id = 15,
+        config = 16,
+        ll_addr = 17,
+        watch_lo = 18,
+        watch_hi = 19,
+        x_context = 20,
+        parity_error = 26,
+        cache_error = 27,
+        tag_lo = 28,
+        tag_hi = 29,
+        error_epc = 30
+    };
 };
 
 inline constexpr std::array cop0_reg_str_repr = {
@@ -68,8 +70,9 @@ inline constexpr std::array cop0_reg_str_repr = {
     "TAG_LO",
     "TAG_HI",
     "ERROR_EPC",
+    "COP0_31",
 };
-static_assert(cop0_reg_str_repr.size() == 31);
+static_assert(cop0_reg_str_repr.size() == 32);
 
 void OnCountCompareMatchEvent();
 template<bool initial_add = false> void ReloadCountCompareEvent();
@@ -258,6 +261,8 @@ struct Cop0Registers {
     void OnWriteToStatus();
     void OnWriteToWired();
 } inline cop0;
+
+inline u32 last_cop0_write;
 
 /* Used to generate random numbers in the interval [wired, 31], when the 'random' register is read. */
 class RandomGenerator {

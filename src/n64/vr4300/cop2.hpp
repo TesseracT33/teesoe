@@ -15,4 +15,6 @@ void mtc2(u32 rt);
 
 void InitCop2();
 
+inline u64 cop2_latch;
+
 } // namespace n64::vr4300

@@ -8,19 +8,11 @@
 #include <array>
 #include <limits>
 
-namespace n64::vr4300 {
+#if defined _MSC_VER && !defined __clang__
+#include <intrin.h>
+#endif
 
-// TODO: compute these at runtime instead, should be faster
-constexpr std::array right_load_mask = {
-    0xFFFF'FFFF'FFFF'FF00ull,
-    0xFFFF'FFFF'FFFF'0000ull,
-    0xFFFF'FFFF'FF00'0000ull,
-    0xFFFF'FFFF'0000'0000ull,
-    0xFFFF'FF00'0000'0000ull,
-    0xFFFF'0000'0000'0000ull,
-    0xFF00'0000'0000'0000ull,
-    0ull,
-};
+namespace n64::vr4300 {
 
 void DiscardBranch()
 {
@@ -119,12 +111,11 @@ void Interpreter::bgezal(u32 rs, s16 imm) const
 
 void Interpreter::bgezall(u32 rs, s16 imm) const
 {
+    gpr.set(31, pc + 8);
     if (gpr[rs] >= 0) {
         TakeBranch(pc + 4 + (imm << 2));
-        gpr.set(31, pc + 8);
     } else {
         DiscardBranch();
-        gpr.set(31, pc + 4);
     }
 }
 
@@ -239,13 +230,13 @@ void Interpreter::ddiv(u32 rs, u32 rt) const
     if (!can_execute_dword_instrs) return ReservedInstructionException();
     s64 op1 = gpr[rs];
     s64 op2 = gpr[rt];
-    if (op2 == 0) { /* Peter Lemon N64 CPUTest>CPU>DDIV */
+    if (op2 == 0) {
         lo = op1 >= 0 ? -1 : 1;
         hi = op1;
     } else if (op1 == std::numeric_limits<s64>::min() && op2 == -1) {
         lo = op1;
         hi = 0;
-    } else {
+    } else [[likely]] {
         lo = op1 / op2;
         hi = op1 % op2;
     }
@@ -275,7 +266,7 @@ void Interpreter::div(u32 rs, u32 rt) const
         lo = op1 >= 0 ? -1 : 1;
         hi = op1;
     } else if (op1 == std::numeric_limits<s32>::min() && op2 == -1) {
-        lo = std::numeric_limits<s32>::min();
+        lo = op1;
         hi = 0;
     } else [[likely]] {
         lo = op1 / op2;
@@ -303,7 +294,7 @@ void Interpreter::dmult(u32 rs, u32 rt) const
     if (!can_execute_dword_instrs) return ReservedInstructionException();
 #if INT128_AVAILABLE
     s128 prod = s128(gpr[rs]) * s128(gpr[rt]);
-    lo = prod & s64(-1);
+    lo = s64(prod);
     hi = prod >> 64;
 #elif defined _MSC_VER
     lo = _mul128(gpr[rs], gpr[rt], &hi);
@@ -318,7 +309,7 @@ void Interpreter::dmultu(u32 rs, u32 rt) const
     if (!can_execute_dword_instrs) return ReservedInstructionException();
 #if INT128_AVAILABLE
     u128 prod = u128(gpr[rs]) * u128(gpr[rt]);
-    lo = prod & u64(-1);
+    lo = s64(prod);
     hi = prod >> 64;
 #elif defined _MSC_VER
     lo = _umul128(gpr[rs], gpr[rt], reinterpret_cast<u64*>(&hi));
@@ -337,15 +328,21 @@ void Interpreter::j(u32 instr) const
 
 void Interpreter::jal(u32 instr) const
 {
-    gpr.set(31, 4 + (in_branch_delay_slot_taken ? jump_addr : pc + 4));
-    j(instr);
+    if (in_branch_delay_slot_taken) {
+        gpr.set(31, jump_addr + 4);
+    } else {
+        gpr.set(31, pc + 8);
+        TakeBranch((pc + 4) & 0xFFFF'FFFF'F000'0000 | instr << 2 & 0xFFF'FFFF);
+    }
 }
 
 void Interpreter::jalr(u32 rs, u32 rd) const
 {
-    s64 target = gpr[rs];
-    gpr.set(rd, 4 + (in_branch_delay_slot_taken ? jump_addr : pc + 4));
-    if (!in_branch_delay_slot_taken) {
+    if (in_branch_delay_slot_taken) {
+        gpr.set(rd, jump_addr + 4);
+    } else {
+        s64 target = gpr[rs];
+        gpr.set(rd, pc + 8);
         TakeBranch(target);
     }
 }
@@ -401,9 +398,9 @@ void Interpreter::ldr(u32 rs, u32 rt, s16 imm) const
     s64 addr = gpr[rs] + imm;
     u64 val = ReadVirtual<s64, Alignment::UnalignedRight>(addr);
     if (!exception_occurred) {
-        u32 bytes_from_last_boundary = addr & 7;
-        val >>= 8 * (7 - bytes_from_last_boundary);
-        s64 untouched_gpr = gpr[rt] & right_load_mask[bytes_from_last_boundary];
+        u32 bits_from_last_boundary = (addr & 7) << 3;
+        val >>= 56 - bits_from_last_boundary;
+        s64 untouched_gpr = gpr[rt] & 0xFFFF'FFFF'FFFF'FF00 << bits_from_last_boundary;
         gpr.set(rt, val | untouched_gpr);
     }
 }
@@ -469,9 +466,9 @@ void Interpreter::lwr(u32 rs, u32 rt, s16 imm) const
     s64 addr = gpr[rs] + imm;
     u32 val = ReadVirtual<s32, Alignment::UnalignedRight>(addr);
     if (!exception_occurred) {
-        u32 bytes_from_last_boundary = addr & 3;
-        val >>= 8 * (3 - bytes_from_last_boundary);
-        s32 untouched_gpr = s32(gpr[rt] & right_load_mask[bytes_from_last_boundary]);
+        u32 bits_from_last_boundary = (addr & 3) << 3;
+        val >>= 24 - bits_from_last_boundary;
+        s32 untouched_gpr = s32(gpr[rt] & 0xFFFF'FF00 << bits_from_last_boundary);
         gpr.set(rt, s32(val) | untouched_gpr);
     }
 }
@@ -494,10 +491,7 @@ void Interpreter::mult(u32 rs, u32 rt) const
 
 void Interpreter::multu(u32 rs, u32 rt) const
 {
-    u64 prod = u64(u32(gpr[rs])) * u64(u32(gpr[rt]));
-    lo = s32(prod);
-    hi = s32(prod >> 32);
-    AdvancePipeline(4);
+    mult(rs, rt);
 }
 
 void Interpreter::sb(u32 rs, u32 rt, s16 imm) const
@@ -535,7 +529,7 @@ void Interpreter::sdl(u32 rs, u32 rt, s16 imm) const
 void Interpreter::sdr(u32 rs, u32 rt, s16 imm) const
 {
     s64 addr = gpr[rs] + imm;
-    WriteVirtual<8, Alignment::UnalignedRight>(addr, gpr[rt] << (8 * (7 - (addr & 7))));
+    WriteVirtual<8, Alignment::UnalignedRight>(addr, gpr[rt] << (8 * (~addr & 7)));
 }
 
 void Interpreter::sh(u32 rs, u32 rt, s16 imm) const
@@ -568,7 +562,7 @@ void Interpreter::swl(u32 rs, u32 rt, s16 imm) const
 void Interpreter::swr(u32 rs, u32 rt, s16 imm) const
 {
     s64 addr = gpr[rs] + imm;
-    WriteVirtual<4, Alignment::UnalignedRight>(addr, gpr[rt] << (8 * (3 - (addr & 3))));
+    WriteVirtual<4, Alignment::UnalignedRight>(addr, gpr[rt] << (8 * (~addr & 3)));
 }
 
 } // namespace n64::vr4300

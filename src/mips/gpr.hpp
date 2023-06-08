@@ -4,6 +4,7 @@
 
 #include <array>
 #include <concepts>
+#include <span>
 
 namespace mips {
 
@@ -15,6 +16,7 @@ template<std::signed_integral Int> struct Gpr {
         gpr[idx] = data;
         gpr[0] = 0;
     }
+    std::span<const Int, 32> view() const { return gpr; }
 
     Int operator[](u32 idx) const { return gpr[idx]; } // return by value so that writes have to be made through 'set'
 

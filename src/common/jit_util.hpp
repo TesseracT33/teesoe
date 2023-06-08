@@ -1,36 +1,30 @@
 #pragma once
 
+#include "asmjit/a64.h"
 #include "asmjit/x86.h"
-#include "asmjit/x86/x86compiler.h"
 #include "host.hpp"
 #include "types.hpp"
+#include "util.hpp"
 
 #include <array>
 #include <bit>
+#include <type_traits>
 
-inline constexpr std::array gp = {
-#ifdef _WIN32
-    asmjit::x86::rcx,
-    asmjit::x86::rdx,
-    asmjit::x86::r8,
-    asmjit::x86::r9,
-    asmjit::x86::r10,
-    asmjit::x86::r11,
-    asmjit::x86::rax,
-#else
-    asmjit::x86::rdi,
-    asmjit::x86::rsi,
-    asmjit::x86::rdx,
-    asmjit::x86::rcx,
-    asmjit::x86::r8,
-    asmjit::x86::r9,
-    asmjit::x86::r10,
-    asmjit::x86::r11,
-    asmjit::x86::rax,
-#endif
-};
+using AsmjitCompiler = std::conditional_t<arch.x64, asmjit::x86::Compiler, asmjit::a64::Compiler>;
+using HostGpr = std::conditional_t<arch.x64, asmjit::x86::Gpq, asmjit::a64::GpX>;
+using HostVpr128 = std::conditional_t<arch.x64, asmjit::x86::Xmm, asmjit::a64::VecV>;
 
-#if X64
+inline constexpr std::array host_gpr_arg = [] {
+    if constexpr (arch.a64) {
+    } else {
+        using namespace asmjit::x86;
+        if constexpr (os.windows) {
+            return std::array{ rcx, rdx, r8, r9 };
+        } else {
+            return std::array{ rdi, rsi, rdx, rcx, r8, r9 };
+        }
+    }
+}();
 
 inline void call(asmjit::x86::Compiler& c, auto func)
 {
@@ -98,5 +92,3 @@ constexpr asmjit::x86::Mem ymm_ptr(auto const& obj)
 {
     return asmjit::x86::ymmword_ptr(std::bit_cast<u64>(&obj));
 }
-
-#endif

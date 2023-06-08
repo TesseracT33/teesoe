@@ -6,6 +6,7 @@
 #include "memory/rdram.hpp"
 #include "mmu.hpp"
 #include "n64_build_options.hpp"
+#include "recompiler.hpp"
 #include "util.hpp"
 #include "vr4300.hpp"
 
@@ -274,6 +275,7 @@ template<size_t access_size, typename... MaskT> void WriteCacheableArea(u32 padd
         std::memcpy(cache_dst + 4, &to_write, 4);
     }
     cache_line.dirty = true;
+    Invalidate(paddr);
 }
 
 void WritebackCacheLine(auto& cache_line, u32 new_paddr)

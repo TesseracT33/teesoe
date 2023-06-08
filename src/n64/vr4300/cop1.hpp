@@ -30,7 +30,7 @@ void mtc1(u32 fs, u32 rt);
 void sdc1(u32 base, u32 ft, s16 imm);
 void swc1(u32 base, u32 ft, s16 imm);
 
-template<Fmt> void c(u32 fs, u32 ft, u8 cond);
+template<Fmt> void compare(u32 fs, u32 ft, u8 cond);
 
 template<Fmt> void ceil_l(u32 fs, u32 fd);
 template<Fmt> void ceil_w(u32 fs, u32 fd);

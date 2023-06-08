@@ -18,6 +18,8 @@
 #include <type_traits>
 #include <utility>
 
+#include <immintrin.h>
+
 namespace n64::vr4300 {
 
 template<typename T>
@@ -530,9 +532,8 @@ bool IsQuietNan(f64 f)
 void bc1f(s16 imm)
 {
     if (!FpuUsable()) return;
-    s64 offset = s64(imm) << 2;
     if (!fcr31.c) {
-        TakeBranch(pc + offset);
+        TakeBranch(pc + (imm << 2));
     } else {
         OnBranchNotTaken();
     }
@@ -541,9 +542,8 @@ void bc1f(s16 imm)
 void bc1fl(s16 imm)
 {
     if (!FpuUsable()) return;
-    s64 offset = s64(imm) << 2;
     if (!fcr31.c) {
-        TakeBranch(pc + offset);
+        TakeBranch(pc + (imm << 2));
     } else {
         DiscardBranch();
     }
@@ -552,9 +552,8 @@ void bc1fl(s16 imm)
 void bc1t(s16 imm)
 {
     if (!FpuUsable()) return;
-    s64 offset = s64(imm) << 2;
     if (fcr31.c) {
-        TakeBranch(pc + offset);
+        TakeBranch(pc + (imm << 2));
     } else {
         OnBranchNotTaken();
     }
@@ -563,15 +562,14 @@ void bc1t(s16 imm)
 void bc1tl(s16 imm)
 {
     if (!FpuUsable()) return;
-    s64 offset = s64(imm) << 2;
     if (fcr31.c) {
-        TakeBranch(pc + offset);
+        TakeBranch(pc + (imm << 2));
     } else {
         DiscardBranch();
     }
 }
 
-template<Fmt fmt> void c(u32 fs, u32 ft, u8 cond)
+template<Fmt fmt> void compare(u32 fs, u32 ft, u8 cond)
 {
     if constexpr (!one_of(fmt, Fmt::Float32, Fmt::Float64)) {
         OnInvalidFormat();
@@ -1054,7 +1052,7 @@ template<RoundInstr instr, FpuNum From, FpuNum To> void Round(u32 fs, u32 fd)
     template void instr<Fmt::Int64>(__VA_ARGS__);   \
     template void instr<Fmt::Invalid>(__VA_ARGS__);
 
-INST_FMT_SPEC(c, u32, u32, u8);
+INST_FMT_SPEC(compare, u32, u32, u8);
 INST_FMT_SPEC(ceil_l, u32, u32);
 INST_FMT_SPEC(ceil_w, u32, u32);
 INST_FMT_SPEC(cvt_d, u32, u32);

@@ -1,4 +1,5 @@
 #include "rdram.hpp"
+#include "vr4300/recompiler.hpp"
 
 #include <bit>
 #include <cstring>
@@ -89,7 +90,8 @@ template<size_t access_size, typename... MaskT> void Write(u32 addr, s64 data, M
     }
     if constexpr (access_size == 1) addr ^= 3;
     if constexpr (access_size == 2) addr ^= 2;
-    u8* rdram_dst = rdram + (addr & (sizeof(rdram) - 1));
+    addr &= sizeof(rdram) - 1;
+    u8* rdram_dst = rdram + addr;
     auto to_write = [&] {
         if constexpr (access_size == 1) return u8(data);
         if constexpr (access_size == 2) return u16(data);
@@ -113,6 +115,7 @@ template<size_t access_size, typename... MaskT> void Write(u32 addr, s64 data, M
         std::memcpy(rdram_dst, reinterpret_cast<u8 const*>(&to_write) + 4, 4);
         std::memcpy(rdram_dst + 4, &to_write, 4);
     }
+    vr4300::Invalidate(addr);
 }
 
 /* $03F0'0000 - $03FF'FFFF */

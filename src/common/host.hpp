@@ -5,15 +5,15 @@
 #if defined __x86_64__ || defined _M_X64
 struct Arch {
     static constexpr bool x64 = 1;
-    static constexpr bool arm64 = 0;
+    static constexpr bool a64 = 0;
 } constexpr arch;
 #define X64 1
 #elif defined __aarch64__ || defined _M_ARM64
 struct Arch {
     static constexpr bool x64 = 0;
-    static constexpr bool arm64 = 1;
+    static constexpr bool a64 = 1;
 } constexpr arch;
-#define ARM64 1
+#define A64 1
 #else
 #error Unsupported architecture; only x86-64 and arm64 are supported.
 #endif
