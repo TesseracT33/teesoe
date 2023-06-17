@@ -19,12 +19,12 @@ target_sources(teesoe PRIVATE
 
 	rdp/parallel_rdp_wrapper.cpp
 	rdp/rdp.cpp
-
 	rsp/interpreter.cpp
 	rsp/recompiler.cpp
 	rsp/rsp.cpp
 	rsp/vu_interpreter.cpp
-	rsp/vu_recompiler.cpp
+	
+	rsp/x64/vu.hpp
 
 	vr4300/cache.cpp
 	vr4300/cop0.cpp

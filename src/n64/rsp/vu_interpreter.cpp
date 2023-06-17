@@ -22,8 +22,6 @@ using m128i = __m128i;
 
 namespace n64::rsp {
 
-using enum CpuImpl;
-
 static void AddToAcc(m128i low);
 static void AddToAcc(m128i low, m128i mid);
 static void AddToAcc(m128i low, m128i mid, m128i high);
@@ -39,9 +37,8 @@ template<bool vmulf> static void vmulfu(u32 vs, u32 vt, u32 vd, u32 e);
 
 void AddToAcc(m128i low)
 {
-    m128i prev_acc_low = acc.low;
     acc.low = _mm_add_epi16(acc.low, low);
-    m128i low_carry = _mm_cmplt_epu16(acc.low, prev_acc_low);
+    m128i low_carry = _mm_cmplt_epu16(acc.low, low);
     acc.mid = _mm_sub_epi16(acc.mid, low_carry);
     m128i mid_carry = _mm_and_si128(low_carry, _mm_cmpeq_epi16(acc.mid, _mm_setzero_si128()));
     acc.high = _mm_sub_epi16(acc.high, mid_carry);
@@ -50,9 +47,8 @@ void AddToAcc(m128i low)
 void AddToAcc(m128i low, m128i mid)
 {
     AddToAcc(low);
-    m128i prev_acc_mid = acc.mid;
     acc.mid = _mm_add_epi16(acc.mid, mid);
-    m128i mid_carry = _mm_cmplt_epu16(acc.mid, prev_acc_mid);
+    m128i mid_carry = _mm_cmplt_epu16(acc.mid, mid);
     acc.high = _mm_sub_epi16(acc.high, mid_carry);
 }
 
@@ -90,9 +86,8 @@ void AddToAccCond(m128i low, m128i mid, m128i high, m128i cond)
 
 void AddToAccFromMid(m128i mid, m128i high)
 {
-    m128i prev_acc_mid = acc.mid;
     acc.mid = _mm_add_epi16(acc.mid, mid);
-    m128i mid_carry = _mm_cmplt_epu16(acc.mid, prev_acc_mid);
+    m128i mid_carry = _mm_cmplt_epu16(acc.mid, mid);
     acc.high = _mm_add_epi16(acc.high, high);
     acc.high = _mm_sub_epi16(acc.high, mid_carry);
 }
@@ -189,7 +184,7 @@ s32 Rsq(s32 input)
     return (0x400'00000 | rsq_rom[index] << 14) >> rshift ^ mask;
 }
 
-template<> void cfc2<Interpreter>(u32 rt, u32 vs)
+void cfc2(u32 rt, u32 vs)
 {
     /* GPR(31..0) = sign_extend(CTRL(15..0)) */
     vs = std::min(vs & 3, 2u);
@@ -198,37 +193,18 @@ template<> void cfc2<Interpreter>(u32 rt, u32 vs)
     gpr.set(rt, s16(hi << 8 | lo));
 }
 
-template<> void ctc2<Interpreter>(u32 rt, u32 vs)
+void ctc2(u32 rt, u32 vs)
 {
     /* CTRL(15..0) = GPR(15..0) */
-    /* Control registers (16-bit) are encoded in two m128i. Each lane represents one bit. */
-    static constexpr std::array lanes = {
-        s64(0x0000'0000'0000'0000),
-        s64(0x0000'0000'0000'FFFF),
-        s64(0x0000'0000'FFFF'0000),
-        s64(0x0000'0000'FFFF'FFFF),
-        s64(0x0000'FFFF'0000'0000),
-        s64(0x0000'FFFF'0000'FFFF),
-        s64(0x0000'FFFF'FFFF'0000),
-        s64(0x0000'FFFF'FFFF'FFFF),
-        s64(0xFFFF'0000'0000'0000),
-        s64(0xFFFF'0000'0000'FFFF),
-        s64(0xFFFF'0000'FFFF'0000),
-        s64(0xFFFF'0000'FFFF'FFFF),
-        s64(0xFFFF'FFFF'0000'0000),
-        s64(0xFFFF'FFFF'0000'FFFF),
-        s64(0xFFFF'FFFF'FFFF'0000),
-        s64(0xFFFF'FFFF'FFFF'FFFF),
-    };
     vs = std::min(vs & 3, 2u);
     s32 r = gpr[rt];
-    ctrl_reg[vs].lo = _mm_set_epi64x(lanes[r >> 4 & 0xF], lanes[r >> 0 & 0xF]);
+    ctrl_reg[vs].lo = _mm_set_epi64x(ctc2_table[r >> 4 & 0xF], ctc2_table[r >> 0 & 0xF]);
     if (vs < 2) {
-        ctrl_reg[vs].hi = _mm_set_epi64x(lanes[r >> 12 & 0xF], lanes[r >> 8 & 0xF]);
+        ctrl_reg[vs].hi = _mm_set_epi64x(ctc2_table[r >> 12 & 0xF], ctc2_table[r >> 8 & 0xF]);
     }
 }
 
-template<> void mfc2<Interpreter>(u32 rt, u32 vs, u32 e)
+void mfc2(u32 rt, u32 vs, u32 e)
 {
     /* GPR[rt](31..0) = sign_extend(VS<elem>(15..0)) */
     u8* v = (u8*)(&vpr[vs]);
@@ -239,7 +215,7 @@ template<> void mfc2<Interpreter>(u32 rt, u32 vs, u32 e)
     }
 }
 
-template<> void mtc2<Interpreter>(u32 rt, u32 vs, u32 e)
+void mtc2(u32 rt, u32 vs, u32 e)
 {
     /* VS<elem>(15..0) = GPR[rt](15..0) */
     u8* v = (u8*)(&vpr[vs]);
@@ -252,60 +228,60 @@ template<> void mtc2<Interpreter>(u32 rt, u32 vs, u32 e)
     }
 }
 
-template<> void lbv<Interpreter>(u32 base, u32 vt, u32 e, s32 offset)
+void lbv(u32 base, u32 vt, u32 e, s32 offset)
 {
     LoadUpToDword<s8>(base, vt, e, offset);
 }
 
-template<> void ldv<Interpreter>(u32 base, u32 vt, u32 e, s32 offset)
+void ldv(u32 base, u32 vt, u32 e, s32 offset)
 {
     LoadUpToDword<s64>(base, vt, e, offset);
 }
 
-template<> void lfv<Interpreter>(u32 base, u32 vt, u32 e, s32 offset)
+void lfv(u32 base, u32 vt, u32 e, s32 offset)
 {
     u8* vpr_dst = (u8*)(&vpr[vt]);
     auto addr = gpr[base] + offset * 16;
-    auto mem_offset = (addr & 7) - e;
+    auto addr_offset = (addr & 7) - e; // todo: what if e > 8?
     addr &= ~7;
     s16 tmp[8];
     for (int i = 0; i < 4; ++i) {
-        tmp[i] = dmem[addr + (mem_offset + 4 * i & 15) & 0xFFF] << 7;
-        tmp[i + 4] = dmem[addr + (mem_offset + 4 * i + 8 & 15) & 0xFFF] << 7;
+        tmp[i] = dmem[addr + (addr_offset + 4 * i & 15) & 0xFFF] << 7;
+        tmp[i + 4] = dmem[addr + (addr_offset + 4 * i + 8 & 15) & 0xFFF] << 7;
     }
     for (auto byte = e; byte < std::min(e + 8, 16u); ++byte) {
         vpr_dst[byte ^ 1] = reinterpret_cast<u8*>(tmp)[byte ^ 1];
     }
 }
 
-template<> void lhv<Interpreter>(u32 base, u32 vt, u32 e, s32 offset)
+void lhv(u32 base, u32 vt, u32 e, s32 offset)
 {
     s16* vpr_dst = (s16*)(&vpr[vt]);
     auto addr = gpr[base] + offset * 16;
-    auto mem_offset = (addr & 7) - e;
+    auto mem_offset = (addr & 7) - e; // todo: what if e > 8?
     addr &= ~7;
     for (int i = 0; i < 8; ++i) {
         vpr_dst[i] = dmem[addr + (mem_offset + 2 * i & 15) & 0xFFF] << 7;
     }
 }
 
-template<> void llv<Interpreter>(u32 base, u32 vt, u32 e, s32 offset)
+void llv(u32 base, u32 vt, u32 e, s32 offset)
 {
     LoadUpToDword<s32>(base, vt, e, offset);
 }
 
-template<> void lpv<Interpreter>(u32 base, u32 vt, u32 e, s32 offset)
+void lpv(u32 base, u32 vt, u32 e, s32 offset)
 {
     s16* vpr_dst = (s16*)(&vpr[vt]);
     auto addr = gpr[base] + offset * 8;
-    auto mem_offset = (addr & 7) - e;
+    auto mem_offset = (addr & 7) - e; // todo: what if e > 8?
     addr &= ~7;
     for (int i = 0; i < 8; ++i) {
         vpr_dst[i] = dmem[addr + (mem_offset + i & 15) & 0xFFF] << 8;
     }
 }
 
-template<> void lqv<Interpreter>(u32 base, u32 vt, u32 e, s32 offset)
+void lqv(u32 base, u32 vt, u32 e, s32 offset)
 {
     u8* vpr_dst = (u8*)(&vpr[vt]);
     u32 addr = gpr[base] + offset * 16;
@@ -316,26 +292,23 @@ template<> void lqv<Interpreter>(u32 base, u32 vt, u32 e, s32 offset)
     }
 }
 
-template<> void lrv<Interpreter>(u32 base, u32 vt, u32 e, s32 offset)
+void lrv(u32 base, u32 vt, u32 e, s32 offset)
 {
     u8* vpr_dst = (u8*)(&vpr[vt]);
     u32 addr = gpr[base] + offset * 16;
-    e += 16 - (addr & 0xF);
-    if (e < 16) {
-        u32 num_bytes = 16 - e;
-        addr &= 0xFF0;
-        for (u32 i = 0; i < num_bytes; ++i) {
-            vpr_dst[e++ ^ 1] = dmem[addr++];
-        }
+    e += 16 - (addr & 15);
+    addr &= 0xFF0;
+    while (e < 16) {
+        vpr_dst[e++ ^ 1] = dmem[addr++];
     }
 }
 
-template<> void lsv<Interpreter>(u32 base, u32 vt, u32 e, s32 offset)
+void lsv(u32 base, u32 vt, u32 e, s32 offset)
 {
     LoadUpToDword<s16>(base, vt, e, offset);
 }
 
-template<> void ltv<Interpreter>(u32 base, u32 vt, u32 e, s32 offset)
+void ltv(u32 base, u32 vt, u32 e, s32 offset)
 {
     auto addr = gpr[base] + offset * 16;
     auto const wrap_addr = addr & ~7;
@@ -351,36 +324,36 @@ template<> void ltv<Interpreter>(u32 base, u32 vt, u32 e, s32 offset)
     }
 }
 
-template<> void luv<Interpreter>(u32 base, u32 vt, u32 e, s32 offset)
+void luv(u32 base, u32 vt, u32 e, s32 offset)
 {
     s16* vpr_dst = (s16*)(&vpr[vt]);
     auto addr = gpr[base] + offset * 8;
-    auto mem_offset = (addr & 7) - e;
+    auto mem_offset = (addr & 7) - e; // todo: what if e > 8?
     addr &= ~7;
     for (int i = 0; i < 8; ++i) {
         vpr_dst[i] = dmem[addr + (mem_offset + i & 15) & 0xFFF] << 7;
     }
 }
 
-template<> void sbv<Interpreter>(u32 base, u32 vt, u32 e, s32 offset)
+void sbv(u32 base, u32 vt, u32 e, s32 offset)
 {
     StoreUpToDword<s8>(base, vt, e, offset);
 }
 
-template<> void sdv<Interpreter>(u32 base, u32 vt, u32 e, s32 offset)
+void sdv(u32 base, u32 vt, u32 e, s32 offset)
 {
     StoreUpToDword<s64>(base, vt, e, offset);
 }
 
-template<> void sfv<Interpreter>(u32 base, u32 vt, u32 e, s32 offset)
+void sfv(u32 base, u32 vt, u32 e, s32 offset)
 {
     u16* vpr_src = (u16*)(&vpr[vt]);
     auto addr = gpr[base] + offset * 16;
-    auto mem_offset = addr & 7;
+    auto addr_offset = addr & 7;
     addr &= ~7;
-    auto store = [addr, mem_offset, vpr_src](std::array<u8, 4> values) {
+    auto store = [addr, addr_offset](std::array<u8, 4> values) {
         for (int i = 0; i < 4; ++i) {
-            dmem[addr + (mem_offset + 4 * i & 15) & 0xFFF] = values[i];
+            dmem[addr + (addr_offset + 4 * i & 15) & 0xFFF] = values[i];
         }
     };
     auto store_elems = [vpr_src, store](std::array<u8, 4> elems) {
@@ -404,7 +377,7 @@ template<> void sfv<Interpreter>(u32 base, u32 vt, u32 e, s32 offset)
     }
 }
 
-template<> void shv<Interpreter>(u32 base, u32 vt, u32 e, s32 offset)
+void shv(u32 base, u32 vt, u32 e, s32 offset)
 {
     u8* vpr_src = (u8*)(&vpr[vt]);
     auto addr = gpr[base] + offset * 16;
@@ -417,12 +390,12 @@ template<> void shv<Interpreter>(u32 base, u32 vt, u32 e, s32 offset)
     }
 }
 
-template<> void slv<Interpreter>(u32 base, u32 vt, u32 e, s32 offset)
+void slv(u32 base, u32 vt, u32 e, s32 offset)
 {
     StoreUpToDword<s32>(base, vt, e, offset);
 }
 
-template<> void spv<Interpreter>(u32 base, u32 vt, u32 e, s32 offset)
+void spv(u32 base, u32 vt, u32 e, s32 offset)
 {
     u8* vpr_src = (u8*)(&vpr[vt]);
     auto addr = gpr[base] + offset * 8;
@@ -431,14 +404,15 @@ template<> void spv<Interpreter>(u32 base, u32 vt, u32 e, s32 offset)
         if ((elem & 15) < 8) {
             val = vpr_src[elem << 1 & 0xE ^ 1];
         } else {
-            val = *(reinterpret_cast<s16*>(vpr_src) + (elem & 7)) >> 7;
+            val = reinterpret_cast<s16*>(vpr_src)[elem & 7] >> 7;
         }
         dmem[addr++ & 0xFFF] = val;
     }
 }
 
-template<> void sqv<Interpreter>(u32 base, u32 vt, u32 e, s32 offset)
+void sqv(u32 base, u32 vt, u32 e, s32 offset)
 {
+    ASSUME(e < 16);
     u8 const* vpr_src = (u8*)(&vpr[vt]);
     auto addr = gpr[base] + offset * 16;
     u32 addr_offset = addr & 15;
@@ -447,8 +421,9 @@ template<> void sqv<Interpreter>(u32 base, u32 vt, u32 e, s32 offset)
     }
 }
 
-template<> void srv<Interpreter>(u32 base, u32 vt, u32 e, s32 offset)
+void srv(u32 base, u32 vt, u32 e, s32 offset)
 {
+    ASSUME(e < 16);
     u8 const* vpr_src = (u8*)(&vpr[vt]);
     auto addr = gpr[base] + offset * 16;
     u32 addr_offset = addr & 15;
@@ -459,26 +434,28 @@ template<> void srv<Interpreter>(u32 base, u32 vt, u32 e, s32 offset)
     }
 }
 
-template<> void ssv<Interpreter>(u32 base, u32 vt, u32 e, s32 offset)
+void ssv(u32 base, u32 vt, u32 e, s32 offset)
 {
     StoreUpToDword<s16>(base, vt, e, offset);
 }
 
-template<> void stv<Interpreter>(u32 base, u32 vt, u32 e, s32 offset)
+void stv(u32 base, u32 vt, u32 e, s32 offset)
 {
     auto addr = gpr[base] + offset * 16;
     auto offset_addr = (addr & 7) - (e & ~1);
     auto elem = 16 - (e & ~1);
     addr &= ~7;
-    for (auto reg = vt & 0x18; reg < (vt & 0x18) + 8; ++reg) {
+    auto const reg_start = vt & 0x18;
+    for (auto reg = reg_start; reg < reg_start + 8; ++reg) {
         for (int i = 0; i < 2; ++i) {
             dmem[addr + (offset_addr++ & 15) & 0xFFF] = reinterpret_cast<u8*>(&vpr[reg])[elem++ & 15 ^ 1];
         }
     }
 }
 
-template<> void suv<Interpreter>(u32 base, u32 vt, u32 e, s32 offset)
+void suv(u32 base, u32 vt, u32 e, s32 offset)
 {
+    ASSUME(e < 16);
     u8* vpr_src = (u8*)(&vpr[vt]);
     auto addr = gpr[base] + offset * 8;
     for (auto elem = e; elem < e + 8; ++elem) {
@@ -492,8 +469,9 @@ template<> void suv<Interpreter>(u32 base, u32 vt, u32 e, s32 offset)
     }
 }
 
-template<> void swv<Interpreter>(u32 base, u32 vt, u32 e, s32 offset)
+void swv(u32 base, u32 vt, u32 e, s32 offset)
 {
+    ASSUME(e < 16);
     u8* vpr_src = (u8*)(&vpr[vt]);
     auto addr = gpr[base] + offset * 16;
     base = addr & 7;
@@ -503,7 +481,7 @@ template<> void swv<Interpreter>(u32 base, u32 vt, u32 e, s32 offset)
     }
 }
 
-template<> void vabs<Interpreter>(u32 vs, u32 vt, u32 vd, u32 e)
+void vabs(u32 vs, u32 vt, u32 vd, u32 e)
 {
     /* If a lane is 0x8000, store 0x7FFF to vpr[vd], and 0x8000 to the accumulator. */
     m128i eq0 = _mm_cmpeq_epi16(vpr[vs], _mm_setzero_si128());
@@ -514,7 +492,7 @@ template<> void vabs<Interpreter>(u32 vs, u32 vt, u32 vd, u32 e)
     vpr[vd] = _mm_subs_epi16(vpr[vd], slt);
 }
 
-template<> void vadd<Interpreter>(u32 vs, u32 vt, u32 vd, u32 e)
+void vadd(u32 vs, u32 vt, u32 vd, u32 e)
 {
     m128i vt_op = GetVTBroadcast(vt, e);
     acc.low = _mm_add_epi16(vpr[vs], _mm_sub_epi16(vt_op, vco.lo));
@@ -524,7 +502,7 @@ template<> void vadd<Interpreter>(u32 vs, u32 vt, u32 vd, u32 e)
     vco.lo = vco.hi = _mm_setzero_si128();
 }
 
-template<> void vaddc<Interpreter>(u32 vs, u32 vt, u32 vd, u32 e)
+void vaddc(u32 vs, u32 vt, u32 vd, u32 e)
 {
     m128i vt_op = GetVTBroadcast(vt, e);
     vpr[vd] = acc.low = _mm_add_epi16(vpr[vs], vt_op);
@@ -532,12 +510,12 @@ template<> void vaddc<Interpreter>(u32 vs, u32 vt, u32 vd, u32 e)
     vco.hi = _mm_setzero_si128();
 }
 
-template<> void vand<Interpreter>(u32 vs, u32 vt, u32 vd, u32 e)
+void vand(u32 vs, u32 vt, u32 vd, u32 e)
 {
     vpr[vd] = acc.low = _mm_and_si128(vpr[vs], GetVTBroadcast(vt, e));
 }
 
-template<> void vch<Interpreter>(u32 vs, u32 vt, u32 vd, u32 e)
+void vch(u32 vs, u32 vt, u32 vd, u32 e)
 {
     m128i vt_op = GetVTBroadcast(vt, e);
     vco.lo = _mm_xor_si128(vpr[vs], vt_op);
@@ -546,10 +524,10 @@ template<> void vch<Interpreter>(u32 vs, u32 vt, u32 vd, u32 e)
     nvt = _mm_sub_epi16(nvt, vco.lo);
     m128i diff = _mm_sub_epi16(vpr[vs], nvt);
     m128i diff0 = _mm_cmpeq_epi16(diff, _mm_setzero_si128());
-    m128i vtn = _mm_cmplt_epi16(vt_op, _mm_setzero_si128());
     m128i dlez = _mm_cmpgt_epi16(diff, _mm_setzero_si128());
     m128i dgez = _mm_or_si128(dlez, diff0);
-    dlez = _mm_cmpeq_epi16(_mm_setzero_si128(), dlez);
+    dlez = _mm_cmpeq_epi16(dlez, _mm_setzero_si128());
+    m128i vtn = _mm_cmplt_epi16(vt_op, _mm_setzero_si128());
     vcc.hi = _mm_blendv_epi8(dgez, vtn, vco.lo);
     vcc.lo = _mm_blendv_epi8(vtn, dlez, vco.lo);
     vce = _mm_cmpeq_epi16(diff, vco.lo);
@@ -560,7 +538,7 @@ template<> void vch<Interpreter>(u32 vs, u32 vt, u32 vd, u32 e)
     vpr[vd] = acc.low = _mm_blendv_epi8(vpr[vs], nvt, mask);
 }
 
-template<> void vcl<Interpreter>(u32 vs, u32 vt, u32 vd, u32 e)
+void vcl(u32 vs, u32 vt, u32 vd, u32 e)
 {
     m128i vt_op = GetVTBroadcast(vt, e);
     m128i nvt = _mm_xor_si128(vt_op, vco.lo);
@@ -588,7 +566,7 @@ template<> void vcl<Interpreter>(u32 vs, u32 vt, u32 vd, u32 e)
     vco.lo = vco.hi = vce = _mm_setzero_si128();
 }
 
-template<> void vcr<Interpreter>(u32 vs, u32 vt, u32 vd, u32 e)
+void vcr(u32 vs, u32 vt, u32 vd, u32 e)
 {
     m128i vt_op = GetVTBroadcast(vt, e);
     m128i sign = _mm_srai_epi16(_mm_xor_si128(vpr[vs], vt_op), 15);
@@ -596,14 +574,13 @@ template<> void vcr<Interpreter>(u32 vs, u32 vt, u32 vd, u32 e)
     vcc.lo = _mm_srai_epi16(dlez, 15);
     m128i dgez = _mm_min_epi16(_mm_or_si128(vpr[vs], sign), vt_op);
     vcc.hi = _mm_cmpeq_epi16(dgez, vt_op);
-    m128i nvt = _mm_xor_si128(vt_op, sign);
     m128i mask = _mm_blendv_epi8(vcc.hi, vcc.lo, sign);
-    acc.low = _mm_blendv_epi8(vpr[vs], nvt, mask);
-    vpr[vd] = acc.low;
+    m128i nvt = _mm_xor_si128(vt_op, sign);
+    vpr[vd] = acc.low = _mm_blendv_epi8(vpr[vs], nvt, mask);
     vco.lo = vco.hi = vce = _mm_setzero_si128();
 }
 
-template<> void veq<Interpreter>(u32 vs, u32 vt, u32 vd, u32 e)
+void veq(u32 vs, u32 vt, u32 vd, u32 e)
 {
     m128i vt_op = GetVTBroadcast(vt, e);
     m128i eq = _mm_cmpeq_epi16(vpr[vs], vt_op);
@@ -612,7 +589,7 @@ template<> void veq<Interpreter>(u32 vs, u32 vt, u32 vd, u32 e)
     vcc.hi = vco.lo = vco.hi = _mm_setzero_si128();
 }
 
-template<> void vge<Interpreter>(u32 vs, u32 vt, u32 vd, u32 e)
+void vge(u32 vs, u32 vt, u32 vd, u32 e)
 {
     m128i vt_op = GetVTBroadcast(vt, e);
     m128i eq = _mm_cmpeq_epi16(vpr[vs], vt_op);
@@ -623,7 +600,7 @@ template<> void vge<Interpreter>(u32 vs, u32 vt, u32 vd, u32 e)
     vcc.hi = vco.lo = vco.hi = _mm_setzero_si128();
 }
 
-template<> void vlt<Interpreter>(u32 vs, u32 vt, u32 vd, u32 e)
+void vlt(u32 vs, u32 vt, u32 vd, u32 e)
 {
     m128i vt_op = GetVTBroadcast(vt, e);
     m128i eq = _mm_cmpeq_epi16(vpr[vs], vt_op);
@@ -634,7 +611,7 @@ template<> void vlt<Interpreter>(u32 vs, u32 vt, u32 vd, u32 e)
     vcc.hi = vco.lo = vco.hi = _mm_setzero_si128();
 }
 
-template<> void vmacf<Interpreter>(u32 vs, u32 vt, u32 vd, u32 e)
+template<bool vmacf> void vmacfu(u32 vs, u32 vt, u32 vd, u32 e)
 {
     m128i vt_op = GetVTBroadcast(vt, e);
     m128i low = _mm_mullo_epi16(vpr[vs], vt_op);
@@ -642,19 +619,27 @@ template<> void vmacf<Interpreter>(u32 vs, u32 vt, u32 vd, u32 e)
     /* multiply by two to get a 33-bit product. Sign-extend to 48 bits, and add to the accumulator. */
     m128i low_carry = _mm_srli_epi16(low, 15);
     m128i high_carry = _mm_srai_epi16(high, 15);
-    low = _mm_slli_epi16(low, 1);
-    high = _mm_slli_epi16(high, 1);
+    low = _mm_add_epi16(low, low);
+    high = _mm_add_epi16(high, high);
     high = _mm_add_epi16(high, low_carry);
     AddToAcc(low, high, high_carry);
-    vpr[vd] = ClampSigned(acc.mid, acc.high);
+    if constexpr (vmacf) {
+        vpr[vd] = ClampSigned(acc.mid, acc.high);
+    } else { // vmacu
+        vpr[vd] = ClampUnsigned(acc.mid, acc.high);
+    }
 }
 
-template<> void vmacq<Interpreter>(u32 vd)
+void vmacf(u32 vs, u32 vt, u32 vd, u32 e)
+{
+    vmacfu<true>(vs, vt, vd, e);
+}
+
+void vmacq(u32 vd)
 {
     /* Given result = acc.mid | acc.high << 16: if !result.5, add 32 if result < 0, else if result >= 32,
      * subtract 32. */
     m128i mask = _mm_set1_epi16(32);
-    m128i nott = _mm_not_si128(acc.mid);
     m128i addend = _mm_and_si128(_mm_not_si128(acc.mid), mask); /* 0 or 32 */
     m128i acc_high_gtz = _mm_cmpgt_epi16(acc.high, _mm_setzero_si128());
     m128i acc_high_ltz = _mm_cmplt_epi16(acc.high, _mm_setzero_si128());
@@ -674,22 +659,12 @@ template<> void vmacq<Interpreter>(u32 vd)
     vpr[vd] = _mm_and_si128(_mm_set1_epi16(~0xF), ClampSigned(clamp_input_low, clamp_input_high));
 }
 
-template<> void vmacu<Interpreter>(u32 vs, u32 vt, u32 vd, u32 e)
+void vmacu(u32 vs, u32 vt, u32 vd, u32 e)
 {
-    m128i vt_op = GetVTBroadcast(vt, e);
-    m128i low = _mm_mullo_epi16(vpr[vs], vt_op);
-    m128i high = _mm_mulhi_epi16(vpr[vs], vt_op);
-    /* multiply by two to get a 33-bit product. Sign-extend to 48 bits, and add to the accumulator. */
-    m128i low_carry = _mm_srli_epi16(low, 15);
-    m128i high_carry = _mm_srai_epi16(high, 15);
-    low = _mm_slli_epi16(low, 1);
-    high = _mm_slli_epi16(high, 1);
-    high = _mm_add_epi16(high, low_carry);
-    AddToAcc(low, high, high_carry);
-    vpr[vd] = ClampUnsigned(acc.mid, acc.high);
+    vmacfu<false>(vs, vt, vd, e);
 }
 
-template<> void vmadh<Interpreter>(u32 vs, u32 vt, u32 vd, u32 e)
+void vmadh(u32 vs, u32 vt, u32 vd, u32 e)
 {
     m128i vt_op = GetVTBroadcast(vt, e);
     m128i low = _mm_mullo_epi16(vpr[vs], vt_op);
@@ -698,19 +673,19 @@ template<> void vmadh<Interpreter>(u32 vs, u32 vt, u32 vd, u32 e)
     vpr[vd] = ClampSigned(acc.mid, acc.high);
 }
 
-template<> void vmadl<Interpreter>(u32 vs, u32 vt, u32 vd, u32 e)
+void vmadl(u32 vs, u32 vt, u32 vd, u32 e)
 {
     AddToAcc(_mm_mulhi_epu16(vpr[vs], GetVTBroadcast(vt, e)));
     /* In this case, the unsigned clamp will return ACC_LO if ACC_HI is the sign extension of ACC_MD -
     otherwise, it will return 0 for negative ACC_HI, and 65535 for positive ACC_HI */
+    m128i acc_high_neg = _mm_srai_epi16(acc.high, 15);
     m128i is_sign_ext = _mm_cmpeq_epi16(acc.high, _mm_srai_epi16(acc.mid, 15));
-    m128i acc_high_neg = _mm_cmpeq_epi16(_mm_set1_epi64x(s64(-1)), _mm_srai_epi16(acc.high, 15));
     vpr[vd] = _mm_blendv_epi8(_mm_blendv_epi8(_mm_set1_epi64x(s64(-1)), _mm_setzero_si128(), acc_high_neg),
       acc.low,
       is_sign_ext);
 }
 
-template<> void vmadm<Interpreter>(u32 vs, u32 vt, u32 vd, u32 e)
+void vmadm(u32 vs, u32 vt, u32 vd, u32 e)
 {
     m128i vt_op = GetVTBroadcast(vt, e);
     m128i low = _mm_mullo_epi16(vpr[vs], vt_op);
@@ -720,7 +695,7 @@ template<> void vmadm<Interpreter>(u32 vs, u32 vt, u32 vd, u32 e)
     vpr[vd] = ClampSigned(acc.mid, acc.high);
 }
 
-template<> void vmadn<Interpreter>(u32 vs, u32 vt, u32 vd, u32 e)
+void vmadn(u32 vs, u32 vt, u32 vd, u32 e)
 {
     m128i vt_op = GetVTBroadcast(vt, e);
     m128i low = _mm_mullo_epi16(vpr[vs], vt_op);
@@ -729,27 +704,27 @@ template<> void vmadn<Interpreter>(u32 vs, u32 vt, u32 vd, u32 e)
     /* In this case, the unsigned clamp will return ACC_LO if ACC_HI is the sign extension of ACC_MD -
     otherwise, it will return 0 for negative ACC_HI, and 65535 for positive ACC_HI */
     AddToAcc(low, high, sign_ext);
+    m128i acc_high_neg = _mm_srai_epi16(acc.high, 15);
     m128i is_sign_ext = _mm_cmpeq_epi16(acc.high, _mm_srai_epi16(acc.mid, 15));
-    m128i acc_high_neg = _mm_cmpeq_epi16(_mm_set1_epi64x(s64(-1)), _mm_srai_epi16(acc.high, 15));
     vpr[vd] = _mm_blendv_epi8(_mm_blendv_epi8(_mm_set1_epi64x(s64(-1)), _mm_setzero_si128(), acc_high_neg),
       acc.low,
       is_sign_ext);
 }
 
-template<> void vmov<Interpreter>(u32 vt, u32 vt_e, u32 vd, u32 vd_e)
+void vmov(u32 vt, u32 vt_e, u32 vd, u32 vd_e)
 {
     m128i vte = GetVTBroadcast(vt, vt_e);
     reinterpret_cast<s16*>(&vpr[vd])[vd_e] = reinterpret_cast<s16*>(&vte)[vd_e];
     acc.low = vte;
 }
 
-template<> void vmrg<Interpreter>(u32 vs, u32 vt, u32 vd, u32 e)
+void vmrg(u32 vs, u32 vt, u32 vd, u32 e)
 {
     vpr[vd] = acc.low = _mm_blendv_epi8(GetVTBroadcast(vt, e), vpr[vs], vcc.lo);
     std::memset(&vco, 0, sizeof(vco));
 }
 
-template<> void vmudh<Interpreter>(u32 vs, u32 vt, u32 vd, u32 e)
+void vmudh(u32 vs, u32 vt, u32 vd, u32 e)
 {
     m128i vt_op = GetVTBroadcast(vt, e);
     acc.low = _mm_setzero_si128(); /* seems necessary given tests */
@@ -758,13 +733,13 @@ template<> void vmudh<Interpreter>(u32 vs, u32 vt, u32 vd, u32 e)
     vpr[vd] = ClampSigned(acc.mid, acc.high);
 }
 
-template<> void vmudl<Interpreter>(u32 vs, u32 vt, u32 vd, u32 e)
+void vmudl(u32 vs, u32 vt, u32 vd, u32 e)
 {
     vpr[vd] = acc.low = _mm_mulhi_epu16(vpr[vs], GetVTBroadcast(vt, e));
     acc.mid = acc.high = _mm_setzero_si128();
 }
 
-template<> void vmudm<Interpreter>(u32 vs, u32 vt, u32 vd, u32 e)
+void vmudm(u32 vs, u32 vt, u32 vd, u32 e)
 {
     m128i vt_op = GetVTBroadcast(vt, e);
     acc.low = _mm_mullo_epi16(vpr[vs], vt_op);
@@ -773,20 +748,16 @@ template<> void vmudm<Interpreter>(u32 vs, u32 vt, u32 vd, u32 e)
     vpr[vd] = ClampSigned(acc.mid, acc.high);
 }
 
-template<> void vmudn<Interpreter>(u32 vs, u32 vt, u32 vd, u32 e)
+void vmudn(u32 vs, u32 vt, u32 vd, u32 e)
 {
     m128i vt_op = GetVTBroadcast(vt, e);
     acc.low = _mm_mullo_epi16(vpr[vs], vt_op);
     acc.mid = _mm_mulhi_epu16_epi16(vpr[vs], vt_op);
     acc.high = _mm_srai_epi16(acc.mid, 15);
-    m128i is_sign_ext = _mm_set1_epi64x(s64(-1));
-    m128i acc_high_neg = _mm_cmpeq_epi16(_mm_set1_epi64x(s64(-1)), _mm_srai_epi16(acc.high, 15));
-    vpr[vd] = _mm_blendv_epi8(_mm_blendv_epi8(_mm_set1_epi64x(s64(-1)), _mm_setzero_si128(), acc_high_neg),
-      acc.low,
-      is_sign_ext);
+    vpr[vd] = acc.low;
 }
 
-template<> void vmulf<Interpreter>(u32 vs, u32 vt, u32 vd, u32 e)
+void vmulf(u32 vs, u32 vt, u32 vd, u32 e)
 {
     vmulfu<true>(vs, vt, vd, e);
 }
@@ -804,12 +775,12 @@ template<bool vmulf> void vmulfu(u32 vs, u32 vt, u32 vd, u32 e)
     /* multiply by two */
     m128i low_carry_mul = _mm_srli_epi16(low, 15); /* note: either 0 or 1 */
     m128i high_carry_mul = _mm_srai_epi16(high, 15); /* note: either 0 or 0xFFFF */
-    low = _mm_slli_epi16(low, 1);
-    high = _mm_slli_epi16(high, 1);
+    low = _mm_add_epi16(low, low);
+    high = _mm_add_epi16(high, high);
     high = _mm_add_epi16(high, low_carry_mul);
     /* add $8000 */
     low = _mm_add_epi16(low, m128i_epi16_sign_mask);
-    m128i low_carry_add = _mm_cmpgt_epi16(low, _mm_setzero_si128()); /* carry if low >= 0 */
+    m128i low_carry_add = _mm_cmpge_epi16(low, _mm_setzero_si128()); /* carry if low >= 0 */
     high = _mm_sub_epi16(high, low_carry_add);
     m128i high_carry_add = _mm_and_si128(_mm_cmpeq_epi16(high, _mm_setzero_si128()), low_carry_add);
     acc.low = low;
@@ -825,7 +796,7 @@ template<bool vmulf> void vmulfu(u32 vs, u32 vt, u32 vd, u32 e)
     }
 }
 
-template<> void vmulq<Interpreter>(u32 vs, u32 vt, u32 vd, u32 e)
+void vmulq(u32 vs, u32 vt, u32 vd, u32 e)
 {
     m128i vt_op = GetVTBroadcast(vt, e);
     m128i low = _mm_mullo_epi16(vpr[vs], vt_op);
@@ -833,64 +804,64 @@ template<> void vmulq<Interpreter>(u32 vs, u32 vt, u32 vd, u32 e)
     /* add 31 to product if product < 0 */
     m128i addend = _mm_and_si128(_mm_srai_epi16(high, 15), _mm_set1_epi16(0x1F));
     low = _mm_add_epi16(low, addend);
-    m128i low_carry = _mm_srli_epi16(_mm_cmplt_epu16(low, addend), 15);
-    high = _mm_add_epi16(high, low_carry);
+    m128i low_carry = _mm_cmplt_epu16(low, addend);
+    high = _mm_sub_epi16(high, low_carry);
     acc.low = _mm_setzero_si128();
     acc.mid = low;
     acc.high = high;
     vpr[vd] = _mm_and_si128(_mm_set1_epi16(~0xF), ClampSigned(_mm_srai_epi16(acc.mid, 1), _mm_srai_epi16(acc.high, 1)));
 }
 
-template<> void vmulu<Interpreter>(u32 vs, u32 vt, u32 vd, u32 e)
+void vmulu(u32 vs, u32 vt, u32 vd, u32 e)
 {
     vmulfu<false>(vs, vt, vd, e);
 }
 
-template<> void vnand<Interpreter>(u32 vs, u32 vt, u32 vd, u32 e)
+void vnand(u32 vs, u32 vt, u32 vd, u32 e)
 {
     vpr[vd] = acc.low = _mm_nand_si128(vpr[vs], GetVTBroadcast(vt, e));
 }
 
-template<> void vne<Interpreter>(u32 vs, u32 vt, u32 vd, u32 e)
+void vne(u32 vs, u32 vt, u32 vd, u32 e)
 {
     m128i vt_op = GetVTBroadcast(vt, e);
     m128i eq = _mm_cmpeq_epi16(vpr[vs], vt_op);
-    vcc.lo = _mm_or_si128(vco.hi, _mm_cmpneq_epi16(vpr[vs], vt_op));
+    vcc.lo = _mm_or_si128(vco.hi, _mm_not_si128(eq));
     vpr[vd] = acc.low = _mm_blendv_epi8(vt_op, vpr[vs], vcc.lo); /* Each 16-bit lane in vcc is either 0 or $FFFF */
     std::memset(&vco, 0, sizeof(vco));
     std::memset(&vcc.hi, 0, sizeof(vcc.hi));
 }
 
-template<> void vnop<Interpreter>()
+void vnop()
 {
 }
 
-template<> void vnor<Interpreter>(u32 vs, u32 vt, u32 vd, u32 e)
+void vnor(u32 vs, u32 vt, u32 vd, u32 e)
 {
     vpr[vd] = acc.low = _mm_nor_si128(vpr[vs], GetVTBroadcast(vt, e));
 }
 
-template<> void vnxor<Interpreter>(u32 vs, u32 vt, u32 vd, u32 e)
+void vnxor(u32 vs, u32 vt, u32 vd, u32 e)
 {
     vpr[vd] = acc.low = _mm_nxor_si128(vpr[vs], GetVTBroadcast(vt, e));
 }
 
-template<> void vor<Interpreter>(u32 vs, u32 vt, u32 vd, u32 e)
+void vor(u32 vs, u32 vt, u32 vd, u32 e)
 {
     vpr[vd] = acc.low = _mm_or_si128(vpr[vs], GetVTBroadcast(vt, e));
 }
 
-template<> void vrcp<Interpreter>(u32 vt, u32 vt_e, u32 vd, u32 vd_e)
+void vrcp(u32 vt, u32 vt_e, u32 vd, u32 vd_e)
 {
+    acc.low = GetVTBroadcast(vt, vt_e);
     s32 input = _mm_getlane_epi16(&vpr[vt], vt_e & 7);
     s32 result = Rcp(input);
-    acc.low = GetVTBroadcast(vt, vt_e);
     _mm_setlane_epi16(&vpr[vd], vd_e & 7, s16(result));
     div_out = u16(result >> 16);
     div_dp = 0;
 }
 
-template<> void vrcph<Interpreter>(u32 vt, u32 vt_e, u32 vd, u32 vd_e)
+void vrcph(u32 vt, u32 vt_e, u32 vd, u32 vd_e)
 {
     acc.low = GetVTBroadcast(vt, vt_e);
     _mm_setlane_epi16(&vpr[vd], vd_e & 7, div_out);
@@ -898,7 +869,7 @@ template<> void vrcph<Interpreter>(u32 vt, u32 vt_e, u32 vd, u32 vd_e)
     div_dp = 1;
 }
 
-template<> void vrcpl<Interpreter>(u32 vt, u32 vt_e, u32 vd, u32 vd_e)
+void vrcpl(u32 vt, u32 vt_e, u32 vd, u32 vd_e)
 {
     acc.low = GetVTBroadcast(vt, vt_e);
     u16 vte = _mm_getlane_epi16(&vpr[vt], vt_e & 7);
@@ -928,35 +899,32 @@ template<bool p> void vrnd(u32 vt, u32 vt_e, u32 vd, u32 vd_e)
     vpr[vd] = ClampSigned(acc.mid, acc.high);
 }
 
-template<> void vrndn<Interpreter>(u32 vt, u32 vt_e, u32 vd, u32 vd_e)
+void vrndn(u32 vt, u32 vt_e, u32 vd, u32 vd_e)
 {
     vrnd<false>(vt, vt_e, vd, vd_e);
 }
 
-template<> void vrndp<Interpreter>(u32 vt, u32 vt_e, u32 vd, u32 vd_e)
+void vrndp(u32 vt, u32 vt_e, u32 vd, u32 vd_e)
 {
     vrnd<true>(vt, vt_e, vd, vd_e);
 }
 
-template<> void vrsq<Interpreter>(u32 vt, u32 vt_e, u32 vd, u32 vd_e)
+void vrsq(u32 vt, u32 vt_e, u32 vd, u32 vd_e)
 {
+    acc.low = GetVTBroadcast(vt, vt_e);
     s32 input = _mm_getlane_epi16(&vpr[vt], vt_e & 7);
     s32 result = Rsq(input);
-    acc.low = GetVTBroadcast(vt, vt_e);
     _mm_setlane_epi16(&vpr[vd], vd_e & 7, s16(result));
     div_out = result >> 16;
     div_dp = 0;
 }
 
-template<> void vrsqh<Interpreter>(u32 vt, u32 vt_e, u32 vd, u32 vd_e)
+void vrsqh(u32 vt, u32 vt_e, u32 vd, u32 vd_e)
 {
-    acc.low = GetVTBroadcast(vt, vt_e);
-    _mm_setlane_epi16(&vpr[vd], vd_e & 7, div_out);
-    div_in = _mm_getlane_epi16(&vpr[vt], vt_e & 7);
-    div_dp = 1;
+    vrcph(vt, vt_e, vd, vd_e);
 }
 
-template<> void vrsql<Interpreter>(u32 vt, u32 vt_e, u32 vd, u32 vd_e)
+void vrsql(u32 vt, u32 vt_e, u32 vd, u32 vd_e)
 {
     acc.low = GetVTBroadcast(vt, vt_e);
     u16 vte = _mm_getlane_epi16(&vpr[vt], vt_e & 7);
@@ -967,7 +935,7 @@ template<> void vrsql<Interpreter>(u32 vt, u32 vt_e, u32 vd, u32 vd_e)
     div_in = div_dp = 0;
 }
 
-template<> void vsar<Interpreter>(u32 vd, u32 e)
+void vsar(u32 vd, u32 e)
 {
     vpr[vd] = [e] {
         switch (e) {
@@ -979,19 +947,19 @@ template<> void vsar<Interpreter>(u32 vd, u32 e)
     }();
 }
 
-template<> void vsub<Interpreter>(u32 vs, u32 vt, u32 vd, u32 e)
+void vsub(u32 vs, u32 vt, u32 vd, u32 e)
 {
     m128i vt_op = GetVTBroadcast(vt, e);
     m128i diff = _mm_sub_epi16(vt_op, vco.lo);
-    m128i clamped_diff = _mm_subs_epi16(vt_op, vco.lo);
     acc.low = _mm_sub_epi16(vpr[vs], diff);
+    m128i clamped_diff = _mm_subs_epi16(vt_op, vco.lo);
     m128i overflow = _mm_cmpgt_epi16(clamped_diff, diff);
     vpr[vd] = _mm_subs_epi16(vpr[vs], clamped_diff);
     vpr[vd] = _mm_adds_epi16(vpr[vd], overflow);
     vco.lo = vco.hi = _mm_setzero_si128();
 }
 
-template<> void vsubc<Interpreter>(u32 vs, u32 vt, u32 vd, u32 e)
+void vsubc(u32 vs, u32 vt, u32 vd, u32 e)
 {
     m128i vt_op = GetVTBroadcast(vt, e);
     vco.lo = _mm_cmplt_epu16(vpr[vs], vt_op); /* check borrow */
@@ -999,12 +967,12 @@ template<> void vsubc<Interpreter>(u32 vs, u32 vt, u32 vd, u32 e)
     vco.hi = _mm_or_si128(vco.lo, _mm_cmpneq_epi16(vpr[vd], _mm_setzero_si128()));
 }
 
-template<> void vxor<Interpreter>(u32 vs, u32 vt, u32 vd, u32 e)
+void vxor(u32 vs, u32 vt, u32 vd, u32 e)
 {
     vpr[vd] = acc.low = _mm_xor_si128(vpr[vs], GetVTBroadcast(vt, e));
 }
 
-template<> void vzero<Interpreter>(u32 vs, u32 vt, u32 vd, u32 e)
+void vzero(u32 vs, u32 vt, u32 vd, u32 e)
 {
     acc.low = _mm_add_epi16(vpr[vs], GetVTBroadcast(vt, e));
     vpr[vd] = _mm_setzero_si128();

@@ -3,10 +3,9 @@
 #include <bit>
 #include <concepts>
 
-#include "gpr.hpp"
 #include "host.hpp"
 #include "jit_util.hpp"
-#include "register_allocator.hpp"
+#include "mips/types.hpp"
 
 namespace mips {
 
@@ -24,22 +23,25 @@ enum class Cond {
     Ne
 };
 
-template<std::signed_integral GprInt, std::signed_integral LoHiInt, std::integral PcInt> struct Recompiler {
+template<std::signed_integral GprInt, std::signed_integral LoHiInt, std::integral PcInt, typename RegisterAllocator>
+struct Recompiler {
     using BlockEpilogHandler = void (*)();
     using BlockEpilogWithJmpHandler = void (*)(void*);
     using CheckCanExecDwordInstrHandler = bool (*)();
     using ExceptionHandler = void (*)();
+    using IndirectJumpHandler = void (*)(Gp target);
     using LinkHandler = void (*)(u32 reg);
-    using TakeBranchHandler = void (*)(asmjit::x86::Gp target);
+    using TakeBranchHandler = void (*)(PcInt target);
 
     consteval Recompiler(AsmjitCompiler& compiler,
-      RegisterAllocator<GprInt>& reg_alloc,
+      RegisterAllocator& reg_alloc,
       LoHiInt& lo,
       LoHiInt& hi,
       PcInt& jit_pc,
       bool& branch_hit,
       bool& branched,
       TakeBranchHandler take_branch_handler,
+      IndirectJumpHandler indirect_jump_handler,
       LinkHandler link_handler,
       BlockEpilogHandler block_epilog = nullptr, // only for cpus supporting exceptions
       BlockEpilogWithJmpHandler block_epilog_with_jmp = nullptr, // only for cpus supporting exceptions
@@ -54,6 +56,7 @@ template<std::signed_integral GprInt, std::signed_integral LoHiInt, std::integra
         branch_hit(branch_hit),
         branched(branched),
         take_branch(take_branch_handler),
+        indirect_jump(indirect_jump_handler),
         link(link_handler),
         check_can_exec_dword_instr(check_can_exec_dword_instr),
         block_epilog(block_epilog),
@@ -67,10 +70,11 @@ template<std::signed_integral GprInt, std::signed_integral LoHiInt, std::integra
     LoHiInt& hi;
     PcInt& jit_pc;
     AsmjitCompiler& c;
-    RegisterAllocator<GprInt>& reg_alloc;
+    RegisterAllocator& reg_alloc;
     bool& branch_hit;
     bool& branched;
     TakeBranchHandler const take_branch;
+    IndirectJumpHandler const indirect_jump;
     LinkHandler const link;
     CheckCanExecDwordInstrHandler const check_can_exec_dword_instr;
     BlockEpilogHandler const block_epilog;
@@ -88,12 +92,12 @@ template<std::signed_integral GprInt, std::signed_integral LoHiInt, std::integra
     {
         Label l_noexception = c.newLabel();
         Gpd hs = GetGpr32(rs), ht = GetGpr32(rt);
-        c.lea(eax, Mem(hs, ht, 0, 0)); // [hs + ht]
+        c.lea(eax, ptr(hs, ht));
         c.jno(l_noexception);
         block_epilog_with_jmp(integer_overflow_exception);
         c.bind(l_noexception);
         if (rd) {
-            Gp hd = GetGprMarkDirty(rd);
+            Gp hd = GetDirtyGpr(rd);
             if constexpr (mips32) c.mov(hd, eax);
             else c.movsxd(hd, eax);
         }
@@ -103,13 +107,12 @@ template<std::signed_integral GprInt, std::signed_integral LoHiInt, std::integra
     {
         Label l_noexception = c.newLabel();
         Gpd hs = GetGpr32(rs);
-        c.mov(eax, hs);
-        c.add(eax, imm);
+        c.lea(eax, ptr(hs, imm));
         c.jno(l_noexception);
         block_epilog_with_jmp(integer_overflow_exception);
         c.bind(l_noexception);
         if (rt) {
-            Gp ht = GetGprMarkDirty(rt);
+            Gp ht = GetDirtyGpr(rt);
             if constexpr (mips32) c.mov(ht, eax);
             else c.movsxd(ht, eax);
         }
@@ -118,24 +121,23 @@ template<std::signed_integral GprInt, std::signed_integral LoHiInt, std::integra
     void addiu(u32 rs, u32 rt, s16 imm) const
     {
         if (!rt) return;
-        Gpd hs = GetGpr32(rs), ht = GetGpr32MarkDirty(rt);
-        if (rs != rt) c.mov(ht, hs);
-        c.add(ht, imm);
+        Gpd ht = GetDirtyGpr32(rt), hs = GetGpr32(rs);
+        c.lea(ht, ptr(hs, imm));
         if constexpr (mips64) c.movsxd(ht.r64(), ht);
     }
 
     void addu(u32 rs, u32 rt, u32 rd) const
     {
         if (!rd) return;
-        Gpd hs = GetGpr32(rs), ht = GetGpr32(rt), hd = GetGpr32MarkDirty(rd);
-        c.lea(hd, Mem(hs, ht, 0, 0)); // [hs + ht]
+        Gpd hd = GetDirtyGpr32(rd), hs = GetGpr32(rs), ht = GetGpr32(rt);
+        c.lea(hd, ptr(hs, ht));
         if constexpr (mips64) c.movsxd(hd.r64(), hd);
     }
 
     void and_(u32 rs, u32 rt, u32 rd) const
     {
         if (!rd) return;
-        Gp hd = GetGprMarkDirty(rd);
+        Gp hd = GetDirtyGpr(rd);
         if (!rs || !rt) {
             c.xor_(hd.r32(), hd.r32());
         } else {
@@ -148,7 +150,7 @@ template<std::signed_integral GprInt, std::signed_integral LoHiInt, std::integra
     void andi(u32 rs, u32 rt, u16 imm) const
     {
         if (!rt) return;
-        Gp ht = GetGprMarkDirty(rt);
+        Gp ht = GetDirtyGpr(rt);
         if (!rs) {
             c.xor_(ht.r32(), ht.r32());
         } else {
@@ -179,11 +181,11 @@ template<std::signed_integral GprInt, std::signed_integral LoHiInt, std::integra
         if (!check_can_exec_dword_instr()) return;
         Label l_noexception = c.newLabel();
         Gpq hs = GetGpr(rs), ht = GetGpr(rt);
-        c.lea(rax, Mem(hs, ht, 0, 0)); // [hs + ht]
+        c.lea(rax, ptr(hs, ht));
         c.jno(l_noexception);
         block_epilog_with_jmp(integer_overflow_exception);
         c.bind(l_noexception);
-        if (rd) c.mov(GetGprMarkDirty(rd), rax);
+        if (rd) c.mov(GetDirtyGpr(rd), rax);
     }
 
     void daddi(u32 rs, u32 rt, s16 imm) const
@@ -191,36 +193,34 @@ template<std::signed_integral GprInt, std::signed_integral LoHiInt, std::integra
         if (!check_can_exec_dword_instr()) return;
         Label l_noexception = c.newLabel();
         Gpq hs = GetGpr(rs);
-        c.mov(rax, hs);
-        c.add(rax, imm);
+        c.lea(rax, ptr(hs, imm));
         c.jno(l_noexception);
         block_epilog_with_jmp(integer_overflow_exception);
         c.bind(l_noexception);
-        if (rt) c.mov(GetGprMarkDirty(rt), rax);
+        if (rt) c.mov(GetDirtyGpr(rt), rax);
     }
 
     void daddiu(u32 rs, u32 rt, s16 imm) const
     {
         if (!check_can_exec_dword_instr()) return;
         if (!rt) return;
-        Gpq hs = GetGpr(rs), ht = GetGprMarkDirty(rt);
-        if (rs != rt) c.mov(ht, hs);
-        c.add(ht, imm);
+        Gpq ht = GetDirtyGpr(rt), hs = GetGpr(rs);
+        c.lea(ht, ptr(hs, imm));
     }
 
     void daddu(u32 rs, u32 rt, u32 rd) const
     {
         if (!check_can_exec_dword_instr()) return;
         if (!rd) return;
-        Gpq hs = GetGpr(rs), ht = GetGpr(rt), hd = GetGprMarkDirty(rd);
-        c.lea(hd, Mem(hs, ht, 0, 0)); // [hs + ht]
+        Gpq hd = GetDirtyGpr(rd), hs = GetGpr(rs), ht = GetGpr(rt);
+        c.lea(hd, ptr(hs, ht));
     }
 
     void dsll(u32 rt, u32 rd, u32 sa) const
     {
         if (!check_can_exec_dword_instr()) return;
         if (!rd) return;
-        Gpq ht = GetGpr(rt), hd = GetGprMarkDirty(rd);
+        Gpq hd = GetDirtyGpr(rd), ht = GetGpr(rt);
         if (rt != rd) c.mov(hd, ht);
         c.shl(hd, sa);
     }
@@ -229,7 +229,7 @@ template<std::signed_integral GprInt, std::signed_integral LoHiInt, std::integra
     {
         if (!check_can_exec_dword_instr()) return;
         if (!rd) return;
-        Gpq ht = GetGpr(rt), hd = GetGprMarkDirty(rd);
+        Gpq hd = GetDirtyGpr(rd), ht = GetGpr(rt);
         if (rt != rd) c.mov(hd, ht);
         c.shl(hd, sa + 32);
     }
@@ -238,7 +238,7 @@ template<std::signed_integral GprInt, std::signed_integral LoHiInt, std::integra
     {
         if (!check_can_exec_dword_instr()) return;
         if (!rd) return;
-        Gpq hs = GetGpr(rs), ht = GetGpr(rt), hd = GetGprMarkDirty(rd);
+        Gpq hd = GetDirtyGpr(rd), hs = GetGpr(rs), ht = GetGpr(rt);
         c.shlx(hd, ht, hs);
     }
 
@@ -246,7 +246,7 @@ template<std::signed_integral GprInt, std::signed_integral LoHiInt, std::integra
     {
         if (!check_can_exec_dword_instr()) return;
         if (!rd) return;
-        Gpq ht = GetGpr(rt), hd = GetGprMarkDirty(rd);
+        Gpq hd = GetDirtyGpr(rd), ht = GetGpr(rt);
         if (rt != rd) c.mov(hd, ht);
         c.sar(hd, sa);
     }
@@ -255,7 +255,7 @@ template<std::signed_integral GprInt, std::signed_integral LoHiInt, std::integra
     {
         if (!check_can_exec_dword_instr()) return;
         if (!rd) return;
-        Gpq ht = GetGpr(rt), hd = GetGprMarkDirty(rd);
+        Gpq hd = GetDirtyGpr(rd), ht = GetGpr(rt);
         if (rt != rd) c.mov(hd, ht);
         c.sar(hd, sa + 32);
     }
@@ -264,7 +264,7 @@ template<std::signed_integral GprInt, std::signed_integral LoHiInt, std::integra
     {
         if (!check_can_exec_dword_instr()) return;
         if (!rd) return;
-        Gpq hs = GetGpr(rs), ht = GetGpr(rt), hd = GetGprMarkDirty(rd);
+        Gpq hd = GetDirtyGpr(rd), hs = GetGpr(rs), ht = GetGpr(rt);
         c.sarx(hd, ht, hs);
     }
 
@@ -272,7 +272,7 @@ template<std::signed_integral GprInt, std::signed_integral LoHiInt, std::integra
     {
         if (!check_can_exec_dword_instr()) return;
         if (!rd) return;
-        Gpq ht = GetGpr(rt), hd = GetGprMarkDirty(rd);
+        Gpq hd = GetDirtyGpr(rd), ht = GetGpr(rt);
         if (rt != rd) c.mov(hd, ht);
         c.shr(hd, sa);
     }
@@ -281,7 +281,7 @@ template<std::signed_integral GprInt, std::signed_integral LoHiInt, std::integra
     {
         if (!check_can_exec_dword_instr()) return;
         if (!rd) return;
-        Gpq ht = GetGpr(rt), hd = GetGprMarkDirty(rd);
+        Gpq hd = GetDirtyGpr(rd), ht = GetGpr(rt);
         if (rt != rd) c.mov(hd, ht);
         c.shr(hd, sa + 32);
     }
@@ -290,7 +290,7 @@ template<std::signed_integral GprInt, std::signed_integral LoHiInt, std::integra
     {
         if (!check_can_exec_dword_instr()) return;
         if (!rd) return;
-        Gpq hs = GetGpr(rs), ht = GetGpr(rt), hd = GetGprMarkDirty(rd);
+        Gpq hd = GetDirtyGpr(rd), hs = GetGpr(rs), ht = GetGpr(rt);
         c.shrx(hd, ht, hs);
     }
 
@@ -304,75 +304,81 @@ template<std::signed_integral GprInt, std::signed_integral LoHiInt, std::integra
         c.jno(l_noexception);
         block_epilog_with_jmp(integer_overflow_exception);
         c.bind(l_noexception);
-        if (rd) c.mov(GetGprMarkDirty(rd), rax);
+        if (rd) c.mov(GetDirtyGpr(rd), rax);
     }
 
     void dsubu(u32 rs, u32 rt, u32 rd) const
     {
         if (!check_can_exec_dword_instr()) return;
         if (!rd) return;
-        Gpq hs = GetGpr(rs), ht = GetGpr(rt), hd = GetGprMarkDirty(rd);
+        Gpq hd = GetDirtyGpr(rd), hs = GetGpr(rs), ht = GetGpr(rt);
         if (rs != rd) c.mov(hd, hs);
         c.sub(hd, ht);
     }
 
     void j(u32 instr) const
     {
-        static constexpr auto t = [] {
-            if constexpr (sizeof(PcInt) == 4) return eax;
-            else return rax;
-        }();
-        c.mov(t, (jit_pc + 4) & ~PcInt(0xFFF'FFFF) | instr << 2 & 0xFFF'FFFF);
-        take_branch(t);
+        take_branch((jit_pc + 4) & ~PcInt(0xFFF'FFFF) | instr << 2 & 0xFFF'FFFF);
         branch_hit = true;
     }
 
     void jal(u32 instr) const
     {
-        static constexpr auto t = [] {
-            if constexpr (sizeof(PcInt) == 4) return eax;
-            else return rax;
-        }();
-        c.mov(t, (jit_pc + 4) & ~PcInt(0xFFF'FFFF) | instr << 2 & 0xFFF'FFFF);
-        take_branch(t);
+        take_branch((jit_pc + 4) & ~PcInt(0xFFF'FFFF) | instr << 2 & 0xFFF'FFFF);
         link(31);
         branch_hit = true;
     }
 
     void jalr(u32 rs, u32 rd) const
     {
-        take_branch(GetGpr(rs));
+        indirect_jump(GetGpr(rs));
         link(rd);
         branch_hit = true;
     }
 
     void jr(u32 rs) const
     {
-        take_branch(GetGpr(rs));
+        indirect_jump(GetGpr(rs));
         branch_hit = true;
     }
 
     void lui(u32 rt, s16 imm) const
     {
         if (!rt) return;
-        Gp ht = GetGprMarkDirty(rt);
+        Gp ht = GetDirtyGpr(rt);
         imm ? c.mov(ht, imm << 16) : c.xor_(ht.r32(), ht.r32());
     }
 
     void mfhi(u32 rd) const
     {
-        if (rd) c.mov(GetGprMarkDirty(rd), ptr(hi));
+        if (rd) {
+            if constexpr (mips32) {
+                c.mov(eax, ptr(hi));
+                c.mov(GetDirtyGpr(rd), eax);
+            } else {
+                c.mov(rax, ptr(hi));
+                c.mov(GetDirtyGpr(rd), rax);
+            }
+        }
     }
 
     void mflo(u32 rd) const
     {
-        if (rd) c.mov(GetGprMarkDirty(rd), ptr(lo));
+        if (rd) {
+            if constexpr (mips32) {
+                c.mov(eax, ptr(lo));
+                c.mov(GetDirtyGpr(rd), eax);
+            } else {
+                c.mov(rax, ptr(lo));
+                c.mov(GetDirtyGpr(rd), rax);
+            }
+        }
     }
 
     void movn(u32 rs, u32 rt, u32 rd) const
     {
         if (!rd) return;
-        Gp hs = GetGpr(rs), ht = GetGpr(rt), hd = GetGprMarkDirty(rd);
+        Gp hd = GetDirtyGpr(rd), hs = GetGpr(rs), ht = GetGpr(rt);
         c.test(ht, ht);
         c.cmovne(hd, hs);
     }
@@ -380,19 +386,37 @@ template<std::signed_integral GprInt, std::signed_integral LoHiInt, std::integra
     void movz(u32 rs, u32 rt, u32 rd) const
     {
         if (!rd) return;
-        Gp hs = GetGpr(rs), ht = GetGpr(rt), hd = GetGprMarkDirty(rd);
+        Gp hd = GetDirtyGpr(rd), hs = GetGpr(rs), ht = GetGpr(rt);
         c.test(ht, ht);
         c.cmove(hd, hs);
     }
 
-    void mthi(u32 rs) const { c.mov(ptr(hi), GetGpr(rs)); }
+    void mthi(u32 rs) const
+    {
+        if constexpr (mips32) {
+            c.mov(eax, GetGpr(rs));
+            c.mov(ptr(hi), eax);
+        } else {
+            c.mov(rax, GetGpr(rs));
+            c.mov(ptr(hi), rax);
+        }
+    }
 
-    void mtlo(u32 rs) const { c.mov(ptr(lo), GetGpr(rs)); }
+    void mtlo(u32 rs) const
+    {
+        if constexpr (mips32) {
+            c.mov(eax, GetGpr(rs));
+            c.mov(ptr(lo), eax);
+        } else {
+            c.mov(rax, GetGpr(rs));
+            c.mov(ptr(lo), rax);
+        }
+    }
 
     void nor(u32 rs, u32 rt, u32 rd) const
     {
         if (!rd) return;
-        Gp hs = GetGpr(rs), ht = GetGpr(rt), hd = GetGprMarkDirty(rd);
+        Gp hd = GetDirtyGpr(rd), hs = GetGpr(rs), ht = GetGpr(rt);
         if (rs != rd) c.mov(hd, hs);
         c.or_(hd, ht);
         c.not_(hd);
@@ -401,7 +425,7 @@ template<std::signed_integral GprInt, std::signed_integral LoHiInt, std::integra
     void or_(u32 rs, u32 rt, u32 rd) const
     {
         if (!rd) return;
-        Gp hs = GetGpr(rs), ht = GetGpr(rt), hd = GetGprMarkDirty(rd);
+        Gp hd = GetDirtyGpr(rd), hs = GetGpr(rs), ht = GetGpr(rt);
         if (rs != rd) c.mov(hd, hs);
         c.or_(hd, ht);
     }
@@ -409,7 +433,7 @@ template<std::signed_integral GprInt, std::signed_integral LoHiInt, std::integra
     void ori(u32 rs, u32 rt, u16 imm) const
     {
         if (!rt) return;
-        Gp hs = GetGpr(rs), ht = GetGprMarkDirty(rt);
+        Gp ht = GetDirtyGpr(rt), hs = GetGpr(rs);
         if (rs != rt) c.mov(ht, hs);
         c.or_(ht, imm);
     }
@@ -417,7 +441,7 @@ template<std::signed_integral GprInt, std::signed_integral LoHiInt, std::integra
     void sll(u32 rt, u32 rd, u32 sa) const
     {
         if (!rd) return;
-        Gpd ht = GetGpr32(rt), hd = GetGpr32MarkDirty(rd);
+        Gpd hd = GetDirtyGpr32(rd), ht = GetGpr32(rt);
         if (rt != rd) c.mov(hd, ht);
         c.shl(hd, sa);
         if constexpr (mips64) c.movsxd(hd.r64(), hd);
@@ -426,7 +450,7 @@ template<std::signed_integral GprInt, std::signed_integral LoHiInt, std::integra
     void sllv(u32 rs, u32 rt, u32 rd) const
     {
         if (!rd) return;
-        Gpd hs = GetGpr32(rs), ht = GetGpr32(rt), hd = GetGpr32MarkDirty(rd);
+        Gpd hd = GetDirtyGpr32(rd), hs = GetGpr32(rs), ht = GetGpr32(rt);
         c.shlx(hd, ht, hs);
         if constexpr (mips64) c.movsxd(hd.r64(), hd);
     }
@@ -434,7 +458,7 @@ template<std::signed_integral GprInt, std::signed_integral LoHiInt, std::integra
     void slt(u32 rs, u32 rt, u32 rd) const
     {
         if (!rd) return;
-        Gp hs = GetGpr(rs), ht = GetGpr(rt), hd = GetGprMarkDirty(rd);
+        Gp hd = GetDirtyGpr(rd), hs = GetGpr(rs), ht = GetGpr(rt);
         c.cmp(hs, ht);
         c.setl(hd);
     }
@@ -442,7 +466,7 @@ template<std::signed_integral GprInt, std::signed_integral LoHiInt, std::integra
     void slti(u32 rs, u32 rt, s16 imm) const
     {
         if (!rt) return;
-        Gp hs = GetGpr(rs), ht = GetGprMarkDirty(rt);
+        Gp ht = GetDirtyGpr(rt), hs = GetGpr(rs);
         c.cmp(hs, imm);
         c.setl(ht);
     }
@@ -450,7 +474,7 @@ template<std::signed_integral GprInt, std::signed_integral LoHiInt, std::integra
     void sltiu(u32 rs, u32 rt, s16 imm) const
     {
         if (!rt) return;
-        Gp hs = GetGpr(rs), ht = GetGprMarkDirty(rt);
+        Gp ht = GetDirtyGpr(rt), hs = GetGpr(rs);
         c.cmp(hs, imm);
         c.setb(ht);
     }
@@ -458,7 +482,7 @@ template<std::signed_integral GprInt, std::signed_integral LoHiInt, std::integra
     void sltu(u32 rs, u32 rt, u32 rd) const
     {
         if (!rd) return;
-        Gp hs = GetGpr(rs), ht = GetGpr(rt), hd = GetGprMarkDirty(rd);
+        Gp hd = GetDirtyGpr(rd), hs = GetGpr(rs), ht = GetGpr(rt);
         c.cmp(hs, ht);
         c.setb(hd);
     }
@@ -466,7 +490,7 @@ template<std::signed_integral GprInt, std::signed_integral LoHiInt, std::integra
     void sra(u32 rt, u32 rd, u32 sa) const
     {
         if (!rd) return;
-        Gpd ht = GetGpr32(rt), hd = GetGpr32MarkDirty(rd);
+        Gpd hd = GetDirtyGpr32(rd), ht = GetGpr32(rt);
         if (rt != rd) c.mov(hd, ht);
         c.sar(hd, sa);
         if constexpr (mips64) c.movsxd(hd.r64(), hd);
@@ -475,7 +499,7 @@ template<std::signed_integral GprInt, std::signed_integral LoHiInt, std::integra
     void srav(u32 rs, u32 rt, u32 rd) const
     {
         if (!rd) return;
-        Gpd hs = GetGpr32(rs), ht = GetGpr32(rt), hd = GetGpr32MarkDirty(rd);
+        Gpd hd = GetDirtyGpr32(rd), hs = GetGpr32(rs), ht = GetGpr32(rt);
         c.sarx(hd, ht, hs);
         if constexpr (mips64) c.movsxd(hd.r64(), hd);
     }
@@ -483,7 +507,7 @@ template<std::signed_integral GprInt, std::signed_integral LoHiInt, std::integra
     void srl(u32 rt, u32 rd, u32 sa) const
     {
         if (!rd) return;
-        Gpd ht = GetGpr32(rt), hd = GetGpr32MarkDirty(rd);
+        Gpd hd = GetDirtyGpr32(rd), ht = GetGpr32(rt);
         if (rt != rd) c.mov(hd, ht);
         c.shr(hd, sa);
         if constexpr (mips64) c.movsxd(hd.r64(), hd);
@@ -492,7 +516,7 @@ template<std::signed_integral GprInt, std::signed_integral LoHiInt, std::integra
     void srlv(u32 rs, u32 rt, u32 rd) const
     {
         if (!rd) return;
-        Gpd hs = GetGpr32(rs), ht = GetGpr32(rt), hd = GetGpr32MarkDirty(rd);
+        Gpd hd = GetDirtyGpr32(rd), hs = GetGpr32(rs), ht = GetGpr32(rt);
         c.shrx(hd, ht, hs);
         if constexpr (mips64) c.movsxd(hd.r64(), hd);
     }
@@ -507,7 +531,7 @@ template<std::signed_integral GprInt, std::signed_integral LoHiInt, std::integra
         block_epilog_with_jmp(integer_overflow_exception);
         c.bind(l_noexception);
         if (rd) {
-            Gp hd = GetGprMarkDirty(rd);
+            Gp hd = GetDirtyGpr(rd);
             if constexpr (mips32) c.mov(hd, eax);
             else c.movsxd(hd, eax);
         }
@@ -516,7 +540,7 @@ template<std::signed_integral GprInt, std::signed_integral LoHiInt, std::integra
     void subu(u32 rs, u32 rt, u32 rd) const
     {
         if (!rd) return;
-        Gpd hs = GetGpr32(rs), ht = GetGpr32(rt), hd = GetGpr32MarkDirty(rd);
+        Gpd hd = GetDirtyGpr32(rd), hs = GetGpr32(rs), ht = GetGpr32(rt);
         if (rs != rd) c.mov(hd, hs);
         c.sub(hd, ht);
         if constexpr (mips64) c.movsxd(hd.r64(), hd);
@@ -549,7 +573,7 @@ template<std::signed_integral GprInt, std::signed_integral LoHiInt, std::integra
     void xor_(u32 rs, u32 rt, u32 rd) const
     {
         if (!rd) return;
-        Gp hd = GetGprMarkDirty(rd);
+        Gp hd = GetDirtyGpr(rd);
         if (rs == rt) {
             c.xor_(hd.r32(), hd.r32());
         } else {
@@ -562,7 +586,7 @@ template<std::signed_integral GprInt, std::signed_integral LoHiInt, std::integra
     void xori(u32 rs, u32 rt, u16 imm) const
     {
         if (!rt) return;
-        Gp hs = GetGpr(rs), ht = GetGprMarkDirty(rt);
+        Gp ht = GetDirtyGpr(rt), hs = GetGpr(rs);
         if (rs != rt) c.mov(ht, hs);
         c.xor_(ht, imm);
     }
@@ -580,9 +604,9 @@ protected:
         }
     }
 
-    Gpd GetGpr32MarkDirty(u32 idx) const { return reg_alloc.GetHostMarkDirty(idx).r32(); }
+    Gpd GetDirtyGpr32(u32 idx) const { return reg_alloc.GetHostMarkDirty(idx).r32(); }
 
-    auto GetGprMarkDirty(u32 idx) const
+    auto GetDirtyGpr(u32 idx) const
     {
         auto r = reg_alloc.GetHostMarkDirty(idx);
         if constexpr (mips32) {
@@ -599,12 +623,7 @@ protected:
         c.cmp(hs, ht);
         if constexpr (cc == Cond::Eq) c.jne(l_nobranch);
         if constexpr (cc == Cond::Ne) c.je(l_nobranch);
-        static constexpr auto t = [] {
-            if constexpr (sizeof(PcInt) == 4) return eax;
-            else return rax;
-        }();
-        c.mov(t, jit_pc + 4 + (imm << 2));
-        take_branch(t);
+        take_branch(jit_pc + 4 + (imm << 2));
         c.bind(l_nobranch);
         branch_hit = true;
     }
@@ -618,12 +637,7 @@ protected:
         if constexpr (cc == Cond::Gt) c.jle(l_nobranch);
         if constexpr (cc == Cond::Le) c.jg(l_nobranch);
         if constexpr (cc == Cond::Lt) c.jns(l_nobranch);
-        static constexpr auto t = [] {
-            if constexpr (sizeof(PcInt) == 4) return eax;
-            else return rax;
-        }();
-        c.mov(t, jit_pc + 4 + (imm << 2));
-        take_branch(t);
+        take_branch(jit_pc + 4 + (imm << 2));
         c.bind(l_nobranch);
         branch_hit = true;
     }

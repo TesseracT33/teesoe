@@ -23,11 +23,15 @@
 using namespace asmjit;
 using namespace asmjit::x86;
 
+using mips::BranchState;
+
 namespace n64::vr4300 {
 
 struct Block {
     void (*func)();
     void operator()() const { func(); }
+    bool has_cop0_instrs;
+    bool has_cop1_instrs;
 };
 
 struct Pool {
@@ -69,6 +73,7 @@ void BlockEpilogWithPcFlush(int pc_offset)
 
 void BlockProlog()
 {
+    c.addFunc(FuncSignatureT<void>());
     reg_alloc.BlockProlog();
 }
 
@@ -113,9 +118,10 @@ void ExecuteBlock(Block* block)
 std::pair<Block*, bool> GetBlock(u32 pc)
 {
     static_assert(std::has_single_bit(num_pools));
-    pc &= num_pools - 1;
-    Pool*& pool = pools[pc >> 8]; // each pool 6 bits, each instruction 2 bits
-    if (!pool) pool = reinterpret_cast<Pool*>(allocator.acquire(sizeof(Pool)));
+    Pool*& pool = pools[pc >> 8 & (num_pools - 1)]; // each pool 6 bits, each instruction 2 bits
+    if (!pool) {
+        pool = reinterpret_cast<Pool*>(allocator.acquire(sizeof(Pool)));
+    }
     Block*& block = pool->blocks[pc >> 2 & 63];
     bool compiled = block != nullptr;
     if (!compiled) {
@@ -126,22 +132,26 @@ std::pair<Block*, bool> GetBlock(u32 pc)
 
 Status InitRecompiler()
 {
-    allocator.allocate(32 * 1024 * 1024);
+    allocator.allocate(32_MiB);
     pools.resize(num_pools, nullptr);
     return status_ok();
 }
 
 void Invalidate(u32 addr)
 {
-    pools[addr >> 8 & (num_pools - 1)] = nullptr; // each pool 6 bits, each instruction 2 bits
+    if (cpu_impl == CpuImpl::Recompiler) {
+        pools[addr >> 8 & (num_pools - 1)] = nullptr; // each pool 6 bits, each instruction 2 bits
+    }
 }
 
 void InvalidateRange(u32 addr_lo, u32 addr_hi)
 {
-    ASSUME(addr_lo <= addr_hi);
-    addr_lo = addr_lo >> 8 & (num_pools - 1);
-    addr_hi = addr_hi >> 8 & (num_pools - 1);
-    std::fill(pools.begin() + addr_lo, pools.begin() + addr_hi, nullptr);
+    if (cpu_impl == CpuImpl::Recompiler) {
+        ASSUME(addr_lo <= addr_hi);
+        addr_lo = addr_lo >> 8 & (num_pools - 1);
+        addr_hi = addr_hi >> 8 & (num_pools - 1);
+        std::fill(pools.begin() + addr_lo, pools.begin() + addr_hi, nullptr);
+    }
 }
 
 void JumpJit()
@@ -154,7 +164,7 @@ void JumpJit()
     c.and_(eax, 3);
     c.test(eax, eax);
     c.je(l_end);
-    BlockEpilogWithJmp(AddressErrorException<MemOp::InstrFetch>);
+    // BlockEpilogWithJmp(AddressErrorException<MemOp::InstrFetch>);
     c.bind(l_end);
 }
 
@@ -165,12 +175,15 @@ void LinkJit(u32 reg)
 
 void OnBranchNotTakenJit()
 {
-    c.mov(ptr(in_branch_delay_slot_taken), 0);
-    c.mov(ptr(in_branch_delay_slot_not_taken), 1);
-    c.mov(ptr(branch_state), std::to_underlying(BranchState::DelaySlotNotTaken));
+    c.xor_(eax, eax);
+    c.mov(ptr(in_branch_delay_slot_taken), al);
+    c.mov(eax, 1);
+    c.mov(ptr(in_branch_delay_slot_not_taken), al);
+    c.mov(eax, std::to_underlying(BranchState::DelaySlotNotTaken));
+    c.mov(ptr(branch_state), eax);
 }
 
-u64 RunRecompiler(u64 cpu_cycles)
+u32 RunRecompiler(u32 cpu_cycles)
 {
     cycle_counter = 0;
     while (cycle_counter < cpu_cycles) {
@@ -227,12 +240,10 @@ u64 RunRecompiler(u64 cpu_cycles)
     return cycle_counter - cpu_cycles;
 }
 
-void TakeBranchJit(Gp target)
+void TearDownRecompiler()
 {
-    c.mov(ptr(in_branch_delay_slot_taken), 1);
-    c.mov(ptr(in_branch_delay_slot_not_taken), 0);
-    c.mov(ptr(branch_state), std::to_underlying(BranchState::DelaySlotTaken));
-    c.mov(ptr(jump_addr), target);
+    allocator.deallocate();
+    pools.clear();
 }
 
 } // namespace n64::vr4300

@@ -1,12 +1,25 @@
 #pragma once
 
-#include "types.hpp"
+#include "common/types.hpp"
 
 #include <array>
 #include <concepts>
 #include <span>
 
 namespace mips {
+
+enum class BranchState {
+    DelaySlotNotTaken,
+    DelaySlotTaken,
+    NoBranch,
+    Perform,
+};
+
+enum class OperatingMode {
+    User,
+    Supervisor,
+    Kernel
+};
 
 template<std::signed_integral Int> struct Gpr {
     Int get(u32 idx) const { return gpr[idx]; }

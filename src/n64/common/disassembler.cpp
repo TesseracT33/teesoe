@@ -1,7 +1,8 @@
 #include "disassembler.hpp"
 #include "rsp/interpreter.hpp"
-#include "rsp/recompiler.hpp"
 #include "rsp/vu.hpp"
+#include "rsp/x64/cpu.hpp"
+#include "rsp/x64/vu.hpp"
 #include "util.hpp"
 #include "vr4300/cache.hpp"
 #include "vr4300/cop0.hpp"
@@ -56,7 +57,16 @@
         break;                                                                                                 \
     }
 
-#define COP_RSP(instr, ...) rsp::instr<cpu_impl>(__VA_ARGS__)
+#define COP_RSP(instr, ...)                               \
+    {                                                     \
+        if constexpr (cpu_impl == CpuImpl::Interpreter) { \
+            rsp::instr(__VA_ARGS__);                      \
+        } else if constexpr (arch.a64) {                  \
+            /* rsp::a64::instr(__VA_ARGS__);*/            \
+        } else {                                          \
+            rsp::x64::instr(__VA_ARGS__);                 \
+        }                                                 \
+    }
 
 #define COP_VR4300(instr, ...)                                                          \
     {                                                                                   \
@@ -80,19 +90,23 @@
         } else {                                                    \
             if constexpr (cpu_impl == CpuImpl::Interpreter) {       \
                 rsp::cpu_interpreter.instr(__VA_ARGS__);            \
+            } else if constexpr (arch.a64) {                        \
+                /*rsp::a64::cpu_recompiler.instr(__VA_ARGS__);*/    \
             } else {                                                \
-                rsp::cpu_recompiler.instr(__VA_ARGS__);             \
+                rsp::x64::cpu_recompiler.instr(__VA_ARGS__);        \
             }                                                       \
         }                                                           \
     }
 
-#define CPU_RSP(instr, ...)                               \
-    {                                                     \
-        if constexpr (cpu_impl == CpuImpl::Interpreter) { \
-            rsp::cpu_interpreter.instr(__VA_ARGS__);      \
-        } else {                                          \
-            rsp::cpu_recompiler.instr(__VA_ARGS__);       \
-        }                                                 \
+#define CPU_RSP(instr, ...)                                  \
+    {                                                        \
+        if constexpr (cpu_impl == CpuImpl::Interpreter) {    \
+            rsp::cpu_interpreter.instr(__VA_ARGS__);         \
+        } else if constexpr (arch.a64) {                     \
+            /*rsp::a64::cpu_recompiler.instr(__VA_ARGS__);*/ \
+        } else {                                             \
+            rsp::x64::cpu_recompiler.instr(__VA_ARGS__);     \
+        }                                                    \
     }
 
 #define CPU_VR4300(instr, ...)                                      \
@@ -560,6 +574,6 @@ u32 vt_e_bug(u32 vt_e, u32 vd_e)
 template void exec_cpu<CpuImpl::Interpreter>(u32);
 template void exec_cpu<CpuImpl::Recompiler>(u32);
 template void exec_rsp<CpuImpl::Interpreter>(u32);
-// template void disassemble_rsp<CpuImpl::JIT>(u32);
+template void exec_rsp<CpuImpl::Recompiler>(u32);
 
 } // namespace n64::disassembler

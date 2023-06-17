@@ -15,12 +15,13 @@ struct Accumulator {
     __m128i high;
 } inline acc;
 
-struct ControlRegister {
+struct alignas(32) ControlRegister {
     __m128i lo;
     __m128i hi;
 };
 
-inline s16 div_out, div_in, div_dp;
+inline s16 div_out, div_in;
+inline bool div_dp;
 
 inline std::array<__m128i, 32> vpr; /* SIMD registers; eight 16-bit lanes */
 inline std::array<ControlRegister, 3> ctrl_reg; /* vco, vcc, vce. vce is actually only 8-bits */
@@ -45,6 +46,25 @@ inline const std::array broadcast_mask = {
 };
 
 // clang-format off
+
+constexpr std::array ctc2_table = {
+    0x0000'0000'0000'0000_s64,
+    0x0000'0000'0000'FFFF_s64,
+    0x0000'0000'FFFF'0000_s64,
+    0x0000'0000'FFFF'FFFF_s64,
+    0x0000'FFFF'0000'0000_s64,
+    0x0000'FFFF'0000'FFFF_s64,
+    0x0000'FFFF'FFFF'0000_s64,
+    0x0000'FFFF'FFFF'FFFF_s64,
+    0xFFFF'0000'0000'0000_s64,
+    0xFFFF'0000'0000'FFFF_s64,
+    0xFFFF'0000'FFFF'0000_s64,
+    0xFFFF'0000'FFFF'FFFF_s64,
+    0xFFFF'FFFF'0000'0000_s64,
+    0xFFFF'FFFF'0000'FFFF_s64,
+    0xFFFF'FFFF'FFFF'0000_s64,
+    0xFFFF'FFFF'FFFF'FFFF_s64,
+};
 
 inline constexpr std::array<u16, 512> rcp_rom = {
 	0xFFFF, 0xFF00, 0xFE01, 0xFD04, 0xFC07, 0xFB0C, 0xFA11, 0xF918, 0xF81F, 0xF727, 0xF631, 0xF53B, 0xF446, 0xF352, 0xF25F, 0xF16D,
@@ -118,81 +138,84 @@ inline constexpr std::array<u16, 512> rsq_rom = {
 
 // clang-format on
 
-template<CpuImpl> void cfc2(u32 rt, u32 vs);
-template<CpuImpl> void ctc2(u32 rt, u32 vs);
-template<CpuImpl> void mfc2(u32 rt, u32 vs, u32 e);
-template<CpuImpl> void mtc2(u32 rt, u32 vs, u32 e);
+s32 Rcp(s32 input);
+s32 Rsq(s32 input);
 
-template<CpuImpl> void lbv(u32 base, u32 vt, u32 e, s32 offset);
-template<CpuImpl> void ldv(u32 base, u32 vt, u32 e, s32 offset);
-template<CpuImpl> void lfv(u32 base, u32 vt, u32 e, s32 offset);
-template<CpuImpl> void lhv(u32 base, u32 vt, u32 e, s32 offset);
-template<CpuImpl> void llv(u32 base, u32 vt, u32 e, s32 offset);
-template<CpuImpl> void lpv(u32 base, u32 vt, u32 e, s32 offset);
-template<CpuImpl> void lqv(u32 base, u32 vt, u32 e, s32 offset);
-template<CpuImpl> void lrv(u32 base, u32 vt, u32 e, s32 offset);
-template<CpuImpl> void lsv(u32 base, u32 vt, u32 e, s32 offset);
-template<CpuImpl> void ltv(u32 base, u32 vt, u32 e, s32 offset);
-template<CpuImpl> void luv(u32 base, u32 vt, u32 e, s32 offset);
-template<CpuImpl> void sbv(u32 base, u32 vt, u32 e, s32 offset);
-template<CpuImpl> void sdv(u32 base, u32 vt, u32 e, s32 offset);
-template<CpuImpl> void sfv(u32 base, u32 vt, u32 e, s32 offset);
-template<CpuImpl> void shv(u32 base, u32 vt, u32 e, s32 offset);
-template<CpuImpl> void slv(u32 base, u32 vt, u32 e, s32 offset);
-template<CpuImpl> void spv(u32 base, u32 vt, u32 e, s32 offset);
-template<CpuImpl> void sqv(u32 base, u32 vt, u32 e, s32 offset);
-template<CpuImpl> void srv(u32 base, u32 vt, u32 e, s32 offset);
-template<CpuImpl> void ssv(u32 base, u32 vt, u32 e, s32 offset);
-template<CpuImpl> void stv(u32 base, u32 vt, u32 e, s32 offset);
-template<CpuImpl> void suv(u32 base, u32 vt, u32 e, s32 offset);
-template<CpuImpl> void swv(u32 base, u32 vt, u32 e, s32 offset);
+void cfc2(u32 rt, u32 vs);
+void ctc2(u32 rt, u32 vs);
+void mfc2(u32 rt, u32 vs, u32 e);
+void mtc2(u32 rt, u32 vs, u32 e);
 
-template<CpuImpl> void vabs(u32 vs, u32 vt, u32 vd, u32 e);
-template<CpuImpl> void vadd(u32 vs, u32 vt, u32 vd, u32 e);
-template<CpuImpl> void vaddc(u32 vs, u32 vt, u32 vd, u32 e);
-// template<CpuImpl> void vadmh();
-// template<CpuImpl> void vadmn();
-template<CpuImpl> void vand(u32 vs, u32 vt, u32 vd, u32 e);
-template<CpuImpl> void vch(u32 vs, u32 vt, u32 vd, u32 e);
-template<CpuImpl> void vcl(u32 vs, u32 vt, u32 vd, u32 e);
-template<CpuImpl> void vcr(u32 vs, u32 vt, u32 vd, u32 e);
-template<CpuImpl> void veq(u32 vs, u32 vt, u32 vd, u32 e);
-template<CpuImpl> void vge(u32 vs, u32 vt, u32 vd, u32 e);
-template<CpuImpl> void vlt(u32 vs, u32 vt, u32 vd, u32 e);
-template<CpuImpl> void vmacf(u32 vs, u32 vt, u32 vd, u32 e);
-template<CpuImpl> void vmacq(u32 vd);
-template<CpuImpl> void vmacu(u32 vs, u32 vt, u32 vd, u32 e);
-template<CpuImpl> void vmadh(u32 vs, u32 vt, u32 vd, u32 e);
-template<CpuImpl> void vmadl(u32 vs, u32 vt, u32 vd, u32 e);
-template<CpuImpl> void vmadm(u32 vs, u32 vt, u32 vd, u32 e);
-template<CpuImpl> void vmadn(u32 vs, u32 vt, u32 vd, u32 e);
-template<CpuImpl> void vmov(u32 vt, u32 vt_e, u32 vd, u32 vd_e);
-template<CpuImpl> void vmrg(u32 vs, u32 vt, u32 vd, u32 e);
-template<CpuImpl> void vmudh(u32 vs, u32 vt, u32 vd, u32 e);
-template<CpuImpl> void vmudl(u32 vs, u32 vt, u32 vd, u32 e);
-template<CpuImpl> void vmudm(u32 vs, u32 vt, u32 vd, u32 e);
-template<CpuImpl> void vmudn(u32 vs, u32 vt, u32 vd, u32 e);
-template<CpuImpl> void vmulf(u32 vs, u32 vt, u32 vd, u32 e);
-template<CpuImpl> void vmulq(u32 vs, u32 vt, u32 vd, u32 e);
-template<CpuImpl> void vmulu(u32 vs, u32 vt, u32 vd, u32 e);
-template<CpuImpl> void vnand(u32 vs, u32 vt, u32 vd, u32 e);
-template<CpuImpl> void vne(u32 vs, u32 vt, u32 vd, u32 e);
-template<CpuImpl> void vnop();
-template<CpuImpl> void vnor(u32 vs, u32 vt, u32 vd, u32 e);
-template<CpuImpl> void vnxor(u32 vs, u32 vt, u32 vd, u32 e);
-template<CpuImpl> void vor(u32 vs, u32 vt, u32 vd, u32 e);
-template<CpuImpl> void vrcp(u32 vt, u32 vt_e, u32 vd, u32 vd_e);
-template<CpuImpl> void vrcph(u32 vt, u32 vt_e, u32 vd, u32 vd_e);
-template<CpuImpl> void vrcpl(u32 vt, u32 vt_e, u32 vd, u32 vd_e);
-template<CpuImpl> void vrndn(u32 vt, u32 vt_e, u32 vd, u32 vd_e);
-template<CpuImpl> void vrndp(u32 vt, u32 vt_e, u32 vd, u32 vd_e);
-template<CpuImpl> void vrsq(u32 vt, u32 vt_e, u32 vd, u32 vd_e);
-template<CpuImpl> void vrsqh(u32 vt, u32 vt_e, u32 vd, u32 vd_e);
-template<CpuImpl> void vrsql(u32 vt, u32 vt_e, u32 vd, u32 vd_e);
-template<CpuImpl> void vsar(u32 vd, u32 e);
-template<CpuImpl> void vsub(u32 vs, u32 vt, u32 vd, u32 e);
-template<CpuImpl> void vsubc(u32 vs, u32 vt, u32 vd, u32 e);
-template<CpuImpl> void vxor(u32 vs, u32 vt, u32 vd, u32 e);
-template<CpuImpl> void vzero(u32 vs, u32 vt, u32 vd, u32 e);
+void lbv(u32 base, u32 vt, u32 e, s32 offset);
+void ldv(u32 base, u32 vt, u32 e, s32 offset);
+void lfv(u32 base, u32 vt, u32 e, s32 offset);
+void lhv(u32 base, u32 vt, u32 e, s32 offset);
+void llv(u32 base, u32 vt, u32 e, s32 offset);
+void lpv(u32 base, u32 vt, u32 e, s32 offset);
+void lqv(u32 base, u32 vt, u32 e, s32 offset);
+void lrv(u32 base, u32 vt, u32 e, s32 offset);
+void lsv(u32 base, u32 vt, u32 e, s32 offset);
+void ltv(u32 base, u32 vt, u32 e, s32 offset);
+void luv(u32 base, u32 vt, u32 e, s32 offset);
+void sbv(u32 base, u32 vt, u32 e, s32 offset);
+void sdv(u32 base, u32 vt, u32 e, s32 offset);
+void sfv(u32 base, u32 vt, u32 e, s32 offset);
+void shv(u32 base, u32 vt, u32 e, s32 offset);
+void slv(u32 base, u32 vt, u32 e, s32 offset);
+void spv(u32 base, u32 vt, u32 e, s32 offset);
+void sqv(u32 base, u32 vt, u32 e, s32 offset);
+void srv(u32 base, u32 vt, u32 e, s32 offset);
+void ssv(u32 base, u32 vt, u32 e, s32 offset);
+void stv(u32 base, u32 vt, u32 e, s32 offset);
+void suv(u32 base, u32 vt, u32 e, s32 offset);
+void swv(u32 base, u32 vt, u32 e, s32 offset);
+
+void vabs(u32 vs, u32 vt, u32 vd, u32 e);
+void vadd(u32 vs, u32 vt, u32 vd, u32 e);
+void vaddc(u32 vs, u32 vt, u32 vd, u32 e);
+//  void vadmh();
+//  void vadmn();
+void vand(u32 vs, u32 vt, u32 vd, u32 e);
+void vch(u32 vs, u32 vt, u32 vd, u32 e);
+void vcl(u32 vs, u32 vt, u32 vd, u32 e);
+void vcr(u32 vs, u32 vt, u32 vd, u32 e);
+void veq(u32 vs, u32 vt, u32 vd, u32 e);
+void vge(u32 vs, u32 vt, u32 vd, u32 e);
+void vlt(u32 vs, u32 vt, u32 vd, u32 e);
+void vmacf(u32 vs, u32 vt, u32 vd, u32 e);
+void vmacq(u32 vd);
+void vmacu(u32 vs, u32 vt, u32 vd, u32 e);
+void vmadh(u32 vs, u32 vt, u32 vd, u32 e);
+void vmadl(u32 vs, u32 vt, u32 vd, u32 e);
+void vmadm(u32 vs, u32 vt, u32 vd, u32 e);
+void vmadn(u32 vs, u32 vt, u32 vd, u32 e);
+void vmov(u32 vt, u32 vt_e, u32 vd, u32 vd_e);
+void vmrg(u32 vs, u32 vt, u32 vd, u32 e);
+void vmudh(u32 vs, u32 vt, u32 vd, u32 e);
+void vmudl(u32 vs, u32 vt, u32 vd, u32 e);
+void vmudm(u32 vs, u32 vt, u32 vd, u32 e);
+void vmudn(u32 vs, u32 vt, u32 vd, u32 e);
+void vmulf(u32 vs, u32 vt, u32 vd, u32 e);
+void vmulq(u32 vs, u32 vt, u32 vd, u32 e);
+void vmulu(u32 vs, u32 vt, u32 vd, u32 e);
+void vnand(u32 vs, u32 vt, u32 vd, u32 e);
+void vne(u32 vs, u32 vt, u32 vd, u32 e);
+void vnop();
+void vnor(u32 vs, u32 vt, u32 vd, u32 e);
+void vnxor(u32 vs, u32 vt, u32 vd, u32 e);
+void vor(u32 vs, u32 vt, u32 vd, u32 e);
+void vrcp(u32 vt, u32 vt_e, u32 vd, u32 vd_e);
+void vrcph(u32 vt, u32 vt_e, u32 vd, u32 vd_e);
+void vrcpl(u32 vt, u32 vt_e, u32 vd, u32 vd_e);
+void vrndn(u32 vt, u32 vt_e, u32 vd, u32 vd_e);
+void vrndp(u32 vt, u32 vt_e, u32 vd, u32 vd_e);
+void vrsq(u32 vt, u32 vt_e, u32 vd, u32 vd_e);
+void vrsqh(u32 vt, u32 vt_e, u32 vd, u32 vd_e);
+void vrsql(u32 vt, u32 vt_e, u32 vd, u32 vd_e);
+void vsar(u32 vd, u32 e);
+void vsub(u32 vs, u32 vt, u32 vd, u32 e);
+void vsubc(u32 vs, u32 vt, u32 vd, u32 e);
+void vxor(u32 vs, u32 vt, u32 vd, u32 e);
+void vzero(u32 vs, u32 vt, u32 vd, u32 e);
 
 } // namespace n64::rsp

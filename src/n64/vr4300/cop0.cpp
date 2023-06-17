@@ -13,6 +13,8 @@
 #include <cassert>
 #include <cstring>
 
+using mips::OperatingMode;
+
 namespace n64::vr4300 {
 
 void Cop0Registers::OnWriteToCause()

@@ -9,6 +9,8 @@
 #include "types.hpp"
 #include "vr4300.hpp"
 
+#include <concepts>
+
 namespace n64::vr4300 {
 
 void BlockEpilog();
@@ -22,21 +24,46 @@ void Invalidate(u32 addr);
 void InvalidateRange(u32 addr_lo, u32 addr_hi);
 void LinkJit(u32 reg);
 void OnBranchNotTakenJit();
-u64 RunRecompiler(u64 cpu_cycles);
-void TakeBranchJit(asmjit::x86::Gp reg);
+u32 RunRecompiler(u32 cpu_cycles);
+void TearDownRecompiler();
+
+inline constexpr std::array reg_alloc_volatile_gprs = [] {
+    using namespace asmjit::x86;
+    if constexpr (os.linux) {
+        return std::array<Gpq, 8>{ r11, r10, r9, r8, rcx, rdx, rsi, rdi };
+    } else {
+        return std::array<Gpq, 6>{ r11, r10, r9, r8, rdx, rcx };
+    }
+}();
+
+inline constexpr std::array reg_alloc_nonvolatile_gprs = [] {
+    using namespace asmjit::x86;
+    if constexpr (os.linux) {
+        return std::array<Gpq, 5>{ rbx, r12, r13, r14, r15 };
+    } else {
+        return std::array<Gpq, 7>{ rbx, r12, r13, r14, r15, rdi, rsi };
+    }
+}();
+
+inline constexpr HostGpr reg_alloc_base_gpr_ptr_reg = [] {
+    if constexpr (arch.a64) return asmjit::a64::x0;
+    if constexpr (arch.x64) return asmjit::x86::rbp;
+}();
 
 inline AsmjitCompiler compiler;
-inline mips::RegisterAllocator reg_alloc{ gpr.view(), compiler };
+inline mips::RegisterAllocator<s64, reg_alloc_volatile_gprs.size(), reg_alloc_nonvolatile_gprs.size()>
+  reg_alloc{ gpr.view(), reg_alloc_volatile_gprs, reg_alloc_nonvolatile_gprs, reg_alloc_base_gpr_ptr_reg, compiler };
 inline u64 jit_pc;
-inline u64 block_cycles;
+inline u32 block_cycles;
 inline bool branch_hit, branched;
 
-void JitCallInterpreterImpl(auto impl)
+inline void JitCallInterpreterImpl(auto impl)
 {
     reg_alloc.Call(impl);
 }
 
-template<typename Arg, typename... Args> void JitCallInterpreterImpl(auto impl, Arg first_arg, Args... remaining_args)
+template<typename Arg, typename... Args>
+inline void JitCallInterpreterImpl(auto impl, Arg first_arg, Args... remaining_args)
 {
     static_assert(1 + sizeof...(remaining_args) <= host_gpr_arg.size(),
       "This function does not support passing arguments by the stack");
@@ -55,6 +82,21 @@ template<typename Arg, typename... Args> void JitCallInterpreterImpl(auto impl, 
         r_idx = 0;
     }
     JitCallInterpreterImpl(impl, remaining_args...);
+}
+
+inline void TakeBranchJit(auto target)
+{
+    using namespace asmjit::x86;
+    auto& c = compiler;
+    c.mov(ptr(in_branch_delay_slot_taken), 1);
+    c.mov(ptr(in_branch_delay_slot_not_taken), 0);
+    c.mov(ptr(branch_state), std::to_underlying(mips::BranchState::DelaySlotTaken));
+    if constexpr (std::integral<decltype(target)>) {
+        c.mov(rax, target);
+        c.mov(ptr(jump_addr), rax);
+    } else {
+        c.mov(ptr(jump_addr), target);
+    }
 }
 
 } // namespace n64::vr4300

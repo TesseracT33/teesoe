@@ -6,30 +6,32 @@
 
 namespace n64::rsp {
 
-u64 RunInterpreter(u64 rsp_cycles)
+void InterpretOneInstruction()
+{
+    AdvancePipeline(1);
+    u32 instr = FetchInstruction(pc);
+    disassembler::exec_rsp<CpuImpl::Interpreter>(instr);
+    if (jump_is_pending) {
+        pc = jump_addr;
+        jump_is_pending = in_branch_delay_slot = false;
+        return;
+    }
+    if (in_branch_delay_slot) {
+        jump_is_pending = true;
+    }
+    pc = (pc + 4) & 0xFFC;
+}
+
+u32 RunInterpreter(u32 rsp_cycles)
 {
     if (sp.status.halted) return 0;
-    auto Instr = [] {
-        AdvancePipeline(1);
-        u32 instr = FetchInstruction(pc);
-        disassembler::exec_rsp<CpuImpl::Interpreter>(instr);
-        if (jump_is_pending) {
-            pc = jump_addr;
-            jump_is_pending = in_branch_delay_slot = false;
-            return;
-        }
-        if (in_branch_delay_slot) {
-            jump_is_pending = true;
-        }
-        pc = (pc + 4) & 0xFFC;
-    };
     cycle_counter = 0;
     if (sp.status.sstep) {
-        Instr();
+        InterpretOneInstruction();
         sp.status.halted = true;
     } else {
         while (cycle_counter < rsp_cycles && !sp.status.halted) {
-            Instr();
+            InterpretOneInstruction();
         }
     }
     if (sp.status.halted) {
@@ -61,16 +63,12 @@ void Interpreter::break_() const
 
 void Interpreter::j(u32 instr) const
 {
-    if (!in_branch_delay_slot) {
-        take_branch(instr << 2);
-    }
+    take_branch(instr << 2);
 }
 
 void Interpreter::jal(u32 instr) const
 {
-    if (!in_branch_delay_slot) {
-        take_branch(instr << 2);
-    }
+    take_branch(instr << 2);
     gpr.set(31, (pc + 8) & 0xFFF);
 }
 
@@ -101,7 +99,7 @@ void Interpreter::lw(u32 rs, u32 rt, s16 imm) const
 
 void Interpreter::lwu(u32 rs, u32 rt, s16 imm) const
 {
-    gpr.set(rt, ReadDMEM<s32>(gpr[rs] + imm));
+    lw(rs, rt, imm);
 }
 
 void Interpreter::mfc0(u32 rt, u32 rd) const

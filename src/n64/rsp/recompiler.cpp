@@ -1,24 +1,162 @@
 #include "recompiler.hpp"
+#include "build_options.hpp"
+#include "bump_allocator.hpp"
+#include "disassembler.hpp"
+#include "frontend/message.hpp"
 #include "interface/mi.hpp"
+#include "interpreter.hpp"
 #include "rdp/rdp.hpp"
 #include "rsp.hpp"
 
 using namespace asmjit;
 using namespace asmjit::x86;
 
+using mips::BranchState;
+
 namespace n64::rsp {
+
+struct Block {
+    void (*func)();
+    void operator()() const { func(); }
+};
+
+struct Pool {
+    std::array<Block*, 64> blocks;
+};
+
+static void BlockEpilogWithPcFlush(int pc_offset);
+static void BlockRecordCycles();
+static void ExecuteBlock(Block* block);
+static std::pair<Block*, bool> GetBlock(u32 pc);
+
+constexpr bool use_avx512 = false;
+constexpr size_t num_pools = 16; // imem size (0x1000) / bytes per pool (0x100)
+
+static BumpAllocator allocator;
+static asmjit::CodeHolder code_holder;
+static asmjit::FileLogger jit_logger(stdout);
+static asmjit::JitRuntime jit_runtime;
+static std::vector<Pool*> pools;
+
+static auto& c = compiler;
+
+void BlockEpilog()
+{
+    BlockRecordCycles();
+    reg_alloc.BlockEpilog();
+    c.ret();
+}
+
+void BlockEpilogWithPcFlush(int pc_offset)
+{
+    c.mov(eax, jit_pc + pc_offset);
+    c.mov(dword_ptr(pc), eax);
+    BlockEpilog();
+}
+
+void BlockProlog()
+{
+    code_holder.reset();
+    asmjit::Error err = code_holder.init(jit_runtime.environment(), jit_runtime.cpuFeatures());
+    if (err) {
+        log_error(
+          std::format("Failed to init asmjit code holder; returned {}", asmjit::DebugUtils::errorAsString(err)));
+    }
+    err = code_holder.attach(&compiler);
+    if (err) {
+        log_error(std::format("Failed to attach asmjit compiler to code holder; returned {}",
+          asmjit::DebugUtils::errorAsString(err)));
+    }
+    if constexpr (enable_jit_error_logging) {
+        static AsmjitLogErrorHandler asmjit_log_error_handler{};
+        code_holder.setErrorHandler(&asmjit_log_error_handler);
+    }
+    if constexpr (enable_jit_block_logging) {
+        jit_logger.addFlags(FormatFlags::kMachineCode);
+        code_holder.setLogger(&jit_logger);
+    }
+    FuncNode* func_node = c.addFunc(FuncSignatureT<void>());
+    func_node->frame().setAvxEnabled();
+    func_node->frame().setAvxCleanup();
+    if constexpr (use_avx512) {
+        func_node->frame().setAvx512Enabled();
+    }
+    if constexpr (enable_jit_block_logging) {
+        jit_logger.log("======== RSP BLOCK BEGIN ========\n");
+    }
+    reg_alloc.BlockProlog();
+}
+
+void BlockRecordCycles()
+{
+    if (block_cycles > 0) {
+        c.mov(rax, &cycle_counter);
+        if (block_cycles == 1) {
+            c.inc(dword_ptr(rax));
+        } else {
+            c.add(dword_ptr(rax), block_cycles);
+        }
+    }
+}
+
+void ExecuteBlock(Block* block)
+{
+    (*block)();
+    if (jump_is_pending) {
+        pc = jump_addr;
+        jump_is_pending = in_branch_delay_slot = false;
+        return;
+    }
+    if (in_branch_delay_slot) {
+        jump_is_pending = true;
+    }
+}
+
+std::pair<Block*, bool> GetBlock(u32 pc)
+{
+    static_assert(std::has_single_bit(num_pools));
+    Pool*& pool = pools[pc >> 8 & (num_pools - 1)]; // each pool 6 bits, each instruction 2 bits
+    if (!pool) {
+        pool = reinterpret_cast<Pool*>(allocator.acquire(sizeof(Pool)));
+    }
+    Block*& block = pool->blocks[pc >> 2 & 63];
+    bool compiled = block != nullptr;
+    if (!compiled) {
+        block = reinterpret_cast<Block*>(allocator.acquire(sizeof(Block)));
+    }
+    return { block, compiled };
+}
 
 Status InitRecompiler()
 {
-    return status_unimplemented();
+    allocator.allocate(1_MiB);
+    pools.resize(num_pools, nullptr);
+    return status_ok();
 }
 
 void Invalidate(u32 addr)
 {
+    if (cpu_impl == CpuImpl::Recompiler) {
+        assert(addr <= 0x1000);
+        Pool*& pool = pools[addr >> 8]; // each pool 6 bits, each instruction 2 bits
+        for (Block* block : pool->blocks) {
+            if (block) {
+                jit_runtime.release(block->func);
+            }
+        }
+        pool = nullptr;
+    }
 }
 
 void InvalidateRange(u32 addr_lo, u32 addr_hi)
 {
+    if (cpu_impl == CpuImpl::Recompiler) {
+        ASSUME(addr_lo <= addr_hi);
+        assert(addr_hi <= 0x1000);
+        addr_lo >>= 8;
+        addr_hi >>= 8;
+        std::fill(pools.begin() + addr_lo, pools.begin() + addr_hi, nullptr);
+    }
 }
 
 void LinkJit(u32 reg)
@@ -26,141 +164,78 @@ void LinkJit(u32 reg)
     compiler.mov(reg_alloc.GetHostMarkDirty(reg), (jit_pc + 8) & 0xFFF);
 }
 
-void OnBranchJit()
+u32 RunRecompiler(u32 rsp_cycles)
 {
+    if (sp.status.halted) return 0;
+    cycle_counter = 0;
+    if (sp.status.sstep) {
+        InterpretOneInstruction();
+        sp.status.halted = true;
+        if (jump_is_pending) { // note for future refactors: this makes rsp::op_break::BREAKWithinDelay pass
+            pc = jump_addr;
+            jump_is_pending = in_branch_delay_slot = false;
+        }
+    } else {
+        while (cycle_counter < rsp_cycles) {
+            auto [block, compiled] = GetBlock(pc);
+            assert(block);
+            if (compiled) {
+                ExecuteBlock(block);
+            } else {
+                branch_hit = branched = false;
+                block_cycles = 0;
+                jit_pc = pc;
+
+                BlockProlog();
+
+                auto Instr = [] {
+                    u32 instr = FetchInstruction(jit_pc);
+                    disassembler::exec_rsp<CpuImpl::Recompiler>(instr);
+                    jit_pc = (jit_pc + 4) & 0xFFC;
+                    block_cycles++;
+                };
+                Instr();
+
+                // If the previously executed block ended with a branch instruction, meaning that the branch delay
+                // slot did not fit, execute only the first instruction in this block, before jumping.
+                // The jump can be cancelled if the first instruction is also a branch.
+                Label l_end = c.newLabel();
+                c.mov(al, ptr(in_branch_delay_slot));
+                c.test(al, al);
+                c.je(l_end);
+                BlockEpilog();
+                c.bind(l_end);
+
+                while (!branched && (jit_pc & 255)) {
+                    branched = branch_hit; // If the branch delay slot instruction fits within the block boundary,
+                                           // include it before stopping
+                    Instr();
+                }
+
+                BlockEpilogWithPcFlush(0);
+                c.endFunc();
+                asmjit::Error err = c.finalize();
+                if (err) {
+                    message::error(std::format("Failed to finalize code block; returned {}",
+                      asmjit::DebugUtils::errorAsString(err)));
+                }
+                err = jit_runtime.add(&block->func, &code_holder);
+                if (err) {
+                    message::error(std::format("Failed to add code to asmjit runtime; returned {}",
+                      asmjit::DebugUtils::errorAsString(err)));
+                }
+
+                ExecuteBlock(block);
+            }
+        }
+    }
+    return cycle_counter <= rsp_cycles ? 0 : cycle_counter - rsp_cycles;
 }
 
-u64 RunRecompiler(u64 rsp_cycles)
+void TearDownRecompiler()
 {
-    return 0;
-}
-
-void TakeBranchJit(asmjit::x86::Gp target)
-{
-}
-
-void Recompiler::add(u32 rs, u32 rt, u32 rd) const
-{
-    addu(rs, rt, rd);
-}
-
-void Recompiler::addi(u32 rs, u32 rt, s16 imm) const
-{
-    addiu(rs, rt, imm);
-}
-
-void Recompiler::break_() const
-{
-    Label l_end = c.newLabel();
-    c.or_(ptr(sp.status), 3); // set halted, broke
-    c.bt(ptr(sp.status), 7); // intbreak
-    c.jnb(l_end);
-    c.mov(host_gpr_arg[0].r32(), std::to_underlying(mi::InterruptType::SP));
-    call(c, mi::RaiseInterrupt);
-    c.bind(l_end);
-}
-
-void Recompiler::j(u32 instr) const
-{
-    c.mov(eax, (instr << 2) & 0xFFF);
-    TakeBranchJit(eax);
-    branch_hit = true;
-}
-
-void Recompiler::jal(u32 instr) const
-{
-    c.mov(eax, (instr << 2) & 0xFFF);
-    TakeBranchJit(eax);
-    LinkJit(31);
-    branch_hit = true;
-}
-
-void Recompiler::lb(u32 rs, u32 rt, s16 imm) const
-{
-    load<s8>(rs, rt, imm);
-}
-
-void Recompiler::lbu(u32 rs, u32 rt, s16 imm) const
-{
-    load<u8>(rs, rt, imm);
-}
-
-void Recompiler::lh(u32 rs, u32 rt, s16 imm) const
-{
-    load<s16>(rs, rt, imm);
-}
-
-void Recompiler::lhu(u32 rs, u32 rt, s16 imm) const
-{
-    load<u16>(rs, rt, imm);
-}
-
-void Recompiler::lw(u32 rs, u32 rt, s16 imm) const
-{
-    load<s32>(rs, rt, imm);
-}
-
-void Recompiler::lwu(u32 rs, u32 rt, s16 imm) const
-{
-    load<u32>(rs, rt, imm);
-}
-
-void Recompiler::mfc0(u32 rt, u32 rd) const
-{
-    reg_alloc.Flush(host_gpr_arg[0]);
-    c.mov(host_gpr_arg[0].r32(), (rd & 7) << 2);
-    reg_alloc.Call(rd & 8 ? rdp::ReadReg : rsp::ReadReg);
-    if (rt) c.mov(GetGprMarkDirty(rt), eax);
-}
-
-void Recompiler::mtc0(u32 rt, u32 rd) const
-{
-    reg_alloc.Flush(host_gpr_arg[0]);
-    reg_alloc.Flush(host_gpr_arg[1]);
-    c.mov(host_gpr_arg[0].r32(), (rd & 7) << 2);
-    c.mov(host_gpr_arg[1].r32(), GetGpr(rt));
-    reg_alloc.Call(rd & 8 ? rdp::WriteReg : rsp::WriteReg);
-}
-
-void Recompiler::sb(u32 rs, u32 rt, s16 imm) const
-{
-    store<s8>(rs, rt, imm);
-}
-
-void Recompiler::sh(u32 rs, u32 rt, s16 imm) const
-{
-    store<s16>(rs, rt, imm);
-}
-
-void Recompiler::sub(u32 rs, u32 rt, u32 rd) const
-{
-    subu(rs, rt, rd);
-}
-
-void Recompiler::sw(u32 rs, u32 rt, s16 imm) const
-{
-    store<s32>(rs, rt, imm);
-}
-
-template<std::integral Int> void Recompiler::load(u32 rs, u32 rt, s16 imm) const
-{
-    if (!rt) return;
-    c.mov(host_gpr_arg[0].r32(), GetGpr(rs));
-    c.add(host_gpr_arg[0].r32(), imm);
-    call(c, ReadDMEM<std::make_signed_t<Int>>);
-    if constexpr (std::same_as<Int, s8>) c.movsx(eax, al);
-    if constexpr (std::same_as<Int, u8>) c.movzx(eax, al);
-    if constexpr (std::same_as<Int, s16>) c.cwde(eax);
-    if constexpr (std::same_as<Int, u16>) c.movzx(eax, ax);
-    c.mov(GetGprMarkDirty(rt), eax);
-}
-
-template<std::integral Int> void Recompiler::store(u32 rs, u32 rt, s16 imm) const
-{
-    c.mov(host_gpr_arg[0].r32(), GetGpr(rs));
-    c.add(host_gpr_arg[0].r32(), imm);
-    c.mov(host_gpr_arg[1].r32(), GetGpr(rt));
-    call(c, WriteDMEM<std::make_signed_t<Int>>);
+    allocator.deallocate();
+    pools.clear();
 }
 
 } // namespace n64::rsp

@@ -104,15 +104,27 @@ void PowerOn()
     InitCop1();
     InitializeMMU();
     InitCache();
-    InitRecompiler(); // TODO: do not init in every case?
 }
 
 void Reset()
 {
     exception_occurred = false;
     in_branch_delay_slot_taken = in_branch_delay_slot_not_taken = false;
-    branch_state = BranchState::NoBranch;
+    branch_state = mips::BranchState::NoBranch;
     SoftResetException();
+}
+
+void SetActiveCpuImpl(CpuImpl cpu_impl)
+{
+    vr4300::cpu_impl = cpu_impl;
+    if (cpu_impl == CpuImpl::Interpreter) {
+        TearDownRecompiler();
+    } else {
+        Status status = InitRecompiler();
+        if (!status.ok()) {
+            log_error(status.message());
+        }
+    }
 }
 
 void SetInterruptPending(ExternalInterruptSource interrupt)

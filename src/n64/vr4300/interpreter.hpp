@@ -15,7 +15,7 @@ u64 GetElapsedCycles();
 void Link(u32 reg);
 void OnBranchNotTaken();
 void ResetBranch();
-u64 RunInterpreter(u64 cpu_cycles);
+u32 RunInterpreter(u32 cpu_cycles);
 void TakeBranch(u64 target_address);
 
 struct Interpreter : public mips::Interpreter<s64, s64, u64> {

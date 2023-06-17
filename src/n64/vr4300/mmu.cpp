@@ -15,6 +15,8 @@
 #include <limits>
 #include <type_traits>
 
+using mips::OperatingMode;
+
 namespace n64::vr4300 {
 
 struct TlbEntry {

@@ -12,6 +12,8 @@
 #include <intrin.h>
 #endif
 
+using mips::BranchState;
+
 namespace n64::vr4300 {
 
 void DiscardBranch()
@@ -39,7 +41,7 @@ void ResetBranch()
     branch_state = BranchState::NoBranch;
 }
 
-u64 RunInterpreter(u64 cpu_cycles)
+u32 RunInterpreter(u32 cpu_cycles)
 {
     cycle_counter = 0;
     while (cycle_counter < cpu_cycles) {

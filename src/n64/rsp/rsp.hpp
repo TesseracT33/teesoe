@@ -1,6 +1,7 @@
 #pragma once
 
-#include "mips/gpr.hpp"
+#include "mips/types.hpp"
+#include "n64.hpp"
 #include "types.hpp"
 
 #include <array>
@@ -36,19 +37,22 @@ u64 RdpReadCommand(u32 addr);
 template<std::signed_integral Int> Int ReadDMEM(u32 addr);
 template<std::signed_integral Int> Int ReadMemoryCpu(u32 addr);
 u32 ReadReg(u32 addr);
+void SetActiveCpuImpl(CpuImpl cpu_impl);
 void TakeBranch(u32 target_address);
 template<std::signed_integral Int> void WriteDMEM(u32 addr, Int data);
 template<size_t access_size> void WriteMemoryCpu(u32 addr, s64 data);
 void WriteReg(u32 addr, u32 data);
 
+inline constexpr bool can_execute_dword_instrs_dummy{};
+
 inline bool in_branch_delay_slot;
 inline bool jump_is_pending;
 inline u32 pc;
 inline u32 jump_addr;
-inline u64 cycle_counter;
+inline u32 cycle_counter;
 inline s32 lo_dummy, hi_dummy;
-constexpr bool can_execute_dword_instrs_dummy{};
-inline ::mips::Gpr<s32> gpr;
+inline mips::Gpr<s32> gpr;
+inline CpuImpl cpu_impl;
 
 inline constinit std::array<u8, 0x2000> mem{}; /* 0 - $FFF: data memory; $1000 - $1FFF: instruction memory */
 

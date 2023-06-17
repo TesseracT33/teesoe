@@ -9,7 +9,7 @@
 
 class BumpAllocator {
 public:
-    BumpAllocator(size_t size = 0) : memory(size, 0), index(0) {}
+    BumpAllocator(size_t size = 0) : memory{}, index{} { allocate(size); }
 
     u8* acquire(size_t size)
     {
@@ -28,6 +28,8 @@ public:
         memory.resize(size, 0);
         index = 0;
     }
+
+    void deallocate() { memory.clear(); }
 
 private:
     std::vector<u8> memory;

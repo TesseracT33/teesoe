@@ -5,6 +5,7 @@
 #include "memory/rdram.hpp"
 #include "n64_build_options.hpp"
 #include "rdp/rdp.hpp"
+#include "rsp/recompiler.hpp"
 #include "scheduler.hpp"
 #include "util.hpp"
 #include "vr4300/recompiler.hpp"
@@ -24,15 +25,17 @@ enum class DmaType {
     SpToRd
 };
 
-enum Register {
-    DmaSpaddr,
-    DmaRamaddr,
-    DmaRdlen,
-    DmaWrlen,
-    Status,
-    DmaFull,
-    DmaBusy,
-    Semaphore
+struct Register {
+    enum {
+        DmaSpaddr,
+        DmaRamaddr,
+        DmaRdlen,
+        DmaWrlen,
+        Status,
+        DmaFull,
+        DmaBusy,
+        Semaphore
+    };
 };
 
 /* What was written last to either SP_DMA_RDLEN/ SP_DMA_WRLEN during an ongoing DMA */
@@ -52,7 +55,7 @@ void AdvancePipeline(u64 cycles)
 
 u32 FetchInstruction(u32 addr)
 {
-    assert(addr < 0x1000 && !(addr & 3));
+    ASSUME(addr < 0x1000 && !(addr & 3));
     u32 instr;
     std::memcpy(&instr, &imem[addr], 4);
     instr = std::byteswap(instr);
@@ -111,9 +114,14 @@ template<DmaType dma_type> void InitDma()
 
     scheduler::AddEvent(scheduler::EventType::SpDmaFinish, cpu_cycles_until_finish, OnDmaFinish);
 
-    auto AlignAddresses = [] {
-        sp.dma_spaddr = sp.dma_spaddr & 0x1000 | sp.dma_spaddr + 4 & 0xFFF;
+    auto dram_start = sp.dma_ramaddr;
+    auto sp_start = sp.dma_spaddr;
+    bool sp_full_cycle{};
+
+    auto AlignAddresses = [&] {
+        sp.dma_spaddr = sp.dma_spaddr & 0x1000 | sp.dma_spaddr + 4 & 0xFFF; // stay within DMEM or IMEM
         sp.dma_ramaddr += 4; // TODO: ensure no overflow
+        sp_full_cycle |= sp.dma_spaddr == sp_start;
     };
 
     auto DstPtr = [] {
@@ -131,8 +139,6 @@ template<DmaType dma_type> void InitDma()
             return rsp::GetPointerToMemory(sp.dma_spaddr);
         }
     };
-
-    auto dram_start = sp.dma_ramaddr;
 
     /* The DMA engine allows to transfer multiple "rows" of data in RDRAM, separated by a "skip" value. This allows for
        instance to transfer a rectangular portion of a larger image, by specifying the size of each row of the
@@ -164,8 +170,19 @@ template<DmaType dma_type> void InitDma()
     }
 
     if constexpr (dma_type == DmaType::RdToSp) {
-        // TODO invalidate
+        if (rsp::cpu_impl == CpuImpl::Recompiler && (sp.dma_spaddr & 0x1000)) {
+            if (sp_full_cycle) {
+                rsp::InvalidateRange(0, 0x1000);
+            } else if (sp_start < sp.dma_spaddr) {
+                rsp::InvalidateRange(sp_start - 0x1000, sp.dma_spaddr - 0x1000);
+            } else {
+                rsp::InvalidateRange(0, sp.dma_spaddr - 0x1000);
+                rsp::InvalidateRange(sp_start - 0x1000, 0x1000);
+            }
+        }
+
     } else {
+        // TODO: handle case where skip > 0
         vr4300::InvalidateRange(dram_start, sp.dma_ramaddr);
     }
 }
@@ -266,13 +283,13 @@ u32 ReadReg(u32 addr)
     } else {
         static_assert(sizeof(sp) >> 2 == 8);
         u32 offset = addr >> 2 & 7;
-        u32 ret = [&] {
+        u32 ret = [offset] {
             switch (offset) {
-            case DmaSpaddr: return sp.dma_spaddr;
+            case Register::DmaSpaddr: return sp.dma_spaddr;
 
-            case DmaRamaddr: return sp.dma_ramaddr;
+            case Register::DmaRamaddr: return sp.dma_ramaddr;
 
-            case DmaRdlen:
+            case Register::DmaRdlen:
                 /* SP_DMA_WRLEN and SP_DMA_RDLEN both always returns the same data on read, relative to
                 the current transfer, irrespective on the direction of the transfer. */
                 return ~7 & [&] {
@@ -283,7 +300,7 @@ u32 ReadReg(u32 addr)
                     }
                 }();
 
-            case DmaWrlen:
+            case Register::DmaWrlen:
                 return ~7 & [&] {
                     if (sp.status.dma_busy) {
                         return in_progress_dma_type == DmaType::RdToSp ? sp.dma_rdlen : sp.dma_wrlen;
@@ -292,13 +309,13 @@ u32 ReadReg(u32 addr)
                     }
                 }();
 
-            case Status: return std::bit_cast<u32>(sp.status);
+            case Register::Status: return std::bit_cast<u32>(sp.status);
 
-            case DmaFull: return sp.dma_full;
+            case Register::DmaFull: return sp.dma_full;
 
-            case DmaBusy: return sp.dma_busy;
+            case Register::DmaBusy: return sp.dma_busy;
 
-            case Semaphore: {
+            case Register::Semaphore: {
                 auto ret = sp.semaphore;
                 sp.semaphore = 1;
                 return ret;
@@ -326,15 +343,28 @@ u64 RdpReadCommand(u32 addr)
 constexpr std::string_view RegOffsetToStr(u32 reg_offset)
 {
     switch (reg_offset) {
-    case DmaSpaddr: return "SP_DMA_SP_ADDR";
-    case DmaRamaddr: return "SP_DMA_RAM_ADDR";
-    case DmaRdlen: return "SP_DMA_RDLEN";
-    case DmaWrlen: return "SP_DMA_WRLEN";
-    case Status: return "SP_STATUS";
-    case DmaFull: return "SP_DMA_FULL";
-    case DmaBusy: return "SP_DMA_BUSY";
-    case Semaphore: return "SP_SEMAPHORE";
+    case Register::DmaSpaddr: return "SP_DMA_SP_ADDR";
+    case Register::DmaRamaddr: return "SP_DMA_RAM_ADDR";
+    case Register::DmaRdlen: return "SP_DMA_RDLEN";
+    case Register::DmaWrlen: return "SP_DMA_WRLEN";
+    case Register::Status: return "SP_STATUS";
+    case Register::DmaFull: return "SP_DMA_FULL";
+    case Register::DmaBusy: return "SP_DMA_BUSY";
+    case Register::Semaphore: return "SP_SEMAPHORE";
     default: std::unreachable();
+    }
+}
+
+void SetActiveCpuImpl(CpuImpl cpu_impl)
+{
+    rsp::cpu_impl = cpu_impl;
+    if (cpu_impl == CpuImpl::Interpreter) {
+        TearDownRecompiler();
+    } else {
+        Status status = InitRecompiler();
+        if (!status.ok()) {
+            log_error(status.message());
+        }
     }
 }
 
@@ -385,11 +415,11 @@ void WriteReg(u32 addr, u32 data)
         }
 
         switch (offset) {
-        case DmaSpaddr: sp.dma_spaddr = data & 0x03FF'FFF8; break;
+        case Register::DmaSpaddr: sp.dma_spaddr = data & 0x03FF'FFF8; break;
 
-        case DmaRamaddr: sp.dma_ramaddr = data & 0x03FF'FFF8; break;
+        case Register::DmaRamaddr: sp.dma_ramaddr = data & 0x03FF'FFF8; break;
 
-        case DmaRdlen:
+        case Register::DmaRdlen:
             if (sp.status.dma_busy) {
                 buffered_dma_rdlen = data & 0xFF8F'FFFF;
                 sp.status.dma_full = 1;
@@ -401,7 +431,7 @@ void WriteReg(u32 addr, u32 data)
             }
             break;
 
-        case DmaWrlen:
+        case Register::DmaWrlen:
             if (sp.status.dma_busy) {
                 buffered_dma_wrlen = data & 0xFF8F'FFFF;
                 sp.status.dma_full = 1;
@@ -413,7 +443,7 @@ void WriteReg(u32 addr, u32 data)
             }
             break;
 
-        case Status: {
+        case Register::Status: {
             if ((data & 1) && !(data & 2)) {
                 /* CLR_HALT: Start running RSP code from the current RSP PC (clear the HALTED flag) */
                 sp.status.halted = 0;
@@ -469,10 +499,10 @@ void WriteReg(u32 addr, u32 data)
             break;
         }
 
-        case DmaFull:
-        case DmaBusy: /* read-only */ break;
+        case Register::DmaFull:
+        case Register::DmaBusy: /* read-only */ break;
 
-        case Semaphore:
+        case Register::Semaphore:
             sp.semaphore = 0; /* goes against n64brew, but is according to ares */
             break;
 

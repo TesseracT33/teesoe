@@ -6,7 +6,8 @@
 
 namespace n64::rsp {
 
-u64 RunInterpreter(u64 rsp_cycles);
+void InterpretOneInstruction();
+u32 RunInterpreter(u32 rsp_cycles);
 
 struct Interpreter : public mips::Interpreter<s32, s32, u32> {
     using mips::Interpreter<s32, s32, u32>::Interpreter;

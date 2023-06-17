@@ -1,8 +1,8 @@
 #pragma once
 
-#include "gpr.hpp"
+#include "common/types.hpp"
 #include "host.hpp"
-#include "types.hpp"
+#include "mips/types.hpp"
 
 #include <concepts>
 

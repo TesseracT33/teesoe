@@ -93,6 +93,8 @@ void RemoveEvent(EventType event_type)
 template<CpuImpl vr4300_impl, CpuImpl rsp_impl> void Run()
 {
     Initialize();
+    rsp::SetActiveCpuImpl(rsp_impl);
+    vr4300::SetActiveCpuImpl(vr4300_impl);
 
     s64 cpu_cycle_overrun = 0, rsp_cycle_overrun = 0;
     while (!quit) {

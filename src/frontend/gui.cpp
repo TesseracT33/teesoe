@@ -129,9 +129,9 @@ void DrawCoreSettingsWindow()
 {
     if (ImGui::Begin("Core settings", &show_core_settings_window)) {
         static int tab{};
-        if (ImGui::Button("GBA", ImVec2(100.0f, 0.0f))) tab = 1;
+        if (ImGui::Button("GBA", ImVec2(100.0f, 0.0f))) tab = 0;
         ImGui::SameLine(0.0, 2.0f);
-        if (ImGui::Button("N64", ImVec2(100.0f, 0.0f))) tab = 0;
+        if (ImGui::Button("N64", ImVec2(100.0f, 0.0f))) tab = 1;
 
         auto DrawGBA = [] {
 
@@ -140,19 +140,19 @@ void DrawCoreSettingsWindow()
         auto DrawN64 = [] {
             static int cpu_impl_sel{};
             ImGui::Text("CPU implementation");
-            if (ImGui::RadioButton("Interpreter", &cpu_impl_sel, 0)) {
+            if (ImGui::RadioButton("Interpreter##cpu", &cpu_impl_sel, 0)) {
                 n64_configuration.n64.use_cpu_recompiler = false;
             }
-            if (ImGui::RadioButton("Recompiler", &cpu_impl_sel, 1)) {
+            if (ImGui::RadioButton("Recompiler##cpu", &cpu_impl_sel, 1)) {
                 n64_configuration.n64.use_cpu_recompiler = true;
             }
 
             static int rsp_impl_sel{};
             ImGui::Text("RSP implementation");
-            if (ImGui::RadioButton("Interpreter", &rsp_impl_sel, 0)) {
+            if (ImGui::RadioButton("Interpreter##rsp", &rsp_impl_sel, 0)) {
                 n64_configuration.n64.use_rsp_recompiler = false;
             }
-            if (ImGui::RadioButton("Recompiler", &rsp_impl_sel, 1)) {
+            if (ImGui::RadioButton("Recompiler##rsp", &rsp_impl_sel, 1)) {
                 n64_configuration.n64.use_rsp_recompiler = true;
             }
         };
