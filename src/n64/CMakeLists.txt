@@ -1,7 +1,7 @@
 cmake_minimum_required (VERSION 3.25)
 
 target_sources(teesoe PRIVATE
-	common/disassembler.cpp
+	common/decoder.cpp
 	common/n64.cpp
 	common/scheduler.cpp
 

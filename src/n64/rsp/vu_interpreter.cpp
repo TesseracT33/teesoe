@@ -18,8 +18,6 @@
 #define vcc ctrl_reg[1]
 #define vce ctrl_reg[2].lo
 
-using m128i = __m128i;
-
 namespace n64::rsp {
 
 static void AddToAcc(m128i low);

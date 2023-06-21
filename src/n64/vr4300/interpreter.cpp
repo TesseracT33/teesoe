@@ -1,6 +1,6 @@
 #include "interpreter.hpp"
 #include "cop0.hpp"
-#include "disassembler.hpp"
+#include "decoder.hpp"
 #include "exceptions.hpp"
 #include "host.hpp"
 #include "mmu.hpp"
@@ -49,7 +49,7 @@ u32 RunInterpreter(u32 cpu_cycles)
         exception_occurred = false;
         u32 instr = FetchInstruction(pc);
         if (exception_occurred) continue;
-        disassembler::exec_cpu<CpuImpl::Interpreter>(instr);
+        decoder::exec_cpu<CpuImpl::Interpreter>(instr);
         if (exception_occurred) continue;
         if (branch_state == BranchState::Perform) {
             in_branch_delay_slot_taken = false;

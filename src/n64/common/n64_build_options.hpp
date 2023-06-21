@@ -19,6 +19,7 @@ inline constexpr bool log_io_vi = enable_logging && (log_io_all || 0);
 inline constexpr bool log_io_rdp = enable_logging && (log_io_all || 0);
 inline constexpr bool log_io_rsp = enable_logging && (log_io_all || 0);
 inline constexpr bool log_rsp_instructions = enable_logging && 0;
+inline constexpr bool log_rsp_jit_register_status = enable_logging && 0;
 
 inline constexpr bool skip_boot_rom = 1;
 

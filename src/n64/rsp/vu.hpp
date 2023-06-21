@@ -9,22 +9,28 @@
 
 namespace n64::rsp {
 
+using m128i = __m128i;
+
 struct Accumulator {
-    __m128i low;
-    __m128i mid;
-    __m128i high;
+    m128i low;
+    m128i mid;
+    m128i high;
 } inline acc;
 
 struct alignas(32) ControlRegister {
-    __m128i lo;
-    __m128i hi;
+    m128i lo;
+    m128i hi;
 };
 
 inline s16 div_out, div_in;
 inline bool div_dp;
 
-inline std::array<__m128i, 32> vpr; /* SIMD registers; eight 16-bit lanes */
+inline std::array<m128i, 32> vpr; /* SIMD registers; eight 16-bit lanes */
 inline std::array<ControlRegister, 3> ctrl_reg; /* vco, vcc, vce. vce is actually only 8-bits */
+
+inline const m128i byteswap16_mask = _mm_set_epi8(14, 15, 12, 13, 10, 11, 8, 9, 6, 7, 4, 5, 2, 3, 0, 1);
+inline const m128i byteswap16_qword0_mask = _mm_set_epi8(15, 14, 13, 12, 11, 10, 9, 8, 6, 7, 4, 5, 2, 3, 0, 1);
+inline const m128i byteswap16_qword1_mask = _mm_set_epi8(14, 15, 12, 13, 10, 11, 8, 9, 7, 6, 5, 4, 3, 2, 1, 0);
 
 inline const std::array broadcast_mask = {
     _mm_set_epi64x(0x0F'0E'0D'0C'0B'0A'09'08, 0x07'06'05'04'03'02'01'00), /* 0,1,2,3,4,5,6,7 */
@@ -45,8 +51,6 @@ inline const std::array broadcast_mask = {
     _mm_set1_epi16(0x0F'0E), /* 7,7,7,7,7,7,7,7 */
 };
 
-// clang-format off
-
 constexpr std::array ctc2_table = {
     0x0000'0000'0000'0000_s64,
     0x0000'0000'0000'FFFF_s64,
@@ -65,6 +69,8 @@ constexpr std::array ctc2_table = {
     0xFFFF'FFFF'FFFF'0000_s64,
     0xFFFF'FFFF'FFFF'FFFF_s64,
 };
+
+// clang-format off
 
 inline constexpr std::array<u16, 512> rcp_rom = {
 	0xFFFF, 0xFF00, 0xFE01, 0xFD04, 0xFC07, 0xFB0C, 0xFA11, 0xF918, 0xF81F, 0xF727, 0xF631, 0xF53B, 0xF446, 0xF352, 0xF25F, 0xF16D,

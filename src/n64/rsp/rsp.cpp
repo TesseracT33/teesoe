@@ -392,8 +392,12 @@ template<size_t access_size> void WriteMemoryCpu(u32 addr, s64 data)
         if constexpr (access_size == 8) return data >> 32;
     }();
     if (addr < 0x0404'0000) {
+        addr &= 0x1FFC;
         to_write = std::byteswap(to_write);
-        std::memcpy(&mem[addr & 0x1FFC], &to_write, 4);
+        std::memcpy(&mem[addr], &to_write, 4);
+        if (addr & 0x1000) {
+            Invalidate(addr & 0xFFF);
+        }
     } else {
         WriteReg(addr, to_write);
     }

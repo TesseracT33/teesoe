@@ -7,10 +7,9 @@
 
 #include <string>
 
-namespace n64::disassembler {
+namespace n64::decoder {
 
 template<CpuImpl> void exec_cpu(u32 instr);
 template<CpuImpl> void exec_rsp(u32 instr);
-std::string make_string(u32 instr);
 
-} // namespace n64::disassembler
+} // namespace n64::decoder

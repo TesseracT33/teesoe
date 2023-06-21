@@ -1,5 +1,5 @@
 #include "interpreter.hpp"
-#include "disassembler.hpp"
+#include "decoder.hpp"
 #include "interface/mi.hpp"
 #include "rdp/rdp.hpp"
 #include "rsp.hpp"
@@ -10,7 +10,7 @@ void InterpretOneInstruction()
 {
     AdvancePipeline(1);
     u32 instr = FetchInstruction(pc);
-    disassembler::exec_rsp<CpuImpl::Interpreter>(instr);
+    decoder::exec_rsp<CpuImpl::Interpreter>(instr);
     if (jump_is_pending) {
         pc = jump_addr;
         jump_is_pending = in_branch_delay_slot = false;
@@ -33,11 +33,11 @@ u32 RunInterpreter(u32 rsp_cycles)
         while (cycle_counter < rsp_cycles && !sp.status.halted) {
             InterpretOneInstruction();
         }
-    }
-    if (sp.status.halted) {
-        if (jump_is_pending) { // note for future refactors: this makes rsp::op_break::BREAKWithinDelay pass
-            pc = jump_addr;
-            jump_is_pending = in_branch_delay_slot = false;
+        if (sp.status.halted) {
+            if (jump_is_pending) { // note for future refactors: this makes rsp::op_break::BREAKWithinDelay pass
+                pc = jump_addr;
+                jump_is_pending = in_branch_delay_slot = false;
+            }
         }
     }
     return cycle_counter <= rsp_cycles ? 0 : cycle_counter - rsp_cycles;

@@ -1,4 +1,6 @@
-#include "disassembler.hpp"
+#include "decoder.hpp"
+#include "n64_build_options.hpp"
+#include "rsp/disassembler.hpp"
 #include "rsp/interpreter.hpp"
 #include "rsp/vu.hpp"
 #include "rsp/x64/cpu.hpp"
@@ -8,6 +10,7 @@
 #include "vr4300/cop0.hpp"
 #include "vr4300/cop1.hpp"
 #include "vr4300/cop2.hpp"
+#include "vr4300/disassembler.hpp"
 #include "vr4300/exceptions.hpp"
 #include "vr4300/interpreter.hpp"
 #include "vr4300/x64/cop0.hpp"
@@ -38,6 +41,27 @@
 #define RS   (instr >> 21 & 31)
 #define BASE (instr >> 21 & 31)
 
+#define LOG_RSP(instr, ...)                                         \
+    if constexpr (cpu == Cpu::RSP && log_rsp_instructions) {        \
+        log(std::format("${:03X}  {}",                              \
+          cpu_impl == CpuImpl::Interpreter ? rsp::pc : rsp::jit_pc, \
+          rsp::disassembler.instr(__VA_ARGS__)));                   \
+    }
+
+#define LOG_VR4300(instr, ...)                                            \
+    if constexpr (cpu == Cpu::VR4300 && log_cpu_instructions) {           \
+        log(std::format("${:016X}  {}",                                   \
+          cpu_impl == CpuImpl::Interpreter ? vr4300::pc : vr4300::jit_pc, \
+          vr4300::disassembler.instr(__VA_ARGS__)));                      \
+    }
+
+#define LOG(instr, ...)                     \
+    if constexpr (cpu == Cpu::VR4300) {     \
+        LOG_VR4300(instr, __VA_ARGS__);     \
+    } else if constexpr (cpu == Cpu::RSP) { \
+        LOG_RSP(instr, __VA_ARGS__);        \
+    }
+
 #define COP1_FMT(instr_name, ...)                                                                              \
     switch (instr >> 21 & 31) {                                                                                \
     case std::to_underlying(vr4300::Fmt::Float32):                                                             \
@@ -59,6 +83,7 @@
 
 #define COP_RSP(instr, ...)                               \
     {                                                     \
+        LOG_RSP(instr, __VA_ARGS__);                      \
         if constexpr (cpu_impl == CpuImpl::Interpreter) { \
             rsp::instr(__VA_ARGS__);                      \
         } else if constexpr (arch.a64) {                  \
@@ -79,6 +104,7 @@
 
 #define CPU(instr, ...)                                             \
     {                                                               \
+        LOG(instr, __VA_ARGS__);                                    \
         if constexpr (cpu == Cpu::VR4300) {                         \
             if constexpr (cpu_impl == CpuImpl::Interpreter) {       \
                 vr4300::cpu_interpreter.instr(__VA_ARGS__);         \
@@ -100,6 +126,7 @@
 
 #define CPU_RSP(instr, ...)                                  \
     {                                                        \
+        LOG_RSP(instr, __VA_ARGS__);                         \
         if constexpr (cpu_impl == CpuImpl::Interpreter) {    \
             rsp::cpu_interpreter.instr(__VA_ARGS__);         \
         } else if constexpr (arch.a64) {                     \
@@ -111,6 +138,7 @@
 
 #define CPU_VR4300(instr, ...)                                      \
     {                                                               \
+        LOG_VR4300(instr, __VA_ARGS__);                             \
         if constexpr (cpu == Cpu::VR4300) {                         \
             if constexpr (cpu_impl == CpuImpl::Interpreter) {       \
                 vr4300::cpu_interpreter.instr(__VA_ARGS__);         \
@@ -124,7 +152,7 @@
         }                                                           \
     }
 
-namespace n64::disassembler {
+namespace n64::decoder {
 
 template<Cpu cpu, CpuImpl cpu_impl, bool make_string> static void cop0(u32 instr);
 template<Cpu cpu, CpuImpl cpu_impl, bool make_string> static void cop1(u32 instr);
@@ -147,9 +175,9 @@ template<Cpu cpu, CpuImpl cpu_impl, auto func, typename... Args> void interpr_ji
 template<Cpu cpu, auto impl> void jit_call_interpreter_impl()
 {
     if constexpr (cpu == Cpu::VR4300) {
-        call(vr4300::compiler, impl);
+        jit_x64_call(vr4300::compiler, impl);
     } else {
-        call(rsp::compiler, impl);
+        jit_x64_call(rsp::compiler, impl);
     }
 }
 
@@ -170,7 +198,7 @@ void jit_call_interpreter_impl(Arg first_arg, Args... remaining_args)
         jit_call_interpreter_impl<cpu, impl>(remaining_args...);
     } else {
         r_idx = 0;
-        call(*compiler, impl);
+        jit_x64_call(*compiler, impl);
     }
 }
 
@@ -459,11 +487,6 @@ template<CpuImpl impl> void exec_rsp(u32 instr)
     disassemble<Cpu::RSP, impl, false>(instr);
 }
 
-std::string make_string(u32 instr)
-{
-    return ""; // TODO
-}
-
 template<Cpu cpu, CpuImpl cpu_impl, bool make_string> void regimm(u32 instr)
 {
     switch (instr >> 16 & 31) {
@@ -576,4 +599,4 @@ template void exec_cpu<CpuImpl::Recompiler>(u32);
 template void exec_rsp<CpuImpl::Interpreter>(u32);
 template void exec_rsp<CpuImpl::Recompiler>(u32);
 
-} // namespace n64::disassembler
+} // namespace n64::decoder

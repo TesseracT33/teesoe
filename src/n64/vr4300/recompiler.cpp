@@ -5,7 +5,7 @@
 #include "asmjit/x86/x86compiler.h"
 #include "bump_allocator.hpp"
 #include "cop0.hpp"
-#include "disassembler.hpp"
+#include "decoder.hpp"
 #include "exceptions.hpp"
 #include "frontend/message.hpp"
 #include "jit_util.hpp"
@@ -170,7 +170,7 @@ void JumpJit()
 
 void LinkJit(u32 reg)
 {
-    c.mov(reg_alloc.GetHostMarkDirty(reg), jit_pc + 8);
+    c.mov(reg_alloc.GetHostGprMarkDirty(reg), jit_pc + 8);
 }
 
 void OnBranchNotTakenJit()
@@ -205,7 +205,7 @@ u32 RunRecompiler(u32 cpu_cycles)
                 if (exception_occurred) {
                     // TODO
                 }
-                disassembler::exec_cpu<CpuImpl::Recompiler>(instr);
+                decoder::exec_cpu<CpuImpl::Recompiler>(instr);
                 jit_pc += 4;
                 block_cycles++;
             };

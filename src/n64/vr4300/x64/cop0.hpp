@@ -95,7 +95,7 @@ inline void dmfc0(u32 rt, u32 rd)
     CheckCop0UsableJit();
     if (!CheckDwordOpCondJit()) return;
     if (!rt) return;
-    Gpq ht = reg_alloc.GetHostMarkDirty(rt);
+    Gpq ht = reg_alloc.GetHostGprMarkDirty(rt);
     ReadCop0Jit<8>(ht, rd);
 }
 
@@ -224,7 +224,7 @@ inline void mfc0(u32 rt, u32 rd)
 {
     CheckCop0UsableJit();
     if (!rt) return;
-    Gpq ht = reg_alloc.GetHostMarkDirty(rt);
+    Gpq ht = reg_alloc.GetHostGprMarkDirty(rt);
     ReadCop0Jit<4>(ht, rd);
 }
 

@@ -1,10 +1,11 @@
 #include "recompiler.hpp"
 #include "build_options.hpp"
 #include "bump_allocator.hpp"
-#include "disassembler.hpp"
+#include "decoder.hpp"
 #include "frontend/message.hpp"
 #include "interface/mi.hpp"
 #include "interpreter.hpp"
+#include "n64_build_options.hpp"
 #include "rdp/rdp.hpp"
 #include "rsp.hpp"
 
@@ -18,6 +19,7 @@ namespace n64::rsp {
 struct Block {
     void (*func)();
     void operator()() const { func(); }
+    bool ends_with_branch_and_delay_slot;
 };
 
 struct Pool {
@@ -34,14 +36,16 @@ constexpr size_t num_pools = 16; // imem size (0x1000) / bytes per pool (0x100)
 
 static BumpAllocator allocator;
 static asmjit::CodeHolder code_holder;
+static asmjit::Label epilog_label;
 static asmjit::FileLogger jit_logger(stdout);
 static asmjit::JitRuntime jit_runtime;
 static std::vector<Pool*> pools;
 
-static auto& c = compiler;
+static AsmjitCompiler& c = compiler;
 
 void BlockEpilog()
 {
+    // c.bind(epilog_label);
     BlockRecordCycles();
     reg_alloc.BlockEpilog();
     c.ret();
@@ -49,8 +53,8 @@ void BlockEpilog()
 
 void BlockEpilogWithPcFlush(int pc_offset)
 {
-    c.mov(eax, jit_pc + pc_offset);
-    c.mov(dword_ptr(pc), eax);
+    // c.bind(epilog_label);
+    c.mov(GlobalVarPtr(pc), jit_pc + pc_offset);
     BlockEpilog();
 }
 
@@ -84,30 +88,32 @@ void BlockProlog()
     if constexpr (enable_jit_block_logging) {
         jit_logger.log("======== RSP BLOCK BEGIN ========\n");
     }
+    // epilog_label = c.newLabel();
     reg_alloc.BlockProlog();
 }
 
 void BlockRecordCycles()
 {
-    if (block_cycles > 0) {
-        c.mov(rax, &cycle_counter);
-        if (block_cycles == 1) {
-            c.inc(dword_ptr(rax));
-        } else {
-            c.add(dword_ptr(rax), block_cycles);
-        }
+    assert(block_cycles > 0);
+    if (block_cycles == 1) {
+        c.inc(GlobalVarPtr(cycle_counter));
+    } else {
+        c.add(GlobalVarPtr(cycle_counter), block_cycles);
     }
 }
 
 void ExecuteBlock(Block* block)
 {
     (*block)();
-    if (jump_is_pending) {
+    if (jump_is_pending) { // we returned after the first instruction in the block
         pc = jump_addr;
         jump_is_pending = in_branch_delay_slot = false;
-        return;
-    }
-    if (in_branch_delay_slot) {
+    } else if (block->ends_with_branch_and_delay_slot) {
+        if (in_branch_delay_slot) { // todo: does not work if branch delay slot instr contained another branch instr
+            pc = jump_addr;
+            jump_is_pending = in_branch_delay_slot = false;
+        }
+    } else if (in_branch_delay_slot) { // block ends in branch, but delay slot did not fit
         jump_is_pending = true;
     }
 }
@@ -139,12 +145,14 @@ void Invalidate(u32 addr)
     if (cpu_impl == CpuImpl::Recompiler) {
         assert(addr <= 0x1000);
         Pool*& pool = pools[addr >> 8]; // each pool 6 bits, each instruction 2 bits
-        for (Block* block : pool->blocks) {
-            if (block) {
-                jit_runtime.release(block->func);
+        if (pool) {
+            for (Block* block : pool->blocks) {
+                if (block) {
+                    jit_runtime.release(block->func);
+                }
             }
+            pool = nullptr;
         }
-        pool = nullptr;
     }
 }
 
@@ -161,7 +169,7 @@ void InvalidateRange(u32 addr_lo, u32 addr_hi)
 
 void LinkJit(u32 reg)
 {
-    compiler.mov(reg_alloc.GetHostMarkDirty(reg), (jit_pc + 8) & 0xFFF);
+    compiler.mov(reg_alloc.GetHostGprMarkDirty(reg), (jit_pc + 8) & 0xFFF);
 }
 
 u32 RunRecompiler(u32 rsp_cycles)
@@ -171,12 +179,8 @@ u32 RunRecompiler(u32 rsp_cycles)
     if (sp.status.sstep) {
         InterpretOneInstruction();
         sp.status.halted = true;
-        if (jump_is_pending) { // note for future refactors: this makes rsp::op_break::BREAKWithinDelay pass
-            pc = jump_addr;
-            jump_is_pending = in_branch_delay_slot = false;
-        }
     } else {
-        while (cycle_counter < rsp_cycles) {
+        while (cycle_counter < rsp_cycles && !sp.status.halted) {
             auto [block, compiled] = GetBlock(pc);
             assert(block);
             if (compiled) {
@@ -190,18 +194,20 @@ u32 RunRecompiler(u32 rsp_cycles)
 
                 auto Instr = [] {
                     u32 instr = FetchInstruction(jit_pc);
-                    disassembler::exec_rsp<CpuImpl::Recompiler>(instr);
+                    decoder::exec_rsp<CpuImpl::Recompiler>(instr);
                     jit_pc = (jit_pc + 4) & 0xFFC;
                     block_cycles++;
+                    if constexpr (log_rsp_jit_register_status) {
+                        jit_logger.log(reg_alloc.GetStatusString().c_str());
+                    }
                 };
                 Instr();
 
                 // If the previously executed block ended with a branch instruction, meaning that the branch delay
-                // slot did not fit, execute only the first instruction in this block, before jumping.
+                // slot did not fit, execute only the first instruction in this block, before returning.
                 // The jump can be cancelled if the first instruction is also a branch.
                 Label l_end = c.newLabel();
-                c.mov(al, ptr(in_branch_delay_slot));
-                c.test(al, al);
+                c.cmp(GlobalVarPtr(jump_is_pending), 0);
                 c.je(l_end);
                 BlockEpilog();
                 c.bind(l_end);
@@ -211,6 +217,11 @@ u32 RunRecompiler(u32 rsp_cycles)
                                            // include it before stopping
                     Instr();
                 }
+
+                // If the block ends with a branch delay slot instruction, need to signal that we should evaluate
+                // jumping immeditely after the execution of this block. Only branches/jumps can set branch_hit. Thus,
+                // break will set the below to false.
+                block->ends_with_branch_and_delay_slot = branched && branch_hit;
 
                 BlockEpilogWithPcFlush(0);
                 c.endFunc();
@@ -226,6 +237,12 @@ u32 RunRecompiler(u32 rsp_cycles)
                 }
 
                 ExecuteBlock(block);
+            }
+        }
+        if (sp.status.halted) {
+            if (jump_is_pending) { // note for future refactors: this makes rsp::op_break::BREAKWithinDelay pass
+                pc = jump_addr;
+                jump_is_pending = in_branch_delay_slot = false;
             }
         }
     }

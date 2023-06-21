@@ -21,9 +21,8 @@ struct Recompiler : public mips::Recompiler<s32, s32, u32, RegisterAllocator> {
     void break_() const
     {
         Label l_end = c.newLabel();
-        c.mov(rax, &sp.status);
-        c.or_(dword_ptr(rax), 3); // set halted, broke
-        c.bt(dword_ptr(rax), 6); // test intbreak
+        c.or_(GlobalVarPtr(sp.status), 3); // set halted, broke
+        c.bt(GlobalVarPtr(sp.status), 6); // test intbreak
         c.jnb(l_end);
         reg_alloc.Free(host_gpr_arg[0]);
         c.mov(host_gpr_arg[0].r32(), std::to_underlying(mi::InterruptType::SP));
@@ -49,9 +48,9 @@ struct Recompiler : public mips::Recompiler<s32, s32, u32, RegisterAllocator> {
     {
         if (!rt) return;
         Gpd ht = GetDirtyGpr(rt), hs = GetGpr(rs);
+        c.mov(rcx, dmem);
         c.lea(eax, ptr(hs, imm)); // addr
         c.and_(eax, 0xFFF);
-        c.mov(rcx, dmem);
         c.movsx(ht, byte_ptr(rcx, rax));
     }
 
@@ -59,9 +58,9 @@ struct Recompiler : public mips::Recompiler<s32, s32, u32, RegisterAllocator> {
     {
         if (!rt) return;
         Gpd ht = GetDirtyGpr(rt), hs = GetGpr(rs);
+        c.mov(rcx, dmem);
         c.lea(eax, ptr(hs, imm)); // addr
         c.and_(eax, 0xFFF);
-        c.mov(rcx, dmem);
         c.movzx(ht, byte_ptr(rcx, rax));
     }
 
@@ -69,48 +68,59 @@ struct Recompiler : public mips::Recompiler<s32, s32, u32, RegisterAllocator> {
     {
         if (!rt) return;
         Gpd ht = GetDirtyGpr(rt), hs = GetGpr(rs);
+        c.mov(rcx, dmem);
         c.lea(eax, ptr(hs, imm)); // addr
         c.and_(eax, 0xFFF);
-        c.mov(rcx, dmem);
-        c.mov(ht.r8Hi(), byte_ptr(rcx, rax));
+        c.mov(dh, byte_ptr(rcx, rax));
         c.inc(eax);
         c.and_(eax, 0xFFF);
-        c.mov(ht.r8Lo(), byte_ptr(rcx, rax));
-        c.movsx(ht, ht.r16());
+        c.mov(dl, byte_ptr(rcx, rax));
+        c.movsx(ht, dx);
     }
 
     void lhu(u32 rs, u32 rt, s16 imm) const
     {
         if (!rt) return;
         Gpd ht = GetDirtyGpr(rt), hs = GetGpr(rs);
+        c.mov(rcx, dmem);
         c.lea(eax, ptr(hs, imm)); // addr
         c.and_(eax, 0xFFF);
-        c.mov(rcx, dmem);
-        c.mov(ht.r8Hi(), byte_ptr(rcx, rax));
+        c.mov(dh, byte_ptr(rcx, rax));
         c.inc(eax);
         c.and_(eax, 0xFFF);
-        c.mov(ht.r8Lo(), byte_ptr(rcx, rax));
-        c.movzx(ht, ht.r16());
+        c.mov(dl, byte_ptr(rcx, rax));
+        c.movzx(ht, dx);
     }
 
     void lw(u32 rs, u32 rt, s16 imm) const
     {
         if (!rt) return;
         Gpd ht = GetDirtyGpr(rt), hs = GetGpr(rs);
+        Label l_no_ov = c.newLabel(), l_end = c.newLabel();
+        c.mov(rcx, dmem);
         c.lea(eax, ptr(hs, imm)); // addr
         c.and_(eax, 0xFFF);
-        c.mov(rcx, dmem);
-        c.mov(ht.r8Hi(), byte_ptr(rcx, rax));
+        c.cmp(eax, 0xFFC);
+        c.jbe(l_no_ov);
+
+        c.mov(dh, byte_ptr(rcx, rax));
         c.inc(eax);
         c.and_(eax, 0xFFF);
-        c.mov(ht.r8Lo(), byte_ptr(rcx, rax));
+        c.mov(dl, byte_ptr(rcx, rax));
         c.shl(edx, 16);
         c.inc(eax);
         c.and_(eax, 0xFFF);
-        c.mov(ht.r8Hi(), byte_ptr(rcx, rax));
+        c.mov(dh, byte_ptr(rcx, rax));
         c.inc(eax);
         c.and_(eax, 0xFFF);
-        c.mov(ht.r8Lo(), byte_ptr(rcx, rax));
+        c.mov(dl, byte_ptr(rcx, rax));
+        c.mov(ht, edx);
+        c.jmp(l_end);
+
+        c.bind(l_no_ov);
+        c.movbe(ht, dword_ptr(rcx, rax));
+
+        c.bind(l_end);
     }
 
     void lwu(u32 rs, u32 rt, s16 imm) const { lw(rs, rt, imm); }
@@ -135,22 +145,23 @@ struct Recompiler : public mips::Recompiler<s32, s32, u32, RegisterAllocator> {
     void sb(u32 rs, u32 rt, s16 imm) const
     {
         Gpd hs = GetGpr(rs), ht = GetGpr(rt);
+        c.mov(rcx, dmem);
         c.lea(eax, ptr(hs, imm)); // addr
         c.and_(eax, 0xFFF);
-        c.mov(rcx, dmem);
         c.mov(byte_ptr(rcx, rax), ht.r8Lo());
     }
 
     void sh(u32 rs, u32 rt, s16 imm) const
     {
         Gpd hs = GetGpr(rs), ht = GetGpr(rt);
+        c.mov(rcx, dmem);
         c.lea(eax, ptr(hs, imm)); // addr
         c.and_(eax, 0xFFF);
-        c.mov(rcx, dmem);
-        c.mov(byte_ptr(rcx, rax), ht.r8Hi());
+        c.mov(edx, ht);
+        c.mov(byte_ptr(rcx, rax), dh);
         c.inc(eax);
         c.and_(eax, 0xFFF);
-        c.mov(byte_ptr(rcx, rax), ht.r8Lo());
+        c.mov(byte_ptr(rcx, rax), dl);
     }
 
     void sub(u32 rs, u32 rt, u32 rd) const { subu(rs, rt, rd); }
@@ -158,9 +169,13 @@ struct Recompiler : public mips::Recompiler<s32, s32, u32, RegisterAllocator> {
     void sw(u32 rs, u32 rt, s16 imm) const
     {
         Gpd hs = GetGpr(rs), ht = GetGpr(rt);
+        Label l_no_ov = c.newLabel(), l_end = c.newLabel();
+        c.mov(rcx, dmem);
         c.lea(eax, ptr(hs, imm)); // addr
         c.and_(eax, 0xFFF);
-        c.mov(rcx, dmem);
+        c.cmp(eax, 0xFFC);
+        c.jbe(l_no_ov);
+
         c.mov(edx, ht);
         c.bswap(edx);
         c.mov(byte_ptr(rcx, rax), dl);
@@ -174,6 +189,12 @@ struct Recompiler : public mips::Recompiler<s32, s32, u32, RegisterAllocator> {
         c.inc(eax);
         c.and_(eax, 0xFFF);
         c.mov(byte_ptr(rcx, rax), dh);
+        c.jmp(l_end);
+
+        c.bind(l_no_ov);
+        c.movbe(dword_ptr(rcx, rax), ht);
+
+        c.bind(l_end);
     }
 
 } inline constexpr cpu_recompiler{

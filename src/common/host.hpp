@@ -30,6 +30,13 @@ struct Os {
 } constexpr os;
 #endif
 
+// TODO: do this properly
+#ifdef __AVX512F__
+constexpr bool avx512 = 1;
+#else
+constexpr bool avx512 = 0;
+#endif
+
 #ifdef __has_builtin
 #if __has_builtin(__builtin_add_overflow)
 #define HAS_BUILTIN_ADD_OVERFLOW 1

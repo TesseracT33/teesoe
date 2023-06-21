@@ -23,13 +23,13 @@ void Cop2Prolog()
 void cfc2(u32 rt)
 {
     Cop2Prolog();
-    if (rt) c.movsxd(reg_alloc.GetHostMarkDirty(rt), dword_ptr(cop2_latch));
+    if (rt) c.movsxd(reg_alloc.GetHostGprMarkDirty(rt), dword_ptr(cop2_latch));
 }
 
 void ctc2(u32 rt)
 {
     Cop2Prolog();
-    c.movsxd(rax, reg_alloc.GetHost(rt));
+    c.movsxd(rax, reg_alloc.GetHostGpr(rt));
     c.mov(qword_ptr(cop2_latch), rax);
 }
 
@@ -48,7 +48,7 @@ void dctc2()
 void dmfc2(u32 rt)
 {
     Cop2Prolog();
-    if (rt) c.mov(reg_alloc.GetHostMarkDirty(rt), ptr(cop2_latch));
+    if (rt) c.mov(reg_alloc.GetHostGprMarkDirty(rt), ptr(cop2_latch));
 }
 
 void dmtc2(u32 rt)

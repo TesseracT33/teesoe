@@ -403,7 +403,6 @@ struct Recompiler : public mips::Recompiler<s64, s64, u64, RegAllocator> {
         c.sar(t, 32);
         c.movsxd(rax, t.r32());
         c.mov(ptr(hi), rax);
-        reg_alloc.ReleaseTemporary(t);
         block_cycles += 4;
     }
 

@@ -6,6 +6,8 @@
 #include "rsp/vu.hpp"
 #include "sse_util.hpp"
 
+#include <type_traits>
+
 #define vco ctrl_reg[0]
 #define vcc ctrl_reg[1]
 #define vce ctrl_reg[2].lo
@@ -19,51 +21,52 @@ AsmjitCompiler& c = compiler;
 
 static Xmm GetVpr(u32 idx)
 {
-    return xmm0;
+    return reg_alloc.GetHostVpr(idx);
 }
+
 static Xmm GetDirtyVpr(u32 idx)
 {
-    return xmm0;
+    return reg_alloc.GetHostVprMarkDirty(idx);
 }
 
 static Gpd GetGpr(u32 idx)
 {
-    return eax;
+    return reg_alloc.GetHostGpr(idx).r32();
 }
 
 static Gpd GetDirtyGpr(u32 idx)
 {
-    return eax;
+    return reg_alloc.GetHostGprMarkDirty(idx).r32();
 }
 
 static Xmm GetAccLow()
 {
-    return xmm15;
+    return reg_alloc.GetAccLow();
 }
 
 static Xmm GetAccMid()
 {
-    return xmm14;
+    return reg_alloc.GetAccMid();
 }
 
 static Xmm GetAccHigh()
 {
-    return xmm13;
+    return reg_alloc.GetAccHigh();
 }
 
 static Xmm GetDirtyAccLow()
 {
-    return xmm15;
+    return reg_alloc.GetAccLowMarkDirty();
 }
 
 static Xmm GetDirtyAccMid()
 {
-    return xmm14;
+    return reg_alloc.GetAccMidMarkDirty();
 }
 
 static Xmm GetDirtyAccHigh()
 {
-    return xmm13;
+    return reg_alloc.GetAccHighMarkDirty();
 }
 
 static std::tuple<Xmm, Xmm, Xmm> GetDirtyAccs()
@@ -77,8 +80,8 @@ static Xmm GetVte(uint vt /* 0-31 */, uint element /* 0-15 */)
     if (element < 2) {
         return ht;
     } else {
-        c.vpshufb(xmm14, ht, ptr(broadcast_mask[element]));
-        return xmm14;
+        // c.vpshufb(xmm14, ht, GlobalVarPtr(broadcast_mask, 16 * element));
+        // return xmm14;
     }
 }
 
@@ -87,10 +90,10 @@ void cfc2(u32 rt, u32 vs)
     Gpd hrt = GetDirtyGpr(rt);
     vs = std::min(vs & 3, 2u);
     c.vpxor(xmm0, xmm0, xmm0);
-    c.vmovdqa(xmm1, ptr(ctrl_reg[vs].lo));
+    c.vmovaps(xmm1, GlobalVarPtr(ctrl_reg[vs].lo));
     c.vpacksswb(xmm1, xmm1, xmm0);
     c.vpmovmskb(eax, xmm1);
-    c.vmovdqa(xmm1, ptr(ctrl_reg[vs].hi));
+    c.vmovaps(xmm1, GlobalVarPtr(ctrl_reg[vs].hi));
     c.vpacksswb(xmm1, xmm1, xmm0);
     c.vpmovmskb(hrt, xmm1);
     c.shl(hrt, 8);
@@ -110,16 +113,17 @@ void ctc2(u32 rt, u32 vs)
     c.shr(eax, 4);
     c.and_(eax, 15);
     c.vpinsrq(xmm0, xmm0, qword_ptr(rcx, rax, 3u), 1);
-    c.vmovaps(ptr(ctrl_reg[vs].lo), xmm0);
+    c.vmovaps(GlobalVarPtr(ctrl_reg[vs].lo), xmm0);
     if (vs < 2) {
-        c.mov(al, ht.r8Hi());
+        c.mov(eax, ht);
+        c.mov(al, ah);
         c.and_(eax, 15);
         c.movq(xmm0, qword_ptr(rcx, rax, 3u));
-        c.mov(al, ht.r8Hi());
-        c.shr(eax, 4);
+        c.mov(eax, ht);
+        c.shr(eax, 12);
         c.and_(eax, 15);
         c.vpinsrq(xmm0, xmm0, qword_ptr(rcx, rax, 3u), 1);
-        c.vmovaps(ptr(ctrl_reg[vs].hi), xmm0);
+        c.vmovaps(GlobalVarPtr(ctrl_reg[vs].hi), xmm0);
     }
 }
 
@@ -129,11 +133,11 @@ void mfc2(u32 rt, u32 vs, u32 e)
     Gpd hrt = GetDirtyGpr(rt);
     Xmm hvs = GetVpr(vs);
     if (e & 1) {
-        c.vpextrb(eax, hvs, e ^ 1);
-        c.mov(hrt.r8Hi(), eax.r8Lo());
+        c.vpextrb(ecx, hvs, e ^ 1);
+        c.shl(ecx, 8);
         c.vpextrb(eax, hvs, e + 1 & 15 ^ 1);
-        c.mov(hrt.r8Lo(), eax.r8Lo());
-        c.movsx(hrt, hrt.r16());
+        c.or_(ecx, eax);
+        c.movsx(hrt, cx);
     } else {
         c.vpextrw(hrt, hvs, e / 2);
         c.movsx(hrt, hrt.r16());
@@ -157,32 +161,34 @@ void mtc2(u32 rt, u32 vs, u32 e)
 }
 
 // LBV, LSV, LLV, LDV
-template<std::signed_integral Int> void LoadUpToDword(u32 base, u32 vt, u32 e, s32 offset)
+template<std::signed_integral Int> static void LoadUpToDword(u32 base, u32 vt, u32 e, s32 offset)
 {
+    Gpd hbase = GetGpr(base);
     Xmm ht = GetDirtyVpr(vt);
-    c.lea(eax, ptr(GetGpr(base), offset * sizeof(Int)));
+    c.lea(eax, ptr(hbase, offset * sizeof(Int)));
     c.mov(rcx, dmem);
-    c.vmovaps(xmmword_ptr(x86::rsp, -24), ht);
+    c.vmovaps(xmmword_ptr(x86::rsp, -16), ht);
     for (u32 i = 0; i < std::min((u32)sizeof(Int), 16 - e); ++i) {
         if (i) c.inc(eax);
         c.and_(eax, 0xFFF);
         c.mov(dl, byte_ptr(rcx, rax));
-        c.mov(byte_ptr(x86::rsp, (e + i ^ 1) - 24), dl);
+        c.mov(byte_ptr(x86::rsp, (e + i ^ 1) - 16), dl);
     }
-    c.vmovaps(ht, xmmword_ptr(x86::rsp, -24));
+    c.vmovaps(ht, xmmword_ptr(x86::rsp, -16));
 }
 
 // SBV, SSV, SLV, SDV
-template<std::signed_integral Int> void StoreUpToDword(u32 base, u32 vt, u32 e, s32 offset)
+template<std::signed_integral Int> static void StoreUpToDword(u32 base, u32 vt, u32 e, s32 offset)
 {
+    Gpd hbase = GetGpr(base);
     Xmm ht = GetVpr(vt);
-    c.lea(eax, ptr(GetGpr(base), offset * sizeof(Int)));
+    c.lea(eax, ptr(hbase, offset * sizeof(Int)));
     c.mov(rcx, dmem);
-    c.vmovaps(xmmword_ptr(x86::rsp, -24), ht);
+    c.vmovaps(xmmword_ptr(x86::rsp, -16), ht);
     for (u32 i = 0; i < std::min((u32)sizeof(Int), 16 - e); ++i) {
         if (i) c.inc(eax);
         c.and_(eax, 0xFFF);
-        c.mov(dl, byte_ptr(x86::rsp, (e + i & 15 ^ 1) - 24));
+        c.mov(dl, byte_ptr(x86::rsp, (e + i & 15 ^ 1) - 16));
         c.mov(byte_ptr(rcx, rax), dl);
     }
 }
@@ -202,10 +208,10 @@ void lfv(u32 base, u32 vt, u32 e, s32 offset)
     Gpd hbase = GetGpr(base);
     Xmm ht = GetDirtyVpr(vt);
     reg_alloc.Free(r8);
-    c.lea(eax, ptr(GetGpr(base), offset * 16));
+    c.lea(eax, ptr(hbase, offset * 16));
     c.mov(ecx, eax);
     c.and_(ecx, 7);
-    c.sub(ecx, e); // addr_offset
+    if (e) c.sub(ecx, e); // addr_offset
     c.and_(eax, ~7);
     c.mov(rbx, dmem);
 
@@ -217,7 +223,7 @@ void lfv(u32 base, u32 vt, u32 e, s32 offset)
         c.and_(r8d, 0xFFF);
         c.mov(r8b, byte_ptr(rbx, r8));
         c.shl(r8d, 7);
-        c.mov(word_ptr(x86::rsp, 2 * i - 24), r8w);
+        c.mov(word_ptr(x86::rsp, 2 * i - 16), r8w);
 
         c.add(edx, 8);
         c.and_(edx, 15);
@@ -225,17 +231,23 @@ void lfv(u32 base, u32 vt, u32 e, s32 offset)
         c.and_(r8d, 0xFFF);
         c.mov(r8b, byte_ptr(rbx, r8));
         c.shl(r8d, 7);
-        c.mov(word_ptr(x86::rsp, 2 * i + 8 - 24), r8w);
+        c.mov(word_ptr(x86::rsp, 2 * i + 8 - 16), r8w);
     }
 
-    c.vmovaps(xmmword_ptr(x86::rsp, -40), ht);
-
-    for (auto byte = e; byte < std::min(e + 8, 16u); ++byte) {
-        c.mov(al, byte_ptr(x86::rsp, (byte ^ 1) - 24));
-        c.mov(byte_ptr(x86::rsp, (byte ^ 1) - 40), al);
+    if (e == 0) {
+        c.vpinsrq(ht, ht, qword_ptr(x86::rsp, -16), 0);
+        c.vpshufb(ht, ht, GlobalVarPtr(byteswap16_qword0_mask));
+    } else if (e == 8) {
+        c.vpinsrq(ht, ht, qword_ptr(x86::rsp, -16), 1);
+        c.vpshufb(ht, ht, GlobalVarPtr(byteswap16_qword1_mask));
+    } else {
+        c.vmovaps(xmmword_ptr(x86::rsp, -40), ht);
+        for (auto byte = e; byte < std::min(e + 8, 16u); ++byte) {
+            c.mov(al, byte_ptr(x86::rsp, (byte ^ 1) - 16));
+            c.mov(byte_ptr(x86::rsp, (byte ^ 1) - 40), al);
+        }
+        c.vmovaps(ht, xmmword_ptr(x86::rsp, -40));
     }
-
-    c.vmovaps(ht, xmmword_ptr(x86::rsp, -40));
 }
 
 void lhv(u32 base, u32 vt, u32 e, s32 offset)
@@ -246,9 +258,10 @@ void lhv(u32 base, u32 vt, u32 e, s32 offset)
     c.lea(eax, ptr(hbase, offset * 16)); // addr
     c.mov(ecx, eax);
     c.and_(ecx, 7);
-    c.sub(ecx, e); // mem offset
+    if (e) c.sub(ecx, e); // mem offset
     c.and_(eax, ~7);
     c.mov(rbx, dmem);
+    c.vmovaps(xmmword_ptr(x86::rsp, -16), ht);
 
     for (int i = 0; i < 8; ++i) {
         if (i) c.add(ecx, 2);
@@ -257,10 +270,10 @@ void lhv(u32 base, u32 vt, u32 e, s32 offset)
         c.and_(edx, 0xFFF);
         c.mov(dl, byte_ptr(rbx, rdx));
         c.shl(edx, 7);
-        c.mov(word_ptr(x86::rsp, 2 * i - 24), dx);
+        c.mov(word_ptr(x86::rsp, 2 * i - 16), dx);
     }
 
-    c.vmovaps(ht, xmmword_ptr(x86::rsp, -24));
+    c.vmovaps(ht, xmmword_ptr(x86::rsp, -16));
     c.xor_(ebx, ebx);
 }
 
@@ -277,9 +290,10 @@ void lpv(u32 base, u32 vt, u32 e, s32 offset)
     c.lea(eax, ptr(hbase, offset * 8)); // addr
     c.mov(ecx, eax);
     c.and_(ecx, 7);
-    c.sub(ecx, e); // mem offset
+    if (e) c.sub(ecx, e); // mem offset
     c.and_(eax, ~7);
     c.mov(rbx, dmem);
+    c.vmovaps(xmmword_ptr(x86::rsp, -16), ht);
 
     for (int i = 0; i < 8; ++i) {
         if (i) c.inc(ecx);
@@ -288,10 +302,10 @@ void lpv(u32 base, u32 vt, u32 e, s32 offset)
         c.and_(edx, 0xFFF);
         c.mov(dl, byte_ptr(rbx, rdx));
         c.shl(edx, 8);
-        c.mov(word_ptr(x86::rsp, 2 * i - 24), dx);
+        c.mov(word_ptr(x86::rsp, 2 * i - 16), dx);
     }
 
-    c.vmovaps(ht, xmmword_ptr(x86::rsp, -24));
+    c.vmovaps(ht, xmmword_ptr(x86::rsp, -16));
     c.xor_(ebx, ebx);
 }
 
@@ -299,33 +313,64 @@ void lqv(u32 base, u32 vt, u32 e, s32 offset)
 {
     Gpd hbase = GetGpr(base);
     Xmm ht = GetDirtyVpr(vt);
+    reg_alloc.Free(r8);
 
-    Label l_start = c.newLabel(), l_end = c.newLabel();
+    Label l_start = c.newLabel();
     c.lea(eax, ptr(hbase, offset * 16)); // addr
-    c.mov(ecx, eax);
-    c.and_(ecx, 15);
-    c.mov(edx, e);
-    c.cmp(ecx, edx);
-    c.cmovb(ecx, edx);
-    c.neg(ecx);
-    c.add(ecx, 16 + e); // last element written to, exclusive
+    c.mov(rcx, dmem);
+    c.mov(edx, eax);
+    c.and_(edx, 15);
     c.and_(eax, 0xFFF);
-    c.mov(rbx, dmem);
-    c.mov(r8d, e); // e
 
-    c.bind(l_start);
-    c.mov(dl, byte_ptr(rbx, rax));
-    c.inc(eax);
-    c.xor_(r8d, 1);
-    c.mov(byte_ptr(x86::rsp, rcx, 0, -24), dl);
-    c.xor_(r8d, 1);
-    c.inc(r8d);
-    c.cmp(r8d, ecx);
-    c.jne(l_start);
+    if (e == 0) {
+        Label l_simple = c.newLabel(), l_end = c.newLabel();
+        c.test(edx, edx);
+        c.je(l_simple);
 
-    c.bind(l_end);
-    c.vmovaps(ht, xmmword_ptr(x86::rsp, -24));
-    c.xor_(ebx, ebx);
+        c.add(rcx, rax); // addr base
+        c.xor_(eax, eax); // element
+        c.neg(edx);
+        c.add(edx, 16); // last element written to, exclusive
+        c.vmovaps(xmmword_ptr(x86::rsp, -16), ht);
+
+        c.bind(l_start);
+        c.mov(r8b, byte_ptr(rcx));
+        c.inc(rcx);
+        c.xor_(eax, 1);
+        c.mov(byte_ptr(x86::rsp, rax, 0, -16), r8b);
+        c.xor_(eax, 1);
+        c.inc(eax);
+        c.cmp(eax, edx);
+        c.jne(l_start);
+        c.vmovaps(ht, xmmword_ptr(x86::rsp, -16));
+        c.jmp(l_end);
+
+        c.bind(l_simple);
+        c.vmovaps(ht, xmmword_ptr(rcx, rax));
+        c.vpshufb(ht, ht, GlobalVarPtr(byteswap16_mask));
+
+        c.bind(l_end);
+    } else {
+        c.add(rcx, rax); // addr base
+        c.mov(eax, e); // e counter
+        c.cmp(edx, eax);
+        c.cmovb(edx, eax);
+        c.neg(edx);
+        c.add(edx, 16 + e); // last element written to, exclusive
+        c.vmovaps(xmmword_ptr(x86::rsp, -16), ht);
+
+        c.bind(l_start);
+        c.mov(r8b, byte_ptr(rcx));
+        c.inc(rcx);
+        c.xor_(eax, 1);
+        c.mov(byte_ptr(x86::rsp, rax, 0, -16), r8b);
+        c.xor_(eax, 1);
+        c.inc(eax);
+        c.cmp(eax, edx);
+        c.jne(l_start);
+
+        c.vmovaps(ht, xmmword_ptr(x86::rsp, -16));
+    }
 }
 
 void lrv(u32 base, u32 vt, u32 e, s32 offset)
@@ -337,26 +382,27 @@ void lrv(u32 base, u32 vt, u32 e, s32 offset)
     c.lea(eax, ptr(hbase, offset * 16)); // addr
     c.mov(ecx, eax);
     c.and_(ecx, 15);
-    c.cmp(ecx, e); // e < (addr & 15)
+    e ? c.cmp(ecx, e) : c.test(ecx, ecx); // e < (addr & 15)
     c.jbe(l_end);
 
     c.neg(ecx);
     c.add(ecx, e + 16); // e
     c.and_(eax, 0xFF0);
     c.mov(rbx, dmem);
+    c.vmovaps(xmmword_ptr(x86::rsp, -16), ht);
 
     c.bind(l_start);
     c.mov(dl, byte_ptr(rbx, rax));
     c.inc(eax);
     c.xor_(ecx, 1);
-    c.mov(byte_ptr(x86::rsp, rcx, 0, -24), dl);
+    c.mov(byte_ptr(x86::rsp, rcx, 0, -16), dl);
     c.xor_(ecx, 1);
     c.inc(ecx);
     c.cmp(ecx, 16);
     c.jb(l_start);
 
     c.bind(l_end_l);
-    c.vmovaps(ht, xmmword_ptr(x86::rsp, -24));
+    c.vmovaps(ht, xmmword_ptr(x86::rsp, -16));
 
     c.bind(l_end);
     c.xor_(ebx, ebx);
@@ -376,7 +422,7 @@ void ltv(u32 base, u32 vt, u32 e, s32 offset)
     c.mov(ecx, eax);
     c.and_(ecx, ~7); // wrap_addr
     c.and_(eax, 8);
-    c.add(eax, e);
+    if (e) c.add(eax, e);
     c.and_(eax, 15);
     c.add(eax, ecx);
     c.mov(edx, ecx);
@@ -388,7 +434,7 @@ void ltv(u32 base, u32 vt, u32 e, s32 offset)
 
     for (int i = 0; i < 8; ++i) {
         Xmm hreg = GetDirtyVpr(reg_base + reg_off);
-        c.vmovaps(xmmword_ptr(x86::rsp, -24), hreg);
+        c.vmovaps(xmmword_ptr(x86::rsp, -16), hreg);
         for (int j = 1; j >= 0; --j) {
             if (i != 0 || j != 1) {
                 c.inc(eax);
@@ -397,9 +443,9 @@ void ltv(u32 base, u32 vt, u32 e, s32 offset)
             }
             c.and_(eax, 0xFFF);
             c.mov(r8b, byte_ptr(rbx, rax));
-            c.mov(byte_ptr(x86::rsp, 2 * i + j - 24), r8b);
+            c.mov(byte_ptr(x86::rsp, 2 * i + j - 16), r8b);
         }
-        c.vmovaps(hreg, xmmword_ptr(x86::rsp, -24));
+        c.vmovaps(hreg, xmmword_ptr(x86::rsp, -16));
         reg_off = reg_off + 1 & 7;
     }
 
@@ -414,9 +460,10 @@ void luv(u32 base, u32 vt, u32 e, s32 offset)
     c.lea(eax, ptr(hbase, offset * 8)); // addr
     c.mov(ecx, eax);
     c.and_(ecx, 7);
-    c.sub(ecx, e); // mem offset
+    if (e) c.sub(ecx, e); // mem offset
     c.and_(eax, ~7);
     c.mov(rbx, dmem);
+    c.vmovaps(xmmword_ptr(x86::rsp, -16), ht);
 
     for (int i = 0; i < 8; ++i) {
         if (i) c.inc(ecx);
@@ -425,10 +472,10 @@ void luv(u32 base, u32 vt, u32 e, s32 offset)
         c.and_(edx, 0xFFF);
         c.mov(dl, byte_ptr(rbx, rdx));
         c.shl(edx, 7);
-        c.mov(word_ptr(x86::rsp, 2 * i - 24), dx);
+        c.mov(word_ptr(x86::rsp, 2 * i - 16), dx);
     }
 
-    c.vmovaps(ht, xmmword_ptr(x86::rsp, -24));
+    c.vmovaps(ht, xmmword_ptr(x86::rsp, -16));
     c.xor_(ebx, ebx);
 }
 
@@ -455,7 +502,7 @@ void sfv(u32 base, u32 vt, u32 e, s32 offset)
         Xmm ht = GetVpr(vt);
         reg_alloc.Free(r8);
         c.vpsrlw(xmm0, ht, 7);
-        c.vmovaps(xmmword_ptr(x86::rsp, -24), xmm0);
+        c.vmovaps(xmmword_ptr(x86::rsp, -16), xmm0);
         for (int i = 0; i < 4; ++i) {
             if (i) {
                 c.add(ecx, 4);
@@ -463,7 +510,7 @@ void sfv(u32 base, u32 vt, u32 e, s32 offset)
             }
             c.lea(edx, ptr(eax, ecx));
             c.and_(edx, 0xFFF);
-            c.mov(r8b, byte_ptr(x86::rsp, 2 * elems[i] - 24));
+            c.mov(r8b, byte_ptr(x86::rsp, 2 * elems[i] - 16));
             c.mov(byte_ptr(rbx, rdx), r8b);
         }
     };
@@ -503,11 +550,11 @@ void shv(u32 base, u32 vt, u32 e, s32 offset)
     c.and_(ecx, 7); // addr_offset
     c.and_(eax, ~7);
     c.mov(rbx, dmem);
-    c.vmovaps(xmmword_ptr(x86::rsp, -24), ht);
+    c.vmovaps(xmmword_ptr(x86::rsp, -16), ht);
     for (int i = 0; i < 8; ++i) {
         auto byte = e + 2 * i;
-        c.mov(dl, byte_ptr(x86::rsp, (byte & 15 ^ 1) - 24));
-        c.mov(r8b, byte_ptr(x86::rsp, (byte + 1 & 15 ^ 1) - 24));
+        c.mov(dl, byte_ptr(x86::rsp, (byte & 15 ^ 1) - 16));
+        c.mov(r8b, byte_ptr(x86::rsp, (byte + 1 & 15 ^ 1) - 16));
         c.shl(edx, 1);
         c.shr(r8b, 7);
         c.or_(edx, r8b);
@@ -533,12 +580,12 @@ void spv(u32 base, u32 vt, u32 e, s32 offset)
     Xmm ht = GetVpr(vt);
     c.lea(eax, ptr(hbase, offset * 8));
     c.mov(rcx, dmem);
-    c.vmovaps(xmmword_ptr(x86::rsp, -24), ht);
+    c.vmovaps(xmmword_ptr(x86::rsp, -16), ht);
     for (auto elem = e; elem < e + 8; ++elem) {
         if ((elem & 15) < 8) {
-            c.mov(dl, byte_ptr(x86::rsp, (elem << 1 & 0xE ^ 1) - 24));
+            c.mov(dl, byte_ptr(x86::rsp, (elem << 1 & 0xE ^ 1) - 16));
         } else {
-            c.mov(dx, word_ptr(x86::rsp, (elem << 1 & 15) - 24));
+            c.mov(dx, word_ptr(x86::rsp, (elem << 1 & 15) - 16));
             c.shr(edx, 7);
         }
         if (elem > e) c.inc(eax);
@@ -552,19 +599,25 @@ void sqv(u32 base, u32 vt, u32 e, s32 offset)
     Gpd hbase = GetGpr(base);
     Xmm ht = GetVpr(vt);
     reg_alloc.Free(r8);
+    Label l_simple = c.newLabel();
     c.lea(eax, ptr(hbase, offset * 16)); // addr
     c.mov(ecx, eax);
     c.and_(ecx, 15);
+    c.and_(eax, 0xFFF);
+
+    if (e == 0) {
+        c.test(ecx, ecx);
+        c.je(l_simple);
+    }
+
     c.neg(ecx);
     c.add(ecx, e + 16); // e end (exclusive)
-    c.mov(edx, e); // e start, counter
-    c.mov(rbx, dmem);
-    c.vmovaps(xmmword_ptr(x86::rsp, -24), ht);
+    e ? c.mov(edx, e) : c.xor_(edx, edx); // e start, counter
+    c.vmovaps(xmmword_ptr(x86::rsp, -16), ht);
 
-    c.and_(eax, 0xFFF);
     c.xor_(edx, 1);
-    c.mov(r8b, byte_ptr(x86::rsp, rdx, 0, -24));
-    c.mov(byte_ptr(rbx, rax), r8b);
+    c.mov(r8b, byte_ptr(x86::rsp, rdx, 0, -16));
+    c.mov(GlobalArrPtrWithRegOffset(dmem, rax, 1), r8b);
     c.xor_(edx, 1);
     c.inc(edx);
 
@@ -576,17 +629,23 @@ void sqv(u32 base, u32 vt, u32 e, s32 offset)
     c.bind(l_start);
     c.inc(eax);
     c.and_(eax, 0xFFF);
-    c.mov(r8d, edx);
+    c.mov(r8d, edx); // e current index. needed since edx (e counter) can go beyond 15
     c.and_(r8d, 15);
-    c.xor_(r8d, 1); // vpr element index
-    c.mov(r8b, byte_ptr(x86::rsp, r8, 0, -24));
-    c.mov(byte_ptr(rbx, rax), r8b);
+    c.xor_(r8d, 1);
+    c.mov(r8b, byte_ptr(x86::rsp, r8, 0, -16));
+    c.mov(GlobalArrPtrWithRegOffset(dmem, rax, 1), r8b);
     c.inc(edx);
     c.cmp(edx, ecx);
     c.jne(l_start);
+    c.jmp(l_end);
+
+    c.bind(l_simple);
+    if (e == 0) {
+        c.vpshufb(xmm0, ht, GlobalVarPtr(byteswap16_mask));
+        c.vmovups(GlobalArrPtrWithRegOffset(dmem, rax, 1), xmm0);
+    }
 
     c.bind(l_end);
-    c.xor_(ebx, ebx);
 }
 
 void srv(u32 base, u32 vt, u32 e, s32 offset)
@@ -611,7 +670,7 @@ void srv(u32 base, u32 vt, u32 e, s32 offset)
     c.bind(l_start);
     c.and_(edx, 15);
     c.xor_(edx, 1);
-    c.mov(r8b, byte_ptr(x86::rsp, rdx, 0, -24));
+    c.mov(r8b, byte_ptr(x86::rsp, rdx, 0, -16));
     c.mov(byte_ptr(rbx, rax), r8b);
     c.xor_(edx, 1);
     c.inc(edx);
@@ -637,16 +696,16 @@ void stv(u32 base, u32 vt, u32 e, s32 offset)
     c.lea(eax, ptr(hbase, offset * 8)); // addr
     c.mov(ecx, eax);
     c.and_(ecx, 7);
-    c.sub(ecx, e & ~1); // offset_addr
+    if (e) c.sub(ecx, e & ~1); // offset_addr
     c.and_(eax, ~7);
     c.mov(rbx, dmem);
     auto elem = 16 - (e & ~1);
     auto const reg_start = vt & 0x18;
     for (auto reg = reg_start; reg < reg_start + 8; ++reg) {
         Xmm hreg = GetVpr(reg);
-        c.vmovaps(xmmword_ptr(x86::rsp, -24), hreg);
+        c.vmovaps(xmmword_ptr(x86::rsp, -16), hreg);
         for (int i = 0; i < 2; ++i) {
-            c.mov(dl, byte_ptr(x86::rsp, (elem++ & 15 ^ 1) - 24));
+            c.mov(dl, byte_ptr(x86::rsp, (elem++ & 15 ^ 1) - 16));
             if (reg != reg_start || i) {
                 c.inc(ecx);
                 c.and_(ecx, 15);
@@ -665,13 +724,13 @@ void suv(u32 base, u32 vt, u32 e, s32 offset)
     Xmm ht = GetVpr(vt);
     c.lea(eax, ptr(hbase, offset * 8)); // addr
     c.mov(rcx, dmem);
-    c.vmovaps(xmmword_ptr(x86::rsp, -24), ht);
+    c.vmovaps(xmmword_ptr(x86::rsp, -16), ht);
     for (auto elem = e; elem < e + 8; ++elem) {
         if ((elem & 15) < 8) {
-            c.mov(dx, word_ptr(x86::rsp, (elem << 1 & 15) - 24));
+            c.mov(dx, word_ptr(x86::rsp, (elem << 1 & 15) - 16));
             c.shl(edx, 7);
         } else {
-            c.mov(dl, byte_ptr(x86::rsp, (elem << 1 & 0xE ^ 1) - 24));
+            c.mov(dl, byte_ptr(x86::rsp, (elem << 1 & 0xE ^ 1) - 16));
         }
         if (elem > e) c.inc(eax);
         c.and_(eax, 0xFFF);
@@ -689,9 +748,9 @@ void swv(u32 base, u32 vt, u32 e, s32 offset)
     c.and_(ecx, 7); // base
     c.and_(eax, ~7);
     c.mov(rbx, dmem);
-    c.vmovaps(xmmword_ptr(x86::rsp, -24), ht);
+    c.vmovaps(xmmword_ptr(x86::rsp, -16), ht);
     for (auto elem = e; elem < e + 16; ++elem) {
-        c.mov(dl, byte_ptr(x86::rsp, (elem & 15 ^ 1) - 24));
+        c.mov(dl, byte_ptr(x86::rsp, (elem & 15 ^ 1) - 16));
         if (elem > e) {
             c.inc(ecx);
             c.and_(ecx, 15);
@@ -718,15 +777,15 @@ void vabs(u32 vs, u32 vt, u32 vd, u32 e)
 void vadd(u32 vs, u32 vt, u32 vd, u32 e)
 {
     Xmm hd = GetDirtyVpr(vd), hs = GetVpr(vs), ht = GetVte(vt, e), haccl = GetDirtyAccLow();
-    c.vmovaps(xmm0, ptr(vco.lo));
+    c.vmovaps(xmm0, GlobalVarPtr(vco.lo));
     c.vpsubw(xmm1, ht, xmm0);
     c.vpaddw(haccl, hs, xmm1);
     c.vpminsw(xmm1, hs, ht);
-    c.vpsubsw(xmm1, xmm1, xmm0);
-    c.vpmaxsw(xmm2, hs, ht);
-    c.vpaddsw(hd, xmm1, xmm2);
+    c.vpsubsw(xmm0, xmm1, xmm0);
+    c.vpmaxsw(xmm1, hs, ht);
+    c.vpaddsw(hd, xmm0, xmm1);
     c.vpxor(xmm0, xmm0, xmm0);
-    c.vmovaps(ymm_ptr(vco), ymm0);
+    c.vmovaps(GlobalVarPtr(vco), ymm0);
 }
 
 void vaddc(u32 vs, u32 vt, u32 vd, u32 e)
@@ -734,14 +793,19 @@ void vaddc(u32 vs, u32 vt, u32 vd, u32 e)
     Xmm hd = GetDirtyVpr(vd), hs = GetVpr(vs), ht = GetVte(vt, e), haccl = GetDirtyAccLow();
     c.vpaddw(hd, hs, ht);
     c.vmovaps(haccl, hd);
-    c.vpcmpeqw(xmm0, xmm0, xmm0);
-    c.vpsllw(xmm0, xmm0, 15); // sign mask
-    c.vpaddw(xmm1, hd, xmm0);
-    c.vpaddw(xmm2, ht, xmm0);
-    c.vpcmpgtw(xmm0, xmm2, xmm1);
-    c.vmovaps(ptr(vco.lo), xmm0);
+    if constexpr (avx512) {
+        // c.vpcmpuw(k0, hd, ht, 1);
+        // c.vmovaps(GlobalVarPtr(vco.lo), k0);
+    } else {
+        c.vpcmpeqw(xmm0, xmm0, xmm0);
+        c.vpsllw(xmm0, xmm0, 15); // sign mask
+        c.vpaddw(xmm1, hd, xmm0);
+        c.vpaddw(xmm2, ht, xmm0);
+        c.vpcmpgtw(xmm0, xmm2, xmm1);
+        c.vmovaps(GlobalVarPtr(vco.lo), xmm0);
+    }
     c.vpxor(xmm0, xmm0, xmm0);
-    c.vmovaps(ptr(vco.hi), xmm0);
+    c.vmovaps(GlobalVarPtr(vco.hi), xmm0);
 }
 
 void vand(u32 vs, u32 vt, u32 vd, u32 e)
@@ -812,7 +876,7 @@ void vcl(u32 vs, u32 vt, u32 vd, u32 e)
     c.vmovaps(xmm3, ptr(vcc.lo));
     c.vpblendvb(xmm7, xmm3, xmm0, xmm7);
     c.vpor(xmm6, xmm1, xmm5); // ge
-    // todo: not done
+    // todo: not done. when running out of vol regs, use the stack?
 }
 
 void vcr(u32 vs, u32 vt, u32 vd, u32 e)
@@ -823,18 +887,18 @@ void vcr(u32 vs, u32 vt, u32 vd, u32 e)
     c.vpand(xmm1, hs, xmm0);
     c.vpaddw(xmm1, xmm1, ht); // dlez
     c.vpsraw(xmm1, xmm1, 15); // vcc.lo
-    c.vmovaps(ptr(vcc.lo), xmm1);
+    c.vmovaps(GlobalVarPtr(vcc.lo), xmm1);
     c.vpor(xmm2, hs, xmm0);
     c.vpminsw(xmm2, xmm2, ht); // dgez
     c.vpcmpeqw(xmm2, xmm2, ht); // vcc.hi
-    c.vmovaps(ptr(vcc.hi), xmm2);
+    c.vmovaps(GlobalVarPtr(vcc.hi), xmm2);
     c.vpblendvb(xmm1, xmm2, xmm1, xmm0); // mask
     c.vpxor(xmm0, ht, xmm0); // nvt
     c.vpblendvb(hd, hs, xmm0, xmm1);
     c.vmovaps(haccl, hd);
     c.vpxor(xmm0, xmm0, xmm0);
-    c.vmovaps(ptr(vce), xmm0);
-    c.vmovaps(ptr(vco), ymm0);
+    c.vmovaps(GlobalVarPtr(vce), xmm0);
+    c.vmovaps(GlobalVarPtr(vco), ymm0);
 }
 
 void veq(u32 vs, u32 vt, u32 vd, u32 e)
@@ -1399,7 +1463,7 @@ void vsar(u32 vd, u32 e)
 void vsub(u32 vs, u32 vt, u32 vd, u32 e)
 {
     Xmm hd = GetDirtyVpr(vd), hs = GetVpr(vs), ht = GetVte(vt, e), haccl = GetDirtyAccLow();
-    c.vmovaps(xmm0, ptr(vco.lo));
+    c.vmovaps(xmm0, GlobalVarPtr(vco.lo));
     c.vpsubw(xmm1, ht, xmm0); // diff
     c.vpsubw(haccl, hs, xmm1);
     c.vpsubsw(xmm0, ht, xmm0); // clamped diff
@@ -1407,7 +1471,7 @@ void vsub(u32 vs, u32 vt, u32 vd, u32 e)
     c.vpcmpgtw(xmm0, xmm0, xmm1); // overflow
     c.vpaddsw(hd, hd, xmm0);
     c.vpxor(xmm0, xmm0, xmm0);
-    c.vmovaps(ptr(vco), ymm0);
+    c.vmovaps(GlobalVarPtr(vco), ymm0);
 }
 
 void vsubc(u32 vs, u32 vt, u32 vd, u32 e)
@@ -1418,7 +1482,7 @@ void vsubc(u32 vs, u32 vt, u32 vd, u32 e)
     c.vpaddw(xmm1, hs, xmm0);
     c.vpaddw(xmm2, ht, xmm0);
     c.vpcmpgtw(xmm0, xmm2, xmm1); // vco.lo
-    c.vmovaps(ptr(vco.lo), xmm0);
+    c.vmovaps(GlobalVarPtr(vco.lo), xmm0);
     c.vpsubw(hd, hs, ht);
     c.vmovaps(haccl, hd);
     c.vpxor(xmm1, xmm1, xmm1);
@@ -1426,7 +1490,7 @@ void vsubc(u32 vs, u32 vt, u32 vd, u32 e)
     c.vpcmpeqw(xmm2, xmm2, xmm2);
     c.vpxor(xmm1, xmm1, xmm2);
     c.vpor(xmm0, xmm0, xmm1);
-    c.vmovaps(ptr(vco.hi), xmm0);
+    c.vmovaps(GlobalVarPtr(vco.hi), xmm0);
 }
 
 void vxor(u32 vs, u32 vt, u32 vd, u32 e)

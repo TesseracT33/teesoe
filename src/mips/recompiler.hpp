@@ -142,8 +142,12 @@ struct Recompiler {
             c.xor_(hd.r32(), hd.r32());
         } else {
             Gp hs = GetGpr(rs), ht = GetGpr(rt);
-            if (rs != rd) c.mov(hd, hs);
-            c.and_(hd, ht);
+            if (rt == rd) {
+                c.and_(hd, hs);
+            } else {
+                if (rs != rd) c.mov(hd, hs);
+                c.and_(hd, ht);
+            }
         }
     }
 
@@ -417,8 +421,12 @@ struct Recompiler {
     {
         if (!rd) return;
         Gp hd = GetDirtyGpr(rd), hs = GetGpr(rs), ht = GetGpr(rt);
-        if (rs != rd) c.mov(hd, hs);
-        c.or_(hd, ht);
+        if (rt == rd) {
+            c.or_(hd, hs);
+        } else {
+            if (rs != rd) c.mov(hd, hs);
+            c.or_(hd, ht);
+        }
         c.not_(hd);
     }
 
@@ -426,8 +434,12 @@ struct Recompiler {
     {
         if (!rd) return;
         Gp hd = GetDirtyGpr(rd), hs = GetGpr(rs), ht = GetGpr(rt);
-        if (rs != rd) c.mov(hd, hs);
-        c.or_(hd, ht);
+        if (rt == rd) {
+            c.or_(hd, hs);
+        } else {
+            if (rs != rd) c.mov(hd, hs);
+            c.or_(hd, ht);
+        }
     }
 
     void ori(u32 rs, u32 rt, u16 imm) const
@@ -460,7 +472,8 @@ struct Recompiler {
         if (!rd) return;
         Gp hd = GetDirtyGpr(rd), hs = GetGpr(rs), ht = GetGpr(rt);
         c.cmp(hs, ht);
-        c.setl(hd);
+        c.setl(hd.r8());
+        c.and_(hd, 1);
     }
 
     void slti(u32 rs, u32 rt, s16 imm) const
@@ -468,7 +481,8 @@ struct Recompiler {
         if (!rt) return;
         Gp ht = GetDirtyGpr(rt), hs = GetGpr(rs);
         c.cmp(hs, imm);
-        c.setl(ht);
+        c.setl(ht.r8());
+        c.and_(ht, 1);
     }
 
     void sltiu(u32 rs, u32 rt, s16 imm) const
@@ -476,7 +490,8 @@ struct Recompiler {
         if (!rt) return;
         Gp ht = GetDirtyGpr(rt), hs = GetGpr(rs);
         c.cmp(hs, imm);
-        c.setb(ht);
+        c.setb(ht.r8());
+        c.and_(ht, 1);
     }
 
     void sltu(u32 rs, u32 rt, u32 rd) const
@@ -484,7 +499,8 @@ struct Recompiler {
         if (!rd) return;
         Gp hd = GetDirtyGpr(rd), hs = GetGpr(rs), ht = GetGpr(rt);
         c.cmp(hs, ht);
-        c.setb(hd);
+        c.setb(hd.r8());
+        c.and_(hd, 1);
     }
 
     void sra(u32 rt, u32 rd, u32 sa) const
@@ -541,8 +557,15 @@ struct Recompiler {
     {
         if (!rd) return;
         Gpd hd = GetDirtyGpr32(rd), hs = GetGpr32(rs), ht = GetGpr32(rt);
-        if (rs != rd) c.mov(hd, hs);
-        c.sub(hd, ht);
+        if (rs == rt && rt == rd) {
+            c.xor_(hd, hd);
+        } else if (rt == rd) {
+            c.neg(hd);
+            c.add(hd, hs);
+        } else {
+            if (rs != rd) c.mov(hd, hs);
+            c.sub(hd, ht);
+        }
         if constexpr (mips64) c.movsxd(hd.r64(), hd);
     }
 
@@ -578,8 +601,12 @@ struct Recompiler {
             c.xor_(hd.r32(), hd.r32());
         } else {
             Gp hs = GetGpr(rs), ht = GetGpr(rt);
-            if (rs != rd) c.mov(hd, hs);
-            c.xor_(hd, ht);
+            if (rt == rd) {
+                c.xor_(hd, hs);
+            } else {
+                if (rs != rd) c.mov(hd, hs);
+                c.xor_(hd, ht);
+            }
         }
     }
 
@@ -592,11 +619,11 @@ struct Recompiler {
     }
 
 protected:
-    Gpd GetGpr32(u32 idx) const { return reg_alloc.GetHost(idx).r32(); }
+    Gpd GetGpr32(u32 idx) const { return reg_alloc.GetHostGpr(idx).r32(); }
 
     auto GetGpr(u32 idx) const
     {
-        auto r = reg_alloc.GetHost(idx);
+        auto r = reg_alloc.GetHostGpr(idx);
         if constexpr (mips32) {
             return r.r32();
         } else {
@@ -604,11 +631,11 @@ protected:
         }
     }
 
-    Gpd GetDirtyGpr32(u32 idx) const { return reg_alloc.GetHostMarkDirty(idx).r32(); }
+    Gpd GetDirtyGpr32(u32 idx) const { return reg_alloc.GetHostGprMarkDirty(idx).r32(); }
 
     auto GetDirtyGpr(u32 idx) const
     {
-        auto r = reg_alloc.GetHostMarkDirty(idx);
+        auto r = reg_alloc.GetHostGprMarkDirty(idx);
         if constexpr (mips32) {
             return r.r32();
         } else {

@@ -2,7 +2,7 @@
 #include "cache.hpp"
 #include "cop0.hpp"
 #include "cop1.hpp"
-#include "disassembler.hpp"
+#include "decoder.hpp"
 #include "exceptions.hpp"
 #include "log.hpp"
 #include "mmu.hpp"
