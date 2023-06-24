@@ -76,7 +76,11 @@ struct RegisterAllocatorState {
     typename decltype(bindings)::iterator volatile_bindings_begin_it, volatile_bindings_end_it,
       nonvolatile_bindings_begin_it, nonvolatile_bindings_end_it;
 
-    template<size_t N> void Free(std::array<HostReg, N> hosts, auto flush_and_destroy_binding_func)
+    template<size_t N>
+    void Free(std::array<HostReg, N> hosts,
+      auto flush_and_destroy_binding_func,
+      auto restore_host_func,
+      auto save_host_func)
     {
         for (HostReg host : hosts) {
             auto freed = std::ranges::find_if(bindings, [&](Binding const& b) { return b.host == host; });
@@ -111,6 +115,9 @@ struct RegisterAllocatorState {
                 freed->guest = {};
                 freed->dirty = false;
                 freed->access_index = host_access_index;
+                if (!replacement->is_volatile) {
+                    save_host_func(replacement->host);
+                }
                 if constexpr (std::same_as<HostReg, HostGpr>) {
                     if constexpr (arch.a64) {
                     } else {
@@ -122,6 +129,9 @@ struct RegisterAllocatorState {
                         c.vmovaps(replacement->host, freed->host);
                     }
                 }
+                if (!freed->is_volatile) {
+                    restore_host_func(freed->host);
+                }
             } else {
                 flush_and_destroy_binding_func(*freed, true);
             }
@@ -130,7 +140,7 @@ struct RegisterAllocatorState {
 
     std::string GetStatusString() const
     {
-        std::string occupied_str;
+        std::string used_str;
         std::string free_str;
         for (Binding const& b : bindings) {
             auto host_reg_str{ host_reg_to_string(b.host) };
@@ -138,13 +148,13 @@ struct RegisterAllocatorState {
                 u32 guest = b.guest.value();
                 std::string guest_reg_str =
                   b.host.isXmm() ? std::format("$v{}", guest) : std::string(mips::GprIdxToName(guest));
-                occupied_str.append(std::format("{}({},{}); ", host_reg_str, guest_reg_str, b.dirty ? 'd' : 'c'));
+                used_str.append(std::format("{}({},{}); ", host_reg_str, guest_reg_str, b.dirty ? 'd' : 'c'));
             } else {
                 free_str.append(host_reg_str);
                 free_str.append("; ");
             }
         }
-        return std::format("Occupied: {} Free: {}\n", occupied_str, free_str);
+        return std::format("Used: {} Free: {}\n", used_str, free_str);
     }
 
     bool IsBound(u32 guest) const { return guest_to_host[guest] != nullptr; }
@@ -287,7 +297,11 @@ public:
 
     template<size_t N> void Free(std::array<HostGpr, N> const& hosts)
     {
-        state.Free(hosts, [this](Binding& freed, bool restore) { FlushAndDestroyBinding(freed, restore); });
+        state.Free(
+          hosts,
+          [this](Binding& freed, bool restore) { FlushAndDestroyBinding(freed, restore); },
+          [this](HostGpr gpr) { RestoreHost(gpr); },
+          [this](HostGpr gpr) { SaveHost(gpr); });
     }
 
     HostGpr GetHostGpr(u32 guest) { return GetHostGpr(guest, false); }

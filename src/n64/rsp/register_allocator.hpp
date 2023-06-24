@@ -224,12 +224,20 @@ public:
 
     template<size_t N> void Free(std::array<HostGpr, N> const& hosts)
     {
-        gpr_state.Free(hosts, [this](GprBinding& freed, bool restore) { FlushAndDestroyBinding(freed, restore); });
+        gpr_state.Free(
+          hosts,
+          [this](GprBinding& freed, bool restore) { FlushAndDestroyBinding(freed, restore); },
+          [this](HostGpr gpr) { RestoreHost(gpr); },
+          [this](HostGpr gpr) { SaveHost(gpr); });
     }
 
     template<size_t N> void Free(std::array<HostVpr128, N> const& hosts)
     {
-        vpr_state.Free(hosts, [this](VprBinding& freed, bool restore) { FlushAndDestroyBinding(freed, restore); });
+        vpr_state.Free(
+          hosts,
+          [this](VprBinding& freed, bool restore) { FlushAndDestroyBinding(freed, restore); },
+          [this](HostVpr128 vpr) { RestoreHost(vpr); },
+          [this](HostVpr128 vpr) { SaveHost(vpr); });
     }
 
     HostVpr128 GetAccHigh() { return GetHostVpr(acc_high_idx, false); }
@@ -246,7 +254,11 @@ public:
 
     HostGpr GetHostGpr(u32 idx) { return GetHostGpr(idx, false); }
 
-    HostGpr GetHostGprMarkDirty(u32 idx) { return GetHostGpr(idx, true); }
+    HostGpr GetHostGprMarkDirty(u32 idx)
+    {
+        assert(idx);
+        return GetHostGpr(idx, true);
+    }
 
     HostVpr128 GetHostVpr(u32 idx) { return GetHostVpr(idx, false); }
 
