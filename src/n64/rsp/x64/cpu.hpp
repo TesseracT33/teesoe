@@ -4,6 +4,7 @@
 #include "mips/recompiler.hpp"
 #include "rdp/rdp.hpp"
 #include "rsp/recompiler.hpp"
+#include "rsp/register_allocator.hpp"
 #include "rsp/rsp.hpp"
 
 namespace n64::rsp::x64 {
@@ -48,20 +49,18 @@ struct Recompiler : public mips::Recompiler<s32, s32, u32, RegisterAllocator> {
     {
         if (!rt) return;
         Gpd ht = GetDirtyGpr(rt), hs = GetGpr(rs);
-        c.mov(rcx, dmem);
         c.lea(eax, ptr(hs, imm)); // addr
         c.and_(eax, 0xFFF);
-        c.movsx(ht, byte_ptr(rcx, rax));
+        c.movsx(ht, GlobalArrPtrWithRegOffset(dmem, rax, 1));
     }
 
     void lbu(u32 rs, u32 rt, s16 imm) const
     {
         if (!rt) return;
         Gpd ht = GetDirtyGpr(rt), hs = GetGpr(rs);
-        c.mov(rcx, dmem);
         c.lea(eax, ptr(hs, imm)); // addr
         c.and_(eax, 0xFFF);
-        c.movzx(ht, byte_ptr(rcx, rax));
+        c.movzx(ht, GlobalArrPtrWithRegOffset(dmem, rax, 1));
     }
 
     void lh(u32 rs, u32 rt, s16 imm) const
@@ -145,10 +144,9 @@ struct Recompiler : public mips::Recompiler<s32, s32, u32, RegisterAllocator> {
     void sb(u32 rs, u32 rt, s16 imm) const
     {
         Gpd hs = GetGpr(rs), ht = GetGpr(rt);
-        c.mov(rcx, dmem);
         c.lea(eax, ptr(hs, imm)); // addr
         c.and_(eax, 0xFFF);
-        c.mov(byte_ptr(rcx, rax), ht.r8Lo());
+        c.mov(GlobalArrPtrWithRegOffset(dmem, rax, 1), ht.r8());
     }
 
     void sh(u32 rs, u32 rt, s16 imm) const

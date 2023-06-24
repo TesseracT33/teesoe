@@ -84,10 +84,6 @@ struct Recompiler {
     static constexpr bool mips32 = sizeof(GprInt) == 4;
     static constexpr bool mips64 = sizeof(GprInt) == 8;
 
-    // rax can be used freely
-    // rbx has been calle-saved and is used for $zero. Can be used a temporary, but must be zeroed afterwards
-    // the remaining gprs, aside from rbp and rsi, are used by the register allocator.
-
     void add(u32 rs, u32 rt, u32 rd) const
     {
         Label l_noexception = c.newLabel();

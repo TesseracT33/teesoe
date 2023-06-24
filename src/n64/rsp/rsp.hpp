@@ -54,8 +54,8 @@ inline s32 lo_dummy, hi_dummy;
 inline mips::Gpr<s32> gpr;
 inline CpuImpl cpu_impl;
 
-inline constinit alignas(
-  16) std::array<u8, 0x2000> mem{}; /* 0 - $FFF: data memory; $1000 - $1FFF: instruction memory */
+alignas(
+  16) inline constinit std::array<u8, 0x2000> mem{}; /* 0 - $FFF: data memory; $1000 - $1FFF: instruction memory */
 
 inline constinit u8* const dmem = mem.data();
 inline constinit u8* const imem = mem.data() + 0x1000;

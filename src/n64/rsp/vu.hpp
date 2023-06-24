@@ -31,6 +31,7 @@ inline std::array<ControlRegister, 3> ctrl_reg; /* vco, vcc, vce. vce is actuall
 inline const m128i byteswap16_mask = _mm_set_epi8(14, 15, 12, 13, 10, 11, 8, 9, 6, 7, 4, 5, 2, 3, 0, 1);
 inline const m128i byteswap16_qword0_mask = _mm_set_epi8(15, 14, 13, 12, 11, 10, 9, 8, 6, 7, 4, 5, 2, 3, 0, 1);
 inline const m128i byteswap16_qword1_mask = _mm_set_epi8(14, 15, 12, 13, 10, 11, 8, 9, 7, 6, 5, 4, 3, 2, 1, 0);
+inline const m128i mask32x8 = _mm_set1_epi16(32);
 
 inline const std::array broadcast_mask = {
     _mm_set_epi64x(0x0F'0E'0D'0C'0B'0A'09'08, 0x07'06'05'04'03'02'01'00), /* 0,1,2,3,4,5,6,7 */

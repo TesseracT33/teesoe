@@ -1,6 +1,7 @@
 #pragma once
 
 #include "mips/register_allocator.hpp"
+#include "recompiler.hpp"
 #include "rsp.hpp"
 #include "vu.hpp"
 
@@ -11,20 +12,20 @@ using namespace asmjit;
 inline constexpr std::array reg_alloc_volatile_gprs = [] {
     using namespace x86;
     if constexpr (os.linux) {
-        // return std::array<Gpq, 8>{ r11, r10, r9, r8, rcx, rdx, rsi, rdi };
-        return std::array<Gpq, 6>{ r11, r10, r9, r8, rsi, rdi };
+        // return std::array{ r11, r10, r9, r8, rcx, rdx, rsi, rdi };
+        return std::array{ r11, r10, r9, r8, rsi, rdi };
     } else {
-        // return std::array<Gpq, 6>{ r11, r10, r9, r8, rdx, rcx };
-        return std::array<Gpq, 4>{ r11, r10, r9, r8 };
+        // return std::array{ r11, r10, r9, r8, rdx, rcx };
+        return std::array{ r11, r10, r9, r8 };
     }
 }();
 
 inline constexpr std::array reg_alloc_nonvolatile_gprs = [] {
     using namespace x86;
     if constexpr (os.linux) {
-        return std::array<Gpq, 4>{ r12, r13, r14, r15 };
+        return std::array{ r12, r13, r14, r15 };
     } else {
-        return std::array<Gpq, 6>{ r12, r13, r14, r15, rdi, rsi };
+        return std::array{ r12, r13, r14, r15, rdi, rsi };
     }
 }();
 
@@ -33,24 +34,24 @@ inline constexpr std::array reg_alloc_volatile_vprs = [] {
     if constexpr (os.linux) {
         if constexpr (avx512) {
             // clang-format off
-            return std::array<Xmm, 21>{
+            return std::array{
                 xmm3, xmm4, xmm5, xmm6, xmm7, xmm16, xmm17, xmm18, xmm19, xmm20,
                 xmm21, xmm22, xmm23, xmm24, xmm25, xmm26, xmm27, xmm28, xmm29, xmm30, xmm31,
             };
             // clang-format on
         } else {
-            return std::array<Xmm, 5>{ xmm3, xmm4, xmm5, xmm6, xmm7 };
+            return std::array{ xmm3, xmm4, xmm5, xmm6, xmm7 };
         }
     } else {
         if constexpr (avx512) {
             // clang-format off
-            return std::array<Xmm, 19>{
+            return std::array{
                 xmm3, xmm4, xmm5, xmm16, xmm17, xmm18, xmm19, xmm20, xmm21, 
                 xmm22, xmm23, xmm24, xmm25, xmm26, xmm27, xmm28, xmm29, xmm30, xmm31,
             };
             // clang-format on
         } else {
-            return std::array<Xmm, 3>{ xmm3, xmm4, xmm5 };
+            return std::array{ xmm3, xmm4, xmm5 };
         }
     }
 }();
@@ -58,10 +59,15 @@ inline constexpr std::array reg_alloc_volatile_vprs = [] {
 inline constexpr std::array reg_alloc_nonvolatile_vprs = [] {
     using namespace x86;
     if constexpr (os.linux) {
-        return std::array<Xmm, 8>{ xmm8, xmm9, xmm10, xmm11, xmm12, xmm13, xmm14, xmm15 };
+        return std::array{ xmm8, xmm9, xmm10, xmm11, xmm12, xmm13, xmm14 };
     } else {
-        return std::array<Xmm, 10>{ xmm6, xmm7, xmm8, xmm9, xmm10, xmm11, xmm12, xmm13, xmm14, xmm15 };
+        return std::array{ xmm6, xmm7, xmm8, xmm9, xmm10, xmm11, xmm12, xmm13, xmm14 };
     }
+}();
+
+inline constexpr HostVpr128 reg_alloc_vte_reg = [] {
+    if constexpr (arch.a64) return a64::x0; // todo
+    if constexpr (arch.x64) return x86::xmm15;
 }();
 
 inline constexpr HostGpr reg_alloc_base_gpr_ptr_reg = [] {
@@ -89,7 +95,8 @@ public:
         gpr_state{ c, reg_alloc_volatile_gprs, reg_alloc_nonvolatile_gprs, reg_alloc_base_gpr_ptr_reg },
         vpr_state{ c, reg_alloc_volatile_vprs, reg_alloc_nonvolatile_vprs, reg_alloc_base_vpr_ptr_reg },
         guest_gprs_pointer_reg{ reg_alloc_base_gpr_ptr_reg },
-        guest_vprs_pointer_reg{ reg_alloc_base_vpr_ptr_reg }
+        guest_vprs_pointer_reg{ reg_alloc_base_vpr_ptr_reg },
+        vte_reg_saved{}
     {
     }
 
@@ -101,6 +108,9 @@ public:
         }
         if (is_nonvolatile(guest_vprs_pointer_reg)) {
             RestoreHost(guest_vprs_pointer_reg);
+        }
+        if (vte_reg_saved && is_nonvolatile(reg_alloc_vte_reg)) {
+            RestoreHost(reg_alloc_vte_reg);
         }
         if constexpr (arch.a64) {
         } else {
@@ -117,6 +127,9 @@ public:
         }
         if (is_nonvolatile(guest_vprs_pointer_reg)) {
             RestoreHost(guest_vprs_pointer_reg);
+        }
+        if (vte_reg_saved && is_nonvolatile(reg_alloc_vte_reg)) {
+            RestoreHost(reg_alloc_vte_reg);
         }
         if constexpr (arch.a64) {
         } else {
@@ -141,6 +154,7 @@ public:
             c.mov(guest_gprs_pointer_reg, gpr.ptr(0));
             c.mov(guest_vprs_pointer_reg, vpr.data());
         }
+        vte_reg_saved = false;
     }
 
     void Call(auto func)
@@ -204,14 +218,18 @@ public:
         }
     }
 
-    void Free(HostGpr host)
+    void Free(HostGpr host) { Free<1>({ host }); }
+
+    void Free(HostVpr128 host) { Free<1>({ host }); }
+
+    template<size_t N> void Free(std::array<HostGpr, N> const& hosts)
     {
-        gpr_state.Free(host, [this](GprBinding& freed, bool restore) { FlushAndDestroyBinding(freed, restore); });
+        gpr_state.Free(hosts, [this](GprBinding& freed, bool restore) { FlushAndDestroyBinding(freed, restore); });
     }
 
-    void Free(HostVpr128 host)
+    template<size_t N> void Free(std::array<HostVpr128, N> const& hosts)
     {
-        vpr_state.Free(host, [this](VprBinding& freed, bool restore) { FlushAndDestroyBinding(freed, restore); });
+        vpr_state.Free(hosts, [this](VprBinding& freed, bool restore) { FlushAndDestroyBinding(freed, restore); });
     }
 
     HostVpr128 GetAccHigh() { return GetHostVpr(acc_high_idx, false); }
@@ -241,6 +259,15 @@ public:
         return std::format("GPRs: {}VPRs: {}", gprs_state, vprs_state);
     }
 
+    HostVpr128 GetVte()
+    {
+        if (!vte_reg_saved) {
+            vte_reg_saved = true;
+            SaveHost(reg_alloc_vte_reg);
+        }
+        return reg_alloc_vte_reg;
+    }
+
     bool IsBound(auto reg) const
     {
         if constexpr (std::same_as<decltype(reg), x86::Gp>) {
@@ -254,7 +281,7 @@ private:
     enum : u32 {
         acc_low_idx = 32,
         acc_mid_idx,
-        acc_high_idx,
+        acc_high_idx
     };
 
     static constexpr int gprs_stack_space = 8 * 16; // todo arm64
@@ -269,17 +296,28 @@ private:
     HostGpr guest_gprs_pointer_reg, guest_vprs_pointer_reg;
     GprRegisterAllocatorState gpr_state;
     VprRegisterAllocatorState vpr_state;
+    bool vte_reg_saved;
 
     void Flush(auto& binding, bool restore)
     {
         if (!binding.Occupied()) return;
         if (binding.dirty) {
+            auto guest = binding.guest.value();
             if constexpr (arch.a64) {
             } else {
                 if constexpr (std::same_as<decltype(binding.host), HostGpr>) {
-                    c.mov(dword_ptr(guest_gprs_pointer_reg, 4 * binding.guest.value()), binding.host.r32());
+                    c.mov(dword_ptr(guest_gprs_pointer_reg, 4 * guest), binding.host.r32());
                 } else {
-                    c.vmovaps(xmmword_ptr(guest_vprs_pointer_reg, 16 * binding.guest.value()), binding.host);
+                    if (guest < 32) {
+                        c.vmovaps(xmmword_ptr(guest_vprs_pointer_reg, 16 * guest), binding.host);
+                    } else {
+                        switch (guest) {
+                        case acc_low_idx: c.vmovaps(GlobalVarPtr(acc.low), binding.host); break;
+                        case acc_mid_idx: c.vmovaps(GlobalVarPtr(acc.mid), binding.host); break;
+                        case acc_high_idx: c.vmovaps(GlobalVarPtr(acc.high), binding.host); break;
+                        default: assert(false);
+                        }
+                    }
                 }
             }
         }
@@ -342,20 +380,9 @@ private:
             }
         };
 
-        // 'make_dirty' should be true if the given guest register is a destination in the current instruction.
-        // If so, search for a free host register among the nonvolatile ones first, to reduce the number of
-        // dirty host registers that need to be flushed on block function calls.
-
-        if (make_dirty) {
+        FindReg(state->volatile_bindings_begin_it, state->volatile_bindings_end_it);
+        if (!found_free) {
             FindReg(state->nonvolatile_bindings_begin_it, state->nonvolatile_bindings_end_it);
-            if (!found_free) {
-                FindReg(state->volatile_bindings_begin_it, state->volatile_bindings_end_it);
-            }
-        } else {
-            FindReg(state->volatile_bindings_begin_it, state->volatile_bindings_end_it);
-            if (!found_free) {
-                FindReg(state->nonvolatile_bindings_begin_it, state->nonvolatile_bindings_end_it);
-            }
         }
 
         if (!found_free) {
@@ -384,7 +411,16 @@ private:
                     c.mov(binding.host.r32(), dword_ptr(guest_gprs_pointer_reg, 4 * guest));
                 }
             } else {
-                c.vmovaps(binding.host, xmmword_ptr(guest_vprs_pointer_reg, 16 * guest));
+                if (guest < 32) {
+                    c.vmovaps(binding.host, xmmword_ptr(guest_vprs_pointer_reg, 16 * guest));
+                } else {
+                    switch (guest) {
+                    case acc_low_idx: c.vmovaps(binding.host, GlobalVarPtr(acc.low)); break;
+                    case acc_mid_idx: c.vmovaps(binding.host, GlobalVarPtr(acc.mid)); break;
+                    case acc_high_idx: c.vmovaps(binding.host, GlobalVarPtr(acc.high)); break;
+                    default: assert(false);
+                    }
+                }
             }
         }
     }
@@ -421,6 +457,6 @@ private:
             c.vmovaps(xmmword_ptr(x86::rsp, 16 * vpr.id() + gprs_stack_space), vpr);
         }
     }
-};
+} inline reg_alloc{ compiler };
 
 } // namespace n64::rsp

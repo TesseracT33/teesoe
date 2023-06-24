@@ -459,7 +459,7 @@ void suv(u32 base, u32 vt, u32 e, s32 offset)
     for (auto elem = e; elem < e + 8; ++elem) {
         u8 val;
         if ((elem & 15) < 8) {
-            val = *(reinterpret_cast<s16*>(vpr_src) + (elem & 7)) >> 7;
+            val = reinterpret_cast<s16*>(vpr_src)[elem & 7] >> 7;
         } else {
             val = vpr_src[elem << 1 & 0xE ^ 1];
         }

@@ -74,14 +74,15 @@ static std::tuple<Xmm, Xmm, Xmm> GetDirtyAccs()
     return { GetDirtyAccLow(), GetDirtyAccMid(), GetDirtyAccHigh() };
 }
 
-static Xmm GetVte(uint vt /* 0-31 */, uint element /* 0-15 */)
+static Xmm GetVte(uint vt /* 0-31 */, uint e /* 0-15 */)
 {
     Xmm ht = GetVpr(vt);
-    if (element < 2) {
+    if (e < 2) {
         return ht;
     } else {
-        // c.vpshufb(xmm14, ht, GlobalVarPtr(broadcast_mask, 16 * element));
-        // return xmm14;
+        Xmm vte = reg_alloc.GetVte();
+        c.vpshufb(vte, ht, GlobalArrPtrWithImmOffset(broadcast_mask, 16 * e, 16));
+        return vte;
     }
 }
 
@@ -160,7 +161,7 @@ void mtc2(u32 rt, u32 vs, u32 e)
     }
 }
 
-// LBV, LSV, LLV, LDV
+// LSV, LLV, LDV
 template<std::signed_integral Int> static void LoadUpToDword(u32 base, u32 vt, u32 e, s32 offset)
 {
     Gpd hbase = GetGpr(base);
@@ -177,7 +178,7 @@ template<std::signed_integral Int> static void LoadUpToDword(u32 base, u32 vt, u
     c.vmovaps(ht, xmmword_ptr(x86::rsp, -16));
 }
 
-// SBV, SSV, SLV, SDV
+// SSV, SLV, SDV
 template<std::signed_integral Int> static void StoreUpToDword(u32 base, u32 vt, u32 e, s32 offset)
 {
     Gpd hbase = GetGpr(base);
@@ -185,7 +186,7 @@ template<std::signed_integral Int> static void StoreUpToDword(u32 base, u32 vt, 
     c.lea(eax, ptr(hbase, offset * sizeof(Int)));
     c.mov(rcx, dmem);
     c.vmovaps(xmmword_ptr(x86::rsp, -16), ht);
-    for (u32 i = 0; i < std::min((u32)sizeof(Int), 16 - e); ++i) {
+    for (u32 i = 0; i < sizeof(Int); ++i) {
         if (i) c.inc(eax);
         c.and_(eax, 0xFFF);
         c.mov(dl, byte_ptr(x86::rsp, (e + i & 15 ^ 1) - 16));
@@ -195,7 +196,11 @@ template<std::signed_integral Int> static void StoreUpToDword(u32 base, u32 vt, 
 
 void lbv(u32 base, u32 vt, u32 e, s32 offset)
 {
-    LoadUpToDword<s8>(base, vt, e, offset);
+    Gpd hbase = GetGpr(base);
+    Xmm ht = GetDirtyVpr(vt);
+    c.lea(eax, ptr(hbase, offset));
+    c.and_(eax, 0xFFF);
+    c.vpinsrb(ht, ht, GlobalArrPtrWithRegOffset(dmem, rax, 1), e ^ 1);
 }
 
 void ldv(u32 base, u32 vt, u32 e, s32 offset)
@@ -207,46 +212,59 @@ void lfv(u32 base, u32 vt, u32 e, s32 offset)
 {
     Gpd hbase = GetGpr(base);
     Xmm ht = GetDirtyVpr(vt);
-    reg_alloc.Free(r8);
+
     c.lea(eax, ptr(hbase, offset * 16));
     c.mov(ecx, eax);
     c.and_(ecx, 7);
     if (e) c.sub(ecx, e); // addr_offset
     c.and_(eax, ~7);
-    c.mov(rbx, dmem);
+
+    // Move dmem values into temporary s16 "array" on stack. E.g. for addr_offset = 1:
+    /*  tmp[0] = dmem[1] << 7
+        tmp[1] = dmem[5] << 7
+        tmp[2] = dmem[9] ...
+        tmp[3] = dmem[13]
+        tmp[4] = dmem[9]
+        tmp[5] = dmem[13]
+        tmp[6] = dmem[1]
+        tmp[7] = dmem[5]
+        Same pattern for any addr_offset
+    */
+    static constexpr std::array stack_index_table{ 0, 12, 2, 14, 4, 8, 6, 10 };
 
     for (int i = 0; i < 4; ++i) {
         if (i) c.add(ecx, 4);
-        c.mov(edx, ecx);
-        c.and_(ecx, 15); // todo: only needed for i>0 if underflow from (addr & 7) - e is possible
-        c.lea(r8d, ptr(eax, ecx));
-        c.and_(r8d, 0xFFF);
-        c.mov(r8b, byte_ptr(rbx, r8));
-        c.shl(r8d, 7);
-        c.mov(word_ptr(x86::rsp, 2 * i - 16), r8w);
-
-        c.add(edx, 8);
-        c.and_(edx, 15);
-        c.lea(r8d, ptr(eax, edx));
-        c.and_(r8d, 0xFFF);
-        c.mov(r8b, byte_ptr(rbx, r8));
-        c.shl(r8d, 7);
-        c.mov(word_ptr(x86::rsp, 2 * i + 8 - 16), r8w);
+        c.and_(ecx, 15); // todo: only needed for i==0 if underflow from (addr & 7) - e is possible
+        c.lea(edx, ptr(eax, ecx));
+        c.and_(edx, 0xFFF);
+        c.mov(dl, GlobalArrPtrWithRegOffset(dmem, rdx, 1));
+        c.shl(edx, 7);
+        c.and_(edx, 0x7FFF);
+        c.mov(word_ptr(x86::rsp, stack_index_table[i] - 16), dx);
+        c.mov(word_ptr(x86::rsp, stack_index_table[i + 1] - 16), dx);
     }
 
     if (e == 0) {
         c.vpinsrq(ht, ht, qword_ptr(x86::rsp, -16), 0);
         c.vpshufb(ht, ht, GlobalVarPtr(byteswap16_qword0_mask));
     } else if (e == 8) {
-        c.vpinsrq(ht, ht, qword_ptr(x86::rsp, -16), 1);
+        c.vpinsrq(ht, ht, qword_ptr(x86::rsp, -8), 1);
         c.vpshufb(ht, ht, GlobalVarPtr(byteswap16_qword1_mask));
     } else {
-        c.vmovaps(xmmword_ptr(x86::rsp, -40), ht);
-        for (auto byte = e; byte < std::min(e + 8, 16u); ++byte) {
-            c.mov(al, byte_ptr(x86::rsp, (byte ^ 1) - 16));
-            c.mov(byte_ptr(x86::rsp, (byte ^ 1) - 40), al);
+        c.vmovaps(xmmword_ptr(x86::rsp, -32), ht);
+        if (e & 1) {
+            for (auto byte = e; byte < std::min(e + 8, 16u); ++byte) {
+                c.mov(al, byte_ptr(x86::rsp, (byte ^ 1) - 16));
+                c.mov(byte_ptr(x86::rsp, (byte ^ 1) - 32), al);
+            }
+        } else {
+            for (auto byte = e; byte < std::min(e + 8, 16u); byte += 2) {
+                c.movbe(ax, word_ptr(x86::rsp, byte - 16));
+                c.mov(word_ptr(x86::rsp, byte - 32), ax);
+            }
         }
-        c.vmovaps(ht, xmmword_ptr(x86::rsp, -40));
+
+        c.vmovaps(ht, xmmword_ptr(x86::rsp, -32));
     }
 }
 
@@ -260,21 +278,20 @@ void lhv(u32 base, u32 vt, u32 e, s32 offset)
     c.and_(ecx, 7);
     if (e) c.sub(ecx, e); // mem offset
     c.and_(eax, ~7);
-    c.mov(rbx, dmem);
     c.vmovaps(xmmword_ptr(x86::rsp, -16), ht);
 
     for (int i = 0; i < 8; ++i) {
         if (i) c.add(ecx, 2);
-        c.and_(ecx, 15); // todo: only needed for i>0 if underflow from (addr & 7) - e is possible
+        c.and_(ecx, 15); // todo: only needed for i==0 if underflow from (addr & 7) - e is possible
         c.lea(edx, ptr(eax, ecx));
         c.and_(edx, 0xFFF);
-        c.mov(dl, byte_ptr(rbx, rdx));
+        c.mov(dl, GlobalArrPtrWithRegOffset(dmem, rdx, 1));
         c.shl(edx, 7);
+        c.and_(edx, 0x7FFF);
         c.mov(word_ptr(x86::rsp, 2 * i - 16), dx);
     }
 
     c.vmovaps(ht, xmmword_ptr(x86::rsp, -16));
-    c.xor_(ebx, ebx);
 }
 
 void llv(u32 base, u32 vt, u32 e, s32 offset)
@@ -292,21 +309,19 @@ void lpv(u32 base, u32 vt, u32 e, s32 offset)
     c.and_(ecx, 7);
     if (e) c.sub(ecx, e); // mem offset
     c.and_(eax, ~7);
-    c.mov(rbx, dmem);
     c.vmovaps(xmmword_ptr(x86::rsp, -16), ht);
 
     for (int i = 0; i < 8; ++i) {
         if (i) c.inc(ecx);
-        c.and_(ecx, 15); // todo: only needed for i>0 if underflow from (addr & 7) - e is possible
+        c.and_(ecx, 15); // todo: only needed for i==0 if underflow from (addr & 7) - e is possible
         c.lea(edx, ptr(eax, ecx));
         c.and_(edx, 0xFFF);
-        c.mov(dl, byte_ptr(rbx, rdx));
+        c.mov(dl, GlobalArrPtrWithRegOffset(dmem, rdx, 1));
         c.shl(edx, 8);
         c.mov(word_ptr(x86::rsp, 2 * i - 16), dx);
     }
 
     c.vmovaps(ht, xmmword_ptr(x86::rsp, -16));
-    c.xor_(ebx, ebx);
 }
 
 void lqv(u32 base, u32 vt, u32 e, s32 offset)
@@ -388,11 +403,10 @@ void lrv(u32 base, u32 vt, u32 e, s32 offset)
     c.neg(ecx);
     c.add(ecx, e + 16); // e
     c.and_(eax, 0xFF0);
-    c.mov(rbx, dmem);
     c.vmovaps(xmmword_ptr(x86::rsp, -16), ht);
 
     c.bind(l_start);
-    c.mov(dl, byte_ptr(rbx, rax));
+    c.mov(dl, GlobalArrPtrWithRegOffset(dmem, rax, 1));
     c.inc(eax);
     c.xor_(ecx, 1);
     c.mov(byte_ptr(x86::rsp, rcx, 0, -16), dl);
@@ -405,7 +419,6 @@ void lrv(u32 base, u32 vt, u32 e, s32 offset)
     c.vmovaps(ht, xmmword_ptr(x86::rsp, -16));
 
     c.bind(l_end);
-    c.xor_(ebx, ebx);
 }
 
 void lsv(u32 base, u32 vt, u32 e, s32 offset)
@@ -427,7 +440,6 @@ void ltv(u32 base, u32 vt, u32 e, s32 offset)
     c.add(eax, ecx);
     c.mov(edx, ecx);
     c.add(edx, 16); // addr wrap-around point (exclusive)
-    c.mov(rbx, dmem);
 
     auto const reg_base = vt & 0x18;
     auto reg_off = e >> 1;
@@ -442,14 +454,12 @@ void ltv(u32 base, u32 vt, u32 e, s32 offset)
                 c.cmove(eax, ecx);
             }
             c.and_(eax, 0xFFF);
-            c.mov(r8b, byte_ptr(rbx, rax));
+            c.mov(r8b, GlobalArrPtrWithRegOffset(dmem, rax, 1));
             c.mov(byte_ptr(x86::rsp, 2 * i + j - 16), r8b);
         }
         c.vmovaps(hreg, xmmword_ptr(x86::rsp, -16));
         reg_off = reg_off + 1 & 7;
     }
-
-    c.xor_(ebx, ebx);
 }
 
 void luv(u32 base, u32 vt, u32 e, s32 offset)
@@ -462,26 +472,29 @@ void luv(u32 base, u32 vt, u32 e, s32 offset)
     c.and_(ecx, 7);
     if (e) c.sub(ecx, e); // mem offset
     c.and_(eax, ~7);
-    c.mov(rbx, dmem);
     c.vmovaps(xmmword_ptr(x86::rsp, -16), ht);
 
     for (int i = 0; i < 8; ++i) {
         if (i) c.inc(ecx);
-        c.and_(ecx, 15); // todo: only needed for i>0 if underflow from (addr & 7) - e is
+        c.and_(ecx, 15); // todo: only needed for i==0 if underflow from (addr & 7) - e is possible
         c.lea(edx, ptr(eax, ecx));
         c.and_(edx, 0xFFF);
-        c.mov(dl, byte_ptr(rbx, rdx));
+        c.mov(dl, GlobalArrPtrWithRegOffset(dmem, rdx, 1));
         c.shl(edx, 7);
+        c.and_(edx, 0x7FFF);
         c.mov(word_ptr(x86::rsp, 2 * i - 16), dx);
     }
 
     c.vmovaps(ht, xmmword_ptr(x86::rsp, -16));
-    c.xor_(ebx, ebx);
 }
 
 void sbv(u32 base, u32 vt, u32 e, s32 offset)
 {
-    StoreUpToDword<s8>(base, vt, e, offset);
+    Gpd hbase = GetGpr(base);
+    Xmm ht = GetVpr(vt);
+    c.lea(eax, ptr(hbase, offset));
+    c.and_(eax, 0xFFF);
+    c.vpextrb(GlobalArrPtrWithRegOffset(dmem, rax, 1), ht, e ^ 1);
 }
 
 void sdv(u32 base, u32 vt, u32 e, s32 offset)
@@ -496,7 +509,6 @@ void sfv(u32 base, u32 vt, u32 e, s32 offset)
     c.mov(ecx, eax);
     c.and_(ecx, 7); // addr_offset
     c.and_(eax, ~7);
-    c.mov(rbx, dmem);
 
     auto store_elems = [vt](std::array<u8, 4> elems) {
         Xmm ht = GetVpr(vt);
@@ -511,7 +523,7 @@ void sfv(u32 base, u32 vt, u32 e, s32 offset)
             c.lea(edx, ptr(eax, ecx));
             c.and_(edx, 0xFFF);
             c.mov(r8b, byte_ptr(x86::rsp, 2 * elems[i] - 16));
-            c.mov(byte_ptr(rbx, rdx), r8b);
+            c.mov(GlobalArrPtrWithRegOffset(dmem, rdx, 1), r8b);
         }
     };
 
@@ -532,12 +544,10 @@ void sfv(u32 base, u32 vt, u32 e, s32 offset)
             }
             c.lea(edx, ptr(eax, ecx));
             c.and_(edx, 0xFFF);
-            c.mov(byte_ptr(rbx, rdx), 0);
+            c.mov(GlobalArrPtrWithRegOffset(dmem, rdx, 1), 0);
         }
         break;
     }
-
-    c.xor_(ebx, ebx);
 }
 
 void shv(u32 base, u32 vt, u32 e, s32 offset)
@@ -549,7 +559,6 @@ void shv(u32 base, u32 vt, u32 e, s32 offset)
     c.mov(ecx, eax);
     c.and_(ecx, 7); // addr_offset
     c.and_(eax, ~7);
-    c.mov(rbx, dmem);
     c.vmovaps(xmmword_ptr(x86::rsp, -16), ht);
     for (int i = 0; i < 8; ++i) {
         auto byte = e + 2 * i;
@@ -557,16 +566,15 @@ void shv(u32 base, u32 vt, u32 e, s32 offset)
         c.mov(r8b, byte_ptr(x86::rsp, (byte + 1 & 15 ^ 1) - 16));
         c.shl(edx, 1);
         c.shr(r8b, 7);
-        c.or_(edx, r8b);
+        c.or_(edx, r8d);
         if (i > 0) {
             c.add(ecx, 2);
             if (i > 3) c.and_(ecx, 15);
         }
-        c.lea(edx, ptr(eax, ecx));
-        c.and_(edx, 0xFFF);
-        c.mov(byte_ptr(rbx, rdx), dl);
+        c.lea(r8d, ptr(eax, ecx));
+        c.and_(r8d, 0xFFF);
+        c.mov(GlobalArrPtrWithRegOffset(dmem, r8d, 1), dl);
     }
-    c.xor_(ebx, ebx);
 }
 
 void slv(u32 base, u32 vt, u32 e, s32 offset)
@@ -642,7 +650,7 @@ void sqv(u32 base, u32 vt, u32 e, s32 offset)
     c.bind(l_simple);
     if (e == 0) {
         c.vpshufb(xmm0, ht, GlobalVarPtr(byteswap16_mask));
-        c.vmovups(GlobalArrPtrWithRegOffset(dmem, rax, 1), xmm0);
+        c.vmovaps(GlobalArrPtrWithRegOffset(dmem, rax, 16), xmm0);
     }
 
     c.bind(l_end);
@@ -652,34 +660,32 @@ void srv(u32 base, u32 vt, u32 e, s32 offset)
 {
     Gpd hbase = GetGpr(base);
     Xmm ht = GetVpr(vt);
-    reg_alloc.Free(r8);
+    reg_alloc.Free<2>({ r8, r9 });
 
-    Label l_start = c.newLabel(), l_loop_end = c.newLabel(), l_end = c.newLabel();
+    Label l_start = c.newLabel(), l_end = c.newLabel();
 
     c.lea(eax, ptr(hbase, offset * 16)); // addr
     c.mov(ecx, eax);
     c.and_(ecx, 15); // addr_offset
     c.test(ecx, ecx);
     c.je(l_end);
-    c.mov(edx, 16 + e);
-    c.sub(edx, ecx); // current element
+    c.mov(edx, 16);
+    c.sub(edx, ecx); // base element
+    e ? c.mov(r8d, e) : c.xor_(r8d, r8d); // element
     c.and_(eax, 0xFF0);
     c.add(ecx, eax); // end address (exclusive)
-    c.mov(rbx, dmem);
+    c.vmovaps(xmmword_ptr(x86::rsp, -16), ht);
 
     c.bind(l_start);
-    c.and_(edx, 15);
-    c.xor_(edx, 1);
-    c.mov(r8b, byte_ptr(x86::rsp, rdx, 0, -16));
-    c.mov(byte_ptr(rbx, rax), r8b);
-    c.xor_(edx, 1);
-    c.inc(edx);
+    c.lea(r9d, ptr(edx, r8d));
+    c.and_(r9d, 15);
+    c.xor_(r9d, 1);
+    c.mov(r9b, byte_ptr(x86::rsp, r9, 0, -16));
+    c.mov(GlobalArrPtrWithRegOffset(dmem, rax, 1), r9b);
     c.inc(eax);
+    c.inc(r8d);
     c.cmp(eax, ecx);
     c.jne(l_start);
-
-    c.bind(l_loop_end);
-    c.xor_(ebx, ebx);
 
     c.bind(l_end);
 }
@@ -693,12 +699,11 @@ void stv(u32 base, u32 vt, u32 e, s32 offset)
 {
     Gpd hbase = GetGpr(base);
     reg_alloc.Free(r8);
-    c.lea(eax, ptr(hbase, offset * 8)); // addr
+    c.lea(eax, ptr(hbase, offset * 16)); // addr
     c.mov(ecx, eax);
     c.and_(ecx, 7);
-    if (e) c.sub(ecx, e & ~1); // offset_addr
+    if (e & ~1) c.sub(ecx, e & ~1); // offset_addr
     c.and_(eax, ~7);
-    c.mov(rbx, dmem);
     auto elem = 16 - (e & ~1);
     auto const reg_start = vt & 0x18;
     for (auto reg = reg_start; reg < reg_start + 8; ++reg) {
@@ -712,10 +717,9 @@ void stv(u32 base, u32 vt, u32 e, s32 offset)
             }
             c.lea(r8d, ptr(eax, ecx));
             c.and_(r8d, 0xFFF);
-            c.mov(byte_ptr(rbx, r8), dl);
+            c.mov(GlobalArrPtrWithRegOffset(dmem, r8, 1), dl);
         }
-    }
-    c.xor_(ebx, ebx);
+    };
 }
 
 void suv(u32 base, u32 vt, u32 e, s32 offset)
@@ -728,7 +732,7 @@ void suv(u32 base, u32 vt, u32 e, s32 offset)
     for (auto elem = e; elem < e + 8; ++elem) {
         if ((elem & 15) < 8) {
             c.mov(dx, word_ptr(x86::rsp, (elem << 1 & 15) - 16));
-            c.shl(edx, 7);
+            c.shr(edx, 7);
         } else {
             c.mov(dl, byte_ptr(x86::rsp, (elem << 1 & 0xE ^ 1) - 16));
         }
@@ -747,7 +751,6 @@ void swv(u32 base, u32 vt, u32 e, s32 offset)
     c.mov(ecx, eax);
     c.and_(ecx, 7); // base
     c.and_(eax, ~7);
-    c.mov(rbx, dmem);
     c.vmovaps(xmmword_ptr(x86::rsp, -16), ht);
     for (auto elem = e; elem < e + 16; ++elem) {
         c.mov(dl, byte_ptr(x86::rsp, (elem & 15 ^ 1) - 16));
@@ -757,9 +760,8 @@ void swv(u32 base, u32 vt, u32 e, s32 offset)
         }
         c.lea(r8d, ptr(eax, ecx));
         c.and_(r8d, 0xFFF);
-        c.mov(byte_ptr(rbx, r8), dl);
+        c.mov(GlobalArrPtrWithRegOffset(dmem, r8, 1), dl);
     }
-    c.xor_(ebx, ebx);
 }
 
 void vabs(u32 vs, u32 vt, u32 vd, u32 e)
@@ -843,24 +845,24 @@ void vch(u32 vs, u32 vt, u32 vd, u32 e)
     c.vpblendvb(xmm0, xmm6, xmm5, xmm1);
     c.vpblendvb(hd, hs, xmm2, xmm0);
     c.vmovaps(haccl, hd);
-    c.vmovaps(ptr(vco.lo), xmm1);
-    c.vmovaps(ptr(vco.hi), xmm4);
-    c.vmovaps(ptr(vcc.lo), xmm5);
-    c.vmovaps(ptr(vcc.hi), xmm6);
-    c.vmovaps(ptr(vce), xmm3);
+    c.vmovaps(GlobalVarPtr(vco.lo), xmm1);
+    c.vmovaps(GlobalVarPtr(vco.hi), xmm4);
+    c.vmovaps(GlobalVarPtr(vcc.lo), xmm5);
+    c.vmovaps(GlobalVarPtr(vcc.hi), xmm6);
+    c.vmovaps(GlobalVarPtr(vce), xmm3);
 }
 
 void vcl(u32 vs, u32 vt, u32 vd, u32 e)
 {
     Xmm hd = GetDirtyVpr(vd), hs = GetVpr(vs), ht = GetVte(vt, e), haccl = GetDirtyAccLow();
     c.vpxor(xmm0, xmm0, xmm0);
-    c.vmovaps(xmm1, ptr(vco.lo)); // vco.lo
+    c.vmovaps(xmm1, GlobalVarPtr(vco.lo)); // vco.lo
     c.vpxor(xmm2, ht, xmm1); // nvt
     c.vpsubw(xmm2, xmm2, xmm1);
     c.vpsubw(xmm3, hs, xmm2); // diff
     c.vpaddusw(xmm4, hs, ht); // ncarry
     c.vpcmpeqw(xmm4, xmm4, xmm3);
-    c.vmovaps(xmm5, ptr(vce)); // vce
+    c.vmovaps(xmm5, GlobalVarPtr(vce)); // vce
     c.vpcmpeqw(xmm6, xmm5, xmm0); // nvce
     c.vpcmpeqw(xmm7, xmm3, xmm0); // diff0
     c.vpand(xmm0, xmm7, xmm4); // lec1
@@ -871,9 +873,9 @@ void vcl(u32 vs, u32 vt, u32 vd, u32 e)
     c.vpsubusw(xmm4, ht, hs); // geeq
     c.vpxor(xmm5, xmm5, xmm5);
     c.vpcmpeqw(xmm4, xmm4, xmm5);
-    c.vmovaps(xmm5, ptr(vco.hi)); // vco.hi
+    c.vmovaps(xmm5, GlobalVarPtr(vco.hi)); // vco.hi
     c.vpandn(xmm7, xmm5, xmm1); // le
-    c.vmovaps(xmm3, ptr(vcc.lo));
+    c.vmovaps(xmm3, GlobalVarPtr(vcc.lo));
     c.vpblendvb(xmm7, xmm3, xmm0, xmm7);
     c.vpor(xmm6, xmm1, xmm5); // ge
     // todo: not done. when running out of vol regs, use the stack?
@@ -905,54 +907,55 @@ void veq(u32 vs, u32 vt, u32 vd, u32 e)
 {
     Xmm hd = GetDirtyVpr(vd), hs = GetVpr(vs), ht = GetVte(vt, e), haccl = GetDirtyAccLow();
     c.vpcmpeqw(xmm0, hs, ht);
-    c.vmovaps(xmm1, ptr(vco.hi));
+    c.vmovaps(xmm1, GlobalVarPtr(vco.hi));
     c.vpandn(xmm0, xmm1, xmm0);
-    c.vmovaps(ptr(vcc.lo), xmm0);
+    c.vmovaps(GlobalVarPtr(vcc.lo), xmm0);
     c.vpblendvb(hd, ht, hs, xmm0);
     c.vmovaps(haccl, hd);
     c.vpxor(xmm0, xmm0, xmm0);
-    c.vmovaps(ptr(vcc.hi), xmm0);
-    c.vmovaps(ptr(vco), ymm0);
+    c.vmovaps(GlobalVarPtr(vcc.hi), xmm0);
+    c.vmovaps(GlobalVarPtr(vco), ymm0);
 }
 
 void vge(u32 vs, u32 vt, u32 vd, u32 e)
 {
     Xmm hd = GetDirtyVpr(vd), hs = GetVpr(vs), ht = GetVte(vt, e), haccl = GetDirtyAccLow();
     c.vpcmpeqw(xmm0, hs, ht);
-    c.vmovaps(xmm1, ptr(vco.lo));
-    c.vpand(xmm1, xmm1, ptr(vco.hi));
+    c.vmovaps(xmm1, GlobalVarPtr(vco.lo));
+    c.vpand(xmm1, xmm1, GlobalVarPtr(vco.hi));
     c.vpandn(xmm0, xmm1, xmm0);
     c.vpcmpgtw(xmm1, hs, ht);
     c.vpor(xmm0, xmm0, xmm1);
-    c.vmovaps(ptr(vcc.lo), xmm0);
+    c.vmovaps(GlobalVarPtr(vcc.lo), xmm0);
     c.vpblendvb(hd, ht, hs, xmm0);
     c.vmovaps(haccl, hd);
     c.vpxor(xmm0, xmm0, xmm0);
-    c.vmovaps(ptr(vcc.hi), xmm0);
-    c.vmovaps(ptr(vco), ymm0);
+    c.vmovaps(GlobalVarPtr(vcc.hi), xmm0);
+    c.vmovaps(GlobalVarPtr(vco), ymm0);
 }
 
 void vlt(u32 vs, u32 vt, u32 vd, u32 e)
 {
     Xmm hd = GetDirtyVpr(vd), hs = GetVpr(vs), ht = GetVte(vt, e), haccl = GetDirtyAccLow();
     c.vpcmpeqw(xmm0, hs, ht);
-    c.vmovaps(xmm1, ptr(vco.lo));
-    c.vpand(xmm1, xmm1, ptr(vco.hi));
+    c.vmovaps(xmm1, GlobalVarPtr(vco.lo));
+    c.vpand(xmm1, xmm1, GlobalVarPtr(vco.hi));
     c.vpand(xmm0, xmm1, xmm0);
     c.vpcmpgtw(xmm1, ht, hs);
     c.vpor(xmm0, xmm0, xmm1);
-    c.vmovaps(ptr(vcc.lo), xmm0);
+    c.vmovaps(GlobalVarPtr(vcc.lo), xmm0);
     c.vpblendvb(hd, ht, hs, xmm0);
     c.vmovaps(haccl, hd);
     c.vpxor(xmm0, xmm0, xmm0);
-    c.vmovaps(ptr(vcc.hi), xmm0);
-    c.vmovaps(ptr(vco), ymm0);
+    c.vmovaps(GlobalVarPtr(vcc.hi), xmm0);
+    c.vmovaps(GlobalVarPtr(vco), ymm0);
 }
 
 template<bool vmacf> void vmacfu(u32 vs, u32 vt, u32 vd, u32 e)
 {
     Xmm hd = GetDirtyVpr(vd), hs = GetVpr(vs), ht = GetVte(vt, e);
     auto [haccl, haccm, hacch] = GetDirtyAccs();
+    reg_alloc.Free(xmm3);
     c.vpmullw(xmm0, hs, ht); // low
     c.vpmulhw(xmm1, hs, ht); // high
     c.vpsraw(xmm2, xmm1, 15); // high mul carry
@@ -994,9 +997,10 @@ void vmacq(u32 vd)
 {
     Xmm hd = GetDirtyVpr(vd);
     auto [haccl, haccm, hacch] = GetDirtyAccs();
+    reg_alloc.Free(xmm3);
     c.vpcmpeqw(xmm0, xmm0, xmm0);
     c.vpxor(xmm0, haccm, xmm0);
-    // c.vpand(xmm0, xmm0, mask); // TODO
+    c.vpand(xmm0, xmm0, GlobalVarPtr(mask32x8));
     c.vpxor(xmm1, xmm1, xmm1);
     c.vpcmpeqw(xmm2, hacch, xmm1); // acch eqz
     c.vpsrlw(xmm3, haccm, 5);
@@ -1081,6 +1085,7 @@ template<bool vmadm> void vmadmn(u32 vs, u32 vt, u32 vd, u32 e)
 {
     Xmm hd = GetDirtyVpr(vd), hs = GetVpr(vs), ht = GetVte(vt, e);
     auto [haccl, haccm, hacch] = GetDirtyAccs();
+    reg_alloc.Free(xmm3);
     c.vpmullw(xmm0, hs, ht); // low prod
     c.vpaddw(haccl, haccl, xmm0);
     c.vpcmpeqw(xmm1, xmm1, xmm1);
@@ -1138,11 +1143,11 @@ void vmov(u32 vt, u32 vt_e, u32 vd, u32 vd_e)
 void vmrg(u32 vs, u32 vt, u32 vd, u32 e)
 {
     Xmm hd = GetDirtyVpr(vd), hs = GetVpr(vs), ht = GetVte(vt, e), haccl = GetDirtyAccLow();
-    c.vmovaps(xmm0, ptr(vcc.lo));
+    c.vmovaps(xmm0, GlobalVarPtr(vcc.lo));
     c.vpblendvb(hd, ht, hs, xmm0);
     c.vmovaps(haccl, hd);
     c.vpxor(xmm0, xmm0, xmm0);
-    c.vmovaps(ptr(vco), ymm0);
+    c.vmovaps(GlobalVarPtr(vco), ymm0);
 }
 
 void vmudh(u32 vs, u32 vt, u32 vd, u32 e)
@@ -1285,12 +1290,12 @@ void vne(u32 vs, u32 vt, u32 vd, u32 e)
     c.vpcmpeqw(xmm0, hs, ht); // eq
     c.vpcmpeqw(xmm1, xmm1, xmm1);
     c.vpxor(xmm0, xmm0, xmm1);
-    c.vpor(xmm0, xmm0, ptr(vco.hi)); // vcc.lo
-    c.vmovaps(ptr(vcc.lo), xmm0);
+    c.vpor(xmm0, xmm0, GlobalVarPtr(vco.hi)); // vcc.lo
+    c.vmovaps(GlobalVarPtr(vcc.lo), xmm0);
     c.vpblendvb(hd, ht, hs, xmm0);
     c.vpxor(xmm0, xmm0, xmm0);
-    c.vmovaps(ptr(vcc.hi), xmm0);
-    c.vmovaps(ptr(vco), ymm0);
+    c.vmovaps(GlobalVarPtr(vcc.hi), xmm0);
+    c.vmovaps(GlobalVarPtr(vco), ymm0);
 }
 
 void vnop()
@@ -1328,13 +1333,12 @@ void vrcpq(u32 vt, u32 vt_e, u32 vd, u32 vd_e, void* impl)
     c.vmovaps(haccl, hte);
     reg_alloc.Free(host_gpr_arg[0]);
     c.vpextrw(host_gpr_arg[0].r32(), ht, vt_e & 7);
-    // reg_alloc.Call(impl);
+    reg_alloc.Call(impl);
     Xmm hd = GetDirtyVpr(vd);
     c.vpinsrw(hd, hd, eax, vd_e & 7);
     c.shr(eax, 16);
-    c.mov(::ptr(div_out), ax);
-    c.xor_(eax, eax);
-    c.mov(::ptr(div_dp), al);
+    c.mov(GlobalVarPtr(div_out), ax);
+    c.mov(GlobalVarPtr(div_dp), 0);
 }
 
 void vrcpql(u32 vt, u32 vt_e, u32 vd, u32 vd_e, void* impl)
@@ -1343,23 +1347,20 @@ void vrcpql(u32 vt, u32 vt_e, u32 vd, u32 vd_e, void* impl)
     c.vmovaps(haccl, hte);
     reg_alloc.Free(host_gpr_arg[0]);
     c.vpextrw(host_gpr_arg[0].r32(), ht, vt_e & 7);
-    c.mov(rbx, &div_in);
-    c.mov(dx, word_ptr(rbx));
-    c.shl(edx, 16);
-    c.or_(edx, host_gpr_arg[0].r32());
+    c.mov(ax, GlobalVarPtr(div_in));
+    c.shl(eax, 16);
+    c.or_(eax, host_gpr_arg[0].r32());
     c.movsx(host_gpr_arg[0].r32(), host_gpr_arg[0].r16());
-    c.mov(al, ::ptr(div_dp));
-    c.bt(eax, 0);
-    c.cmovc(host_gpr_arg[0].r32(), edx);
-    // reg_alloc.Call(impl);
+    c.cmp(GlobalVarPtr(div_dp), 1);
+    c.cmove(host_gpr_arg[0].r32(), eax);
+    reg_alloc.Call(impl);
     Xmm hd = GetDirtyVpr(vd);
     c.vpinsrw(hd, hd, eax, vd_e & 7);
     c.shr(eax, 16);
-    c.mov(::ptr(div_out), ax);
+    c.mov(GlobalVarPtr(div_out), ax);
     c.xor_(eax, eax);
-    c.mov(::ptr(div_dp), al);
-    c.mov(word_ptr(rbx), ax);
-    c.xor_(ebx, ebx);
+    c.mov(GlobalVarPtr(div_in), ax);
+    c.mov(GlobalVarPtr(div_dp), al);
 }
 
 void vrcp(u32 vt, u32 vt_e, u32 vd, u32 vd_e)
@@ -1371,12 +1372,9 @@ void vrcph(u32 vt, u32 vt_e, u32 vd, u32 vd_e)
 {
     Xmm hd = GetDirtyVpr(vd), ht = GetVpr(vt), hte = GetVte(vt, vt_e), haccl = GetDirtyAccLow();
     c.vmovaps(haccl, hte);
-    c.mov(ax, ::ptr(div_out));
-    c.vpinsrw(hd, hd, eax, vd_e & 7);
-    c.vpextrw(eax, ht, vt_e & 7);
-    c.mov(::ptr(div_in), ax);
-    c.mov(eax, 1);
-    c.mov(::ptr(div_in), ax);
+    c.vpinsrw(hd, hd, GlobalVarPtr(div_out), vd_e & 7);
+    c.vpextrw(GlobalVarPtr(div_in), ht, vt_e & 7);
+    c.mov(GlobalVarPtr(div_dp), 1);
 }
 
 void vrcpl(u32 vt, u32 vt_e, u32 vd, u32 vd_e)
@@ -1387,6 +1385,7 @@ void vrcpl(u32 vt, u32 vt_e, u32 vd, u32 vd_e)
 template<bool p> void vrnd(u32 vt, u32 vt_e, u32 vd, u32 vd_e)
 {
     Xmm hd = GetDirtyVpr(vd), ht = GetVte(vt, vt_e), haccm = GetDirtyAccMid(), hacch = GetDirtyAccHigh();
+    reg_alloc.Free(xmm3);
     c.vpsraw(xmm0, hacch, 16); // cond
     if constexpr (p) {
         c.vpxor(xmm1, xmm1, xmm1);

@@ -75,7 +75,7 @@ public:
     auto vrsq(u32 vt, u32 vt_e, u32 vd, u32 vd_e) { return VdeVte("vrsq", vd, vd_e, vt, vt_e); }
     auto vrsqh(u32 vt, u32 vt_e, u32 vd, u32 vd_e) { return VdeVte("vrsqh", vd, vd_e, vt, vt_e); }
     auto vrsql(u32 vt, u32 vt_e, u32 vd, u32 vd_e) { return VdeVte("vrsql", vd, vd_e, vt, vt_e); }
-    auto vsar(u32 vd, u32 e) { return std::format("vsar v{}()", vd, e); }
+    auto vsar(u32 vd, u32 e) { return std::format("vsar v{}({})", vd, e); }
     auto vsub(u32 vs, u32 vt, u32 vd, u32 e) { return VdVsVte("vsub", vd, vs, vt, e); }
     auto vsubc(u32 vs, u32 vt, u32 vd, u32 e) { return VdVsVte("vsubc", vd, vs, vt, e); }
     auto vxor(u32 vs, u32 vt, u32 vd, u32 e) { return VdVsVte("vxor", vd, vs, vt, e); }

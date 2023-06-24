@@ -1,7 +1,6 @@
 #pragma once
 
 #include "mips/recompiler.hpp"
-#include "register_allocator.hpp"
 #include "rsp.hpp"
 #include "status.hpp"
 #include "types.hpp"
@@ -18,12 +17,11 @@ u32 RunRecompiler(u32 cpu_cycles);
 void TearDownRecompiler();
 
 inline AsmjitCompiler compiler;
-inline RegisterAllocator reg_alloc{ compiler };
 inline u32 jit_pc;
 inline bool branch_hit, branched;
 inline u32 block_cycles;
 
-template<typename T> static auto GlobalVarPtr(T const& obj)
+template<typename T> auto GlobalVarPtr(T const& obj)
 {
     if constexpr (std::is_pointer_v<T>) {
         return jit_mem_global_var(asmjit::x86::rbp, gpr.ptr(0), obj);
@@ -32,7 +30,16 @@ template<typename T> static auto GlobalVarPtr(T const& obj)
     }
 }
 
-template<typename T> static auto GlobalArrPtrWithRegOffset(T const& obj, asmjit::x86::Gp index, size_t ptr_size)
+template<typename T> auto GlobalArrPtrWithImmOffset(T const& obj, u32 index, size_t ptr_size)
+{
+    if constexpr (std::is_pointer_v<T>) {
+        return jit_mem_global_arr_with_imm_index(asmjit::x86::rbp, index, gpr.ptr(0), obj, ptr_size);
+    } else {
+        return jit_mem_global_arr_with_imm_index(asmjit::x86::rbp, index, gpr.ptr(0), &obj, ptr_size);
+    }
+}
+
+template<typename T> auto GlobalArrPtrWithRegOffset(T const& obj, asmjit::x86::Gp index, size_t ptr_size)
 {
     if constexpr (std::is_pointer_v<T>) {
         return jit_mem_global_arr_with_reg_index(asmjit::x86::rbp, index.r64(), gpr.ptr(0), obj, ptr_size);

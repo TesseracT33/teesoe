@@ -7,6 +7,7 @@
 #include "interpreter.hpp"
 #include "n64_build_options.hpp"
 #include "rdp/rdp.hpp"
+#include "register_allocator.hpp"
 #include "rsp.hpp"
 
 using namespace asmjit;
@@ -71,11 +72,11 @@ void BlockProlog()
         log_error(std::format("Failed to attach asmjit compiler to code holder; returned {}",
           asmjit::DebugUtils::errorAsString(err)));
     }
-    if constexpr (enable_jit_error_logging) {
+    if constexpr (enable_rsp_jit_error_logging) {
         static AsmjitLogErrorHandler asmjit_log_error_handler{};
         code_holder.setErrorHandler(&asmjit_log_error_handler);
     }
-    if constexpr (enable_jit_block_logging) {
+    if constexpr (enable_rsp_jit_block_logging) {
         jit_logger.addFlags(FormatFlags::kMachineCode);
         code_holder.setLogger(&jit_logger);
     }
@@ -85,7 +86,7 @@ void BlockProlog()
     if constexpr (use_avx512) {
         func_node->frame().setAvx512Enabled();
     }
-    if constexpr (enable_jit_block_logging) {
+    if constexpr (enable_rsp_jit_block_logging) {
         jit_logger.log("======== RSP BLOCK BEGIN ========\n");
     }
     // epilog_label = c.newLabel();
@@ -135,7 +136,7 @@ std::pair<Block*, bool> GetBlock(u32 pc)
 
 Status InitRecompiler()
 {
-    allocator.allocate(1_MiB);
+    allocator.allocate(4_MiB);
     pools.resize(num_pools, nullptr);
     return status_ok();
 }

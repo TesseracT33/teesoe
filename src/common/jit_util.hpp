@@ -47,16 +47,16 @@ inline asmjit::x86::Mem jit_mem_global_var(asmjit::x86::Gpq base_ptr_reg, auto c
     return asmjit::x86::ptr(base_ptr_reg, diff, sizeof(decltype(*obj_ptr)));
 }
 
-// inline asmjit::x86::Mem jit_mem_global_arr_with_imm_index(asmjit::x86::Gpq base_ptr_reg,
-//   s32 index,
-//   auto const* base_ptr,
-//   auto const* arr_ptr,
-//   size_t ptr_size)
-//{
-//     std::ptrdiff_t diff = reinterpret_cast<u8 const*>(arr_ptr) + index - reinterpret_cast<u8 const*>(base_ptr);
-//     assert(diff >= std::numeric_limits<s32>::min() && diff <= std::numeric_limits<s32>::max());
-//     return asmjit::x86::ptr(base_ptr_reg, diff, ptr_size);
-// }
+inline asmjit::x86::Mem jit_mem_global_arr_with_imm_index(asmjit::x86::Gpq base_ptr_reg,
+  u32 index,
+  auto const* base_ptr,
+  auto const* arr_ptr,
+  size_t ptr_size)
+{
+    std::ptrdiff_t diff = reinterpret_cast<u8 const*>(arr_ptr) + index - reinterpret_cast<u8 const*>(base_ptr);
+    assert(diff >= std::numeric_limits<s32>::min() && diff <= std::numeric_limits<s32>::max());
+    return asmjit::x86::ptr(base_ptr_reg, diff, ptr_size);
+}
 
 inline asmjit::x86::Mem jit_mem_global_arr_with_reg_index(asmjit::x86::Gpq base_ptr_reg,
   asmjit::x86::Gpq index,
