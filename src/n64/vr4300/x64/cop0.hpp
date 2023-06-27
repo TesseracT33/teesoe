@@ -17,7 +17,7 @@ inline AsmjitCompiler& c = compiler;
 inline void CheckCop0UsableJit()
 {
     Label l_end = c.newLabel();
-    c.cmp(ptr(can_exec_cop0_instrs), 1);
+    c.cmp(GlobalVarPtr(can_exec_cop0_instrs), 1);
     c.je(l_end);
     reg_alloc.FlushAllVolatile();
     c.xor_(host_gpr_arg[0].r32(), host_gpr_arg[0].r32());
@@ -30,15 +30,15 @@ template<size_t size> inline void ReadCop0Jit(Gpq dst, u32 idx)
     auto Read = [dst](auto const& reg) {
         if constexpr (sizeof(reg) == 4) {
             if constexpr (size == 4) {
-                c.movsxd(dst, dword_ptr(reg));
+                // c.movsxd(dst, dword_ptr(reg));
             } else {
-                c.mov(dst.r32(), dword_ptr(reg));
+                // c.mov(dst.r32(), dword_ptr(reg));
             }
         } else if constexpr (sizeof(reg) == 8) {
             if constexpr (size == 4) {
                 // c.movsxd(dst, dword_ptr(reg));
             } else {
-                c.mov(dst, qword_ptr(reg));
+                // c.mov(dst, qword_ptr(reg));
             }
         } else {
             static_assert(always_false<sizeof(reg)>, "Register must be either 4 or 8 bytes.");
@@ -57,7 +57,7 @@ template<size_t size> inline void ReadCop0Jit(Gpq dst, u32 idx)
     case Cop0Reg::count: Read(u32((cop0.count + block_cycles) >> 1)); break;
     case Cop0Reg::entry_hi: Read(cop0.entry_hi); break;
     case Cop0Reg::compare: /* See the declaration of 'compare' */
-        c.mov(rax, ptr(cop0.compare));
+        c.mov(rax, GlobalVarPtr(cop0.compare));
         c.shr(rax, 1);
         if constexpr (size == 4) {
             c.movsxd(dst, eax);
@@ -204,20 +204,20 @@ inline void eret()
     CheckCop0UsableJit();
 
     Label l0 = c.newLabel(), l1 = c.newLabel();
-    c.cmp(ptr(cop0.status.erl), 1);
+    c.cmp(GlobalVarPtr(cop0.status.erl), 1);
     c.je(l0);
     c.mov(rax, cop0.epc);
-    c.mov(ptr(pc), rax);
-    c.mov(ptr(cop0.status.exl), 0);
+    c.mov(GlobalVarPtr(pc), rax);
+    c.mov(GlobalVarPtr(cop0.status.exl), 0);
     c.jmp(l1);
 
     c.bind(l0);
     c.mov(rax, cop0.error_epc);
-    c.mov(ptr(pc), rax);
-    c.mov(ptr(cop0.status.erl), 0);
+    c.mov(GlobalVarPtr(pc), rax);
+    c.mov(GlobalVarPtr(cop0.status.erl), 0);
 
     c.bind(l1);
-    c.mov(ptr(ll_bit), 0);
+    c.mov(GlobalVarPtr(ll_bit), 0);
 }
 
 inline void mfc0(u32 rt, u32 rd)

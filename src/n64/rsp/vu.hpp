@@ -71,6 +71,8 @@ constexpr std::array ctc2_table = {
     0xFFFF'FFFF'FFFF'FFFF_s64,
 };
 
+constexpr std::array lfv_table{ 0, 6, 1, 7, 2, 4, 3, 5 };
+
 // clang-format off
 
 inline constexpr std::array<u16, 512> rcp_rom = {

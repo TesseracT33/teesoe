@@ -21,6 +21,8 @@ inline u32 jit_pc;
 inline bool branch_hit, branched;
 inline u32 block_cycles;
 
+void BlockEpilogWithPcFlush(int pc_offset);
+
 template<typename T> auto GlobalVarPtr(T const& obj)
 {
     if constexpr (std::is_pointer_v<T>) {

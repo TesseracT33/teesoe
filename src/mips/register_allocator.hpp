@@ -84,15 +84,20 @@ struct RegisterAllocatorState {
     {
         for (HostReg host : hosts) {
             auto freed = std::ranges::find_if(bindings, [&](Binding const& b) { return b.host == host; });
-            if (freed == bindings.end() || !freed->Occupied()) continue;
+            if (freed == bindings.end() || !freed->Occupied()) {
+                if (!is_volatile(host)) {
+                    save_host_func(host);
+                }
+                continue;
+            }
 
             Binding* replacement{};
             bool found_free{};
             u64 min_access = std::numeric_limits<u64>::max();
 
             for (Binding& b : bindings) {
-                if (b.host == host) continue;
-                if (!b.Occupied() && std::ranges::find(hosts, b.host) == hosts.end()) {
+                if (std::ranges::find(hosts, b.host) != hosts.end()) continue;
+                if (!b.Occupied()) {
                     found_free = true;
                     replacement = &b;
                     break;
@@ -105,6 +110,8 @@ struct RegisterAllocatorState {
             if (replacement) {
                 if (!found_free) {
                     flush_and_destroy_binding_func(*replacement, false);
+                } else if (!replacement->is_volatile) {
+                    save_host_func(replacement->host);
                 }
                 replacement->guest = freed->guest;
                 replacement->access_index = freed->access_index;
@@ -114,21 +121,7 @@ struct RegisterAllocatorState {
                 // guest_to_host[freed->guest]
                 freed->guest = {};
                 freed->dirty = false;
-                freed->access_index = host_access_index;
-                if (!replacement->is_volatile) {
-                    save_host_func(replacement->host);
-                }
-                if constexpr (std::same_as<HostReg, HostGpr>) {
-                    if constexpr (arch.a64) {
-                    } else {
-                        c.mov(replacement->host, freed->host);
-                    }
-                } else {
-                    if constexpr (arch.a64) {
-                    } else {
-                        c.vmovaps(replacement->host, freed->host);
-                    }
-                }
+                MoveHost(replacement->host, freed->host);
                 if (!freed->is_volatile) {
                     restore_host_func(freed->host);
                 }
@@ -165,6 +158,23 @@ struct RegisterAllocatorState {
             if (b.host.id() == host.id()) return b.Occupied();
         }
         return false;
+    }
+
+    void MoveHost(HostReg dst, HostReg src) const
+    {
+        if constexpr (std::same_as<HostReg, HostGpr>) {
+            if constexpr (arch.a64) {
+            } else {
+                c.mov(dst, src);
+            }
+        } else if (std::same_as<HostReg, HostVpr128>) {
+            if constexpr (arch.a64) {
+            } else {
+                c.vmovaps(dst, src);
+            }
+        } else {
+            always_false<0>;
+        }
     }
 
     void Reset()
@@ -314,6 +324,22 @@ public:
 
     bool IsBound(auto reg) const { return state.IsBound(reg); }
 
+    void RestoreHost(HostGpr gpr)
+    {
+        if constexpr (arch.a64) {
+        } else {
+            c.mov(gpr.r64(), qword_ptr(x86::rsp, 8 * gpr.id()));
+        }
+    }
+
+    void SaveHost(HostGpr gpr)
+    {
+        if constexpr (arch.a64) {
+        } else {
+            c.mov(qword_ptr(x86::rsp, 8 * gpr.id()), gpr.r64());
+        }
+    }
+
 protected:
     static constexpr int register_stack_space = 8 * 16; // todo: arm64
     static constexpr bool mips32 = sizeof(GuestInt) == 4;
@@ -428,22 +454,6 @@ protected:
                     c.mov(binding.host.r64(), qword_ptr(guest_gprs_pointer_reg, 8 * guest));
                 }
             }
-        }
-    }
-
-    void RestoreHost(HostGpr gpr)
-    {
-        if constexpr (arch.a64) {
-        } else {
-            c.mov(gpr.r64(), qword_ptr(x86::rsp, 8 * gpr.id()));
-        }
-    }
-
-    void SaveHost(HostGpr gpr)
-    {
-        if constexpr (arch.a64) {
-        } else {
-            c.mov(qword_ptr(x86::rsp, 8 * gpr.id()), gpr.r64());
         }
     }
 };

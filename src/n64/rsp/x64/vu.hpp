@@ -219,19 +219,6 @@ void lfv(u32 base, u32 vt, u32 e, s32 offset)
     if (e) c.sub(ecx, e); // addr_offset
     c.and_(eax, ~7);
 
-    // Move dmem values into temporary s16 "array" on stack. E.g. for addr_offset = 1:
-    /*  tmp[0] = dmem[1] << 7
-        tmp[1] = dmem[5] << 7
-        tmp[2] = dmem[9] ...
-        tmp[3] = dmem[13]
-        tmp[4] = dmem[9]
-        tmp[5] = dmem[13]
-        tmp[6] = dmem[1]
-        tmp[7] = dmem[5]
-        Same pattern for any addr_offset
-    */
-    static constexpr std::array stack_index_table{ 0, 12, 2, 14, 4, 8, 6, 10 };
-
     for (int i = 0; i < 4; ++i) {
         if (i) c.add(ecx, 4);
         c.and_(ecx, 15); // todo: only needed for i==0 if underflow from (addr & 7) - e is possible
@@ -240,8 +227,8 @@ void lfv(u32 base, u32 vt, u32 e, s32 offset)
         c.mov(dl, GlobalArrPtrWithRegOffset(dmem, rdx, 1));
         c.shl(edx, 7);
         c.and_(edx, 0x7FFF);
-        c.mov(word_ptr(x86::rsp, stack_index_table[i] - 16), dx);
-        c.mov(word_ptr(x86::rsp, stack_index_table[i + 1] - 16), dx);
+        c.mov(word_ptr(x86::rsp, 2 * lfv_table[2 * i] - 16), dx);
+        c.mov(word_ptr(x86::rsp, 2 * lfv_table[2 * i + 1] - 16), dx);
     }
 
     if (e == 0) {
@@ -263,7 +250,6 @@ void lfv(u32 base, u32 vt, u32 e, s32 offset)
                 c.mov(word_ptr(x86::rsp, byte - 32), ax);
             }
         }
-
         c.vmovaps(ht, xmmword_ptr(x86::rsp, -32));
     }
 }
@@ -334,12 +320,11 @@ void lqv(u32 base, u32 vt, u32 e, s32 offset)
     c.lea(eax, ptr(hbase, offset * 16)); // addr
     c.mov(rcx, dmem);
     c.mov(edx, eax);
-    c.and_(edx, 15);
     c.and_(eax, 0xFFF);
+    c.and_(edx, 15);
 
     if (e == 0) {
         Label l_simple = c.newLabel(), l_end = c.newLabel();
-        c.test(edx, edx);
         c.je(l_simple);
 
         c.add(rcx, rax); // addr base
@@ -397,7 +382,7 @@ void lrv(u32 base, u32 vt, u32 e, s32 offset)
     c.lea(eax, ptr(hbase, offset * 16)); // addr
     c.mov(ecx, eax);
     c.and_(ecx, 15);
-    e ? c.cmp(ecx, e) : c.test(ecx, ecx); // e < (addr & 15)
+    e ? c.cmp(ecx, e) : c.test(ecx, ecx);
     c.jbe(l_end);
 
     c.neg(ecx);
@@ -610,11 +595,10 @@ void sqv(u32 base, u32 vt, u32 e, s32 offset)
     Label l_simple = c.newLabel();
     c.lea(eax, ptr(hbase, offset * 16)); // addr
     c.mov(ecx, eax);
-    c.and_(ecx, 15);
     c.and_(eax, 0xFFF);
+    c.and_(ecx, 15);
 
     if (e == 0) {
-        c.test(ecx, ecx);
         c.je(l_simple);
     }
 
@@ -667,7 +651,6 @@ void srv(u32 base, u32 vt, u32 e, s32 offset)
     c.lea(eax, ptr(hbase, offset * 16)); // addr
     c.mov(ecx, eax);
     c.and_(ecx, 15); // addr_offset
-    c.test(ecx, ecx);
     c.je(l_end);
     c.mov(edx, 16);
     c.sub(edx, ecx); // base element
@@ -713,8 +696,8 @@ void stv(u32 base, u32 vt, u32 e, s32 offset)
             c.mov(dl, byte_ptr(x86::rsp, (elem++ & 15 ^ 1) - 16));
             if (reg != reg_start || i) {
                 c.inc(ecx);
-                c.and_(ecx, 15);
             }
+            c.and_(ecx, 15);
             c.lea(r8d, ptr(eax, ecx));
             c.and_(r8d, 0xFFF);
             c.mov(GlobalArrPtrWithRegOffset(dmem, r8, 1), dl);
@@ -793,19 +776,25 @@ void vadd(u32 vs, u32 vt, u32 vd, u32 e)
 void vaddc(u32 vs, u32 vt, u32 vd, u32 e)
 {
     Xmm hd = GetDirtyVpr(vd), hs = GetVpr(vs), ht = GetVte(vt, e), haccl = GetDirtyAccLow();
-    c.vpaddw(hd, hs, ht);
-    c.vmovaps(haccl, hd);
-    if constexpr (avx512) {
-        // c.vpcmpuw(k0, hd, ht, 1);
-        // c.vmovaps(GlobalVarPtr(vco.lo), k0);
+    if (hd == ht) {
+        c.vmovaps(xmm0, ht);
+        c.vpaddw(hd, hs, ht);
+        c.vmovaps(haccl, hd);
+        c.vpcmpeqw(xmm1, xmm1, xmm1);
+        c.vpsllw(xmm1, xmm1, 15); // 0x8000
+        c.vpaddw(xmm2, hd, xmm1);
+        c.vpaddw(xmm0, xmm0, xmm1);
+        c.vpcmpgtw(xmm0, xmm0, xmm2);
     } else {
+        c.vpaddw(hd, hs, ht);
+        c.vmovaps(haccl, hd);
         c.vpcmpeqw(xmm0, xmm0, xmm0);
-        c.vpsllw(xmm0, xmm0, 15); // sign mask
+        c.vpsllw(xmm0, xmm0, 15); // 0x8000
         c.vpaddw(xmm1, hd, xmm0);
-        c.vpaddw(xmm2, ht, xmm0);
-        c.vpcmpgtw(xmm0, xmm2, xmm1);
-        c.vmovaps(GlobalVarPtr(vco.lo), xmm0);
+        c.vpaddw(xmm0, ht, xmm0);
+        c.vpcmpgtw(xmm0, xmm0, xmm1);
     }
+    c.vmovaps(GlobalVarPtr(vco.lo), xmm0);
     c.vpxor(xmm0, xmm0, xmm0);
     c.vmovaps(GlobalVarPtr(vco.hi), xmm0);
 }
@@ -820,16 +809,12 @@ void vand(u32 vs, u32 vt, u32 vd, u32 e)
 void vch(u32 vs, u32 vt, u32 vd, u32 e)
 {
     Xmm hd = GetDirtyVpr(vd), hs = GetVpr(vs), ht = GetVte(vt, e), haccl = GetDirtyAccLow();
-    // reg_alloc.Free(xmm4);
-    // reg_alloc.Free(xmm5);
-    // reg_alloc.Free(xmm6);
-    // reg_alloc.Free(xmm7);
-    // todo: if xmm6, xmm7 and windows, and they are unused, we also need to save them
+    reg_alloc.Free<5>({ xmm3, xmm4, xmm5, xmm6, xmm7 });
     c.vpxor(xmm0, xmm0, xmm0);
-    c.vpxor(xmm1, hs, ht);
-    c.vpcmpgtw(xmm1, xmm0, xmm1); // vco.lo
-    c.vpxor(xmm2, ht, xmm1);
-    c.vpsubw(xmm2, xmm2, xmm1); // nvt
+    c.vpxor(xmm1, hs, ht); // vco.lo
+    c.vpcmpgtw(xmm1, xmm0, xmm1);
+    c.vpxor(xmm2, ht, xmm1); // nvt
+    c.vpsubw(xmm2, xmm2, xmm1);
     c.vpsubw(xmm3, hs, xmm2); // diff
     c.vpcmpeqw(xmm4, xmm3, xmm0); // diff0
     c.vpcmpgtw(xmm5, xmm3, xmm0); // dlez
@@ -838,11 +823,11 @@ void vch(u32 vs, u32 vt, u32 vd, u32 e)
     c.vpcmpgtw(xmm7, xmm0, ht); // vtn
     c.vpblendvb(xmm6, xmm6, xmm7, xmm1); // vcc.hi
     c.vpblendvb(xmm5, xmm7, xmm5, xmm1); // vcc.lo
-    c.vpcmpeqw(xmm3, xmm3, xmm1);
-    c.vpand(xmm3, xmm3, xmm1); // vce
+    c.vpcmpeqw(xmm3, xmm3, xmm1); // vce
+    c.vpand(xmm3, xmm3, xmm1);
     c.vpor(xmm4, xmm4, xmm3); // vco.hi
     c.vpcmpeqw(xmm4, xmm4, xmm0);
-    c.vpblendvb(xmm0, xmm6, xmm5, xmm1);
+    c.vpblendvb(xmm0, xmm6, xmm5, xmm1); // mask
     c.vpblendvb(hd, hs, xmm2, xmm0);
     c.vmovaps(haccl, hd);
     c.vmovaps(GlobalVarPtr(vco.lo), xmm1);
@@ -850,11 +835,16 @@ void vch(u32 vs, u32 vt, u32 vd, u32 e)
     c.vmovaps(GlobalVarPtr(vcc.lo), xmm5);
     c.vmovaps(GlobalVarPtr(vcc.hi), xmm6);
     c.vmovaps(GlobalVarPtr(vce), xmm3);
+    if constexpr (os.windows) {
+        reg_alloc.RestoreHost(xmm6);
+        reg_alloc.RestoreHost(xmm7);
+    }
 }
 
 void vcl(u32 vs, u32 vt, u32 vd, u32 e)
 {
     Xmm hd = GetDirtyVpr(vd), hs = GetVpr(vs), ht = GetVte(vt, e), haccl = GetDirtyAccLow();
+    reg_alloc.Free<5>({ xmm3, xmm4, xmm5, xmm6, xmm7 });
     c.vpxor(xmm0, xmm0, xmm0);
     c.vmovaps(xmm1, GlobalVarPtr(vco.lo)); // vco.lo
     c.vpxor(xmm2, ht, xmm1); // nvt
@@ -866,7 +856,7 @@ void vcl(u32 vs, u32 vt, u32 vd, u32 e)
     c.vpcmpeqw(xmm6, xmm5, xmm0); // nvce
     c.vpcmpeqw(xmm7, xmm3, xmm0); // diff0
     c.vpand(xmm0, xmm7, xmm4); // lec1
-    c.vpand(xmm0, xmm0, xmm6);
+    c.vpand(xmm0, xmm0, xmm6); // drop xmm6
     c.vpor(xmm4, xmm4, xmm7); // lec2; drop xmm7
     c.vpand(xmm4, xmm4, xmm5); // drop xmm5
     c.vpor(xmm0, xmm0, xmm4); // leeq; drop xmm4
@@ -874,11 +864,23 @@ void vcl(u32 vs, u32 vt, u32 vd, u32 e)
     c.vpxor(xmm5, xmm5, xmm5);
     c.vpcmpeqw(xmm4, xmm4, xmm5);
     c.vmovaps(xmm5, GlobalVarPtr(vco.hi)); // vco.hi
-    c.vpandn(xmm7, xmm5, xmm1); // le
+    c.vpandn(xmm6, xmm5, xmm1); // le
     c.vmovaps(xmm3, GlobalVarPtr(vcc.lo));
-    c.vpblendvb(xmm7, xmm3, xmm0, xmm7);
-    c.vpor(xmm6, xmm1, xmm5); // ge
-    // todo: not done. when running out of vol regs, use the stack?
+    c.vpblendvb(xmm6, xmm3, xmm0, xmm6);
+    c.vpor(xmm3, xmm1, xmm5); // ge
+    c.vpblendvb(xmm3, xmm4, GlobalVarPtr(vcc.hi), xmm3);
+    c.vpblendvb(xmm4, xmm3, xmm6, xmm1); // mask
+    c.vpblendvb(hd, hs, xmm2, xmm4);
+    c.vpxor(xmm0, xmm0, xmm0);
+    c.vmovaps(haccl, hd);
+    c.vmovaps(GlobalVarPtr(vcc.lo), xmm6);
+    c.vmovaps(GlobalVarPtr(vcc.hi), xmm3);
+    c.vmovaps(GlobalVarPtr(vce), xmm0);
+    c.vmovaps(GlobalVarPtr(vco), xmm0);
+    if constexpr (os.windows) {
+        reg_alloc.RestoreHost(xmm6);
+        reg_alloc.RestoreHost(xmm7);
+    }
 }
 
 void vcr(u32 vs, u32 vt, u32 vd, u32 e)
@@ -998,9 +1000,7 @@ void vmacq(u32 vd)
     Xmm hd = GetDirtyVpr(vd);
     auto [haccl, haccm, hacch] = GetDirtyAccs();
     reg_alloc.Free(xmm3);
-    c.vpcmpeqw(xmm0, xmm0, xmm0);
-    c.vpxor(xmm0, haccm, xmm0);
-    c.vpand(xmm0, xmm0, GlobalVarPtr(mask32x8));
+    c.vpandn(xmm0, haccm, GlobalVarPtr(mask32x8)); // 0 or 32
     c.vpxor(xmm1, xmm1, xmm1);
     c.vpcmpeqw(xmm2, hacch, xmm1); // acch eqz
     c.vpsrlw(xmm3, haccm, 5);
@@ -1012,7 +1012,7 @@ void vmacq(u32 vd)
     c.vmovaps(xmm2, haccm); // prev accm
     c.vpsubw(haccm, haccm, xmm1);
     c.vpcmpeqw(xmm1, xmm1, xmm1);
-    c.vpsllw(xmm1, xmm1, 15); // sign mask
+    c.vpsllw(xmm1, xmm1, 15); // 0x8000
     c.vpaddw(xmm3, haccm, xmm1);
     c.vpaddw(xmm1, xmm2, xmm1);
     c.vpcmpgtw(xmm1, xmm3, xmm1); // borrow
@@ -1022,7 +1022,7 @@ void vmacq(u32 vd)
     c.vpand(xmm0, xmm0, xmm2); // pos addend
     c.vpaddw(haccm, haccm, xmm0);
     c.vpsrlw(xmm0, haccm, 1);
-    c.vpsllw(xmm1, hacch, 1);
+    c.vpsllw(xmm1, hacch, 15);
     c.vpor(xmm0, xmm0, xmm1); // clamp input low
     c.vpsraw(xmm1, hacch, 1); // clamp input high
     c.vpunpcklwd(xmm2, xmm0, xmm1);
@@ -1094,10 +1094,16 @@ template<bool vmadm> void vmadmn(u32 vs, u32 vt, u32 vd, u32 e)
     c.vpaddw(xmm0, xmm0, xmm1);
     c.vpcmpgtw(xmm0, xmm0, xmm2); // low acc carry
     c.vpxor(xmm2, xmm2, xmm2);
-    c.vpcmpgtw(xmm2, xmm2, hs);
-    c.vpsrlw(xmm2, xmm2, 15);
-    c.vpmullw(xmm2, xmm2, ht);
-    c.vpmulhuw(xmm3, ht, hs);
+    if constexpr (vmadm) {
+        c.vpcmpgtw(xmm2, xmm2, hs);
+        c.vpsrlw(xmm2, xmm2, 15);
+        c.vpmullw(xmm2, xmm2, ht);
+    } else { // vmadn
+        c.vpcmpgtw(xmm2, xmm2, ht);
+        c.vpsrlw(xmm2, xmm2, 15);
+        c.vpmullw(xmm2, xmm2, hs);
+    }
+    c.vpmulhuw(xmm3, hs, ht);
     c.vpsubw(xmm2, xmm3, xmm2); // add acc mid
     c.vpsraw(xmm3, xmm2, 15); // add acc high
     c.vpaddw(hacch, hacch, xmm3);
@@ -1277,22 +1283,23 @@ void vmulu(u32 vs, u32 vt, u32 vd, u32 e)
 
 void vnand(u32 vs, u32 vt, u32 vd, u32 e)
 {
-    Xmm hd = GetDirtyVpr(vd), hs = GetVpr(vs), ht = GetVte(vt, e);
+    Xmm hd = GetDirtyVpr(vd), hs = GetVpr(vs), ht = GetVte(vt, e), haccl = GetDirtyAccLow();
     c.vpand(hd, hs, ht);
     c.vpcmpeqd(xmm0, xmm0, xmm0);
     c.vpxor(hd, hd, xmm0);
-    c.vmovaps(ptr(acc.low), hd);
+    c.vmovaps(haccl, hd);
 }
 
 void vne(u32 vs, u32 vt, u32 vd, u32 e)
 {
-    Xmm hd = GetDirtyVpr(vd), hs = GetVpr(vs), ht = GetVte(vt, e);
+    Xmm hd = GetDirtyVpr(vd), hs = GetVpr(vs), ht = GetVte(vt, e), haccl = GetDirtyAccLow();
     c.vpcmpeqw(xmm0, hs, ht); // eq
     c.vpcmpeqw(xmm1, xmm1, xmm1);
     c.vpxor(xmm0, xmm0, xmm1);
     c.vpor(xmm0, xmm0, GlobalVarPtr(vco.hi)); // vcc.lo
     c.vmovaps(GlobalVarPtr(vcc.lo), xmm0);
     c.vpblendvb(hd, ht, hs, xmm0);
+    c.vmovaps(haccl, hd);
     c.vpxor(xmm0, xmm0, xmm0);
     c.vmovaps(GlobalVarPtr(vcc.hi), xmm0);
     c.vmovaps(GlobalVarPtr(vco), ymm0);
@@ -1333,6 +1340,7 @@ void vrcpq(u32 vt, u32 vt_e, u32 vd, u32 vd_e, void* impl)
     c.vmovaps(haccl, hte);
     reg_alloc.Free(host_gpr_arg[0]);
     c.vpextrw(host_gpr_arg[0].r32(), ht, vt_e & 7);
+    c.movsx(host_gpr_arg[0].r32(), host_gpr_arg[0].r16());
     reg_alloc.Call(impl);
     Xmm hd = GetDirtyVpr(vd);
     c.vpinsrw(hd, hd, eax, vd_e & 7);
@@ -1385,20 +1393,20 @@ void vrcpl(u32 vt, u32 vt_e, u32 vd, u32 vd_e)
 template<bool p> void vrnd(u32 vt, u32 vt_e, u32 vd, u32 vd_e)
 {
     Xmm hd = GetDirtyVpr(vd), ht = GetVte(vt, vt_e), haccm = GetDirtyAccMid(), hacch = GetDirtyAccHigh();
+    Xmm haccl = (vd_e & 1) ? Xmm{} : GetDirtyAccLow();
     reg_alloc.Free(xmm3);
     c.vpsraw(xmm0, hacch, 16); // cond
     if constexpr (p) {
         c.vpxor(xmm1, xmm1, xmm1);
         c.vpcmpeqw(xmm0, xmm0, xmm1);
     }
-    if (vd & 1) { // add_low == ht
+    if (vd_e & 1) { // add_low == 0, add_mid = vt, add_high = vt >> 16
         c.vpaddw(xmm1, haccm, ht); // new mid
-    } else { // add_low == 0, add_mid == ht
-        Xmm haccl = GetDirtyAccLow();
+    } else { // add_low == ht, add_mid = vt >> 16, add_high = vt >> 16
         c.vpaddw(xmm1, haccl, ht); // new low
         c.vpblendvb(xmm1, haccl, xmm1, xmm0);
         c.vpcmpeqw(xmm2, xmm2, xmm2);
-        c.vpsllw(xmm2, xmm2, 15); // sign mask
+        c.vpsllw(xmm2, xmm2, 15); // 0x8000
         c.vpaddw(xmm3, xmm1, xmm2);
         c.vpaddw(xmm2, haccl, xmm2);
         c.vpcmpgtw(xmm2, xmm2, xmm3); // low carry
@@ -1409,7 +1417,7 @@ template<bool p> void vrnd(u32 vt, u32 vt_e, u32 vd, u32 vd_e)
     }
     c.vpblendvb(xmm1, haccm, xmm1, xmm0);
     c.vpcmpeqw(xmm2, xmm2, xmm2);
-    c.vpsllw(xmm2, xmm2, 15); // sign mask
+    c.vpsllw(xmm2, xmm2, 15); // 0x8000
     c.vpaddw(xmm3, xmm1, xmm2);
     c.vpaddw(xmm2, haccm, xmm2);
     c.vpcmpgtw(xmm2, xmm2, xmm3); // mid carry
@@ -1452,9 +1460,9 @@ void vsar(u32 vd, u32 e)
 {
     Xmm hd = GetDirtyVpr(vd);
     switch (e) {
-    case 8: c.vmovaps(hd, GetAccLow()); break;
+    case 8: c.vmovaps(hd, GetAccHigh()); break;
     case 9: c.vmovaps(hd, GetAccMid()); break;
-    case 10: c.vmovaps(hd, GetAccHigh()); break;
+    case 10: c.vmovaps(hd, GetAccLow()); break;
     default: c.vpxor(hd, hd, hd); break;
     }
 }
@@ -1477,7 +1485,7 @@ void vsubc(u32 vs, u32 vt, u32 vd, u32 e)
 {
     Xmm hd = GetDirtyVpr(vd), hs = GetVpr(vs), ht = GetVte(vt, e), haccl = GetDirtyAccLow();
     c.vpcmpeqw(xmm0, xmm0, xmm0);
-    c.vpsllw(xmm0, xmm0, 15); // sign mask
+    c.vpsllw(xmm0, xmm0, 15); // 0x8000
     c.vpaddw(xmm1, hs, xmm0);
     c.vpaddw(xmm2, ht, xmm0);
     c.vpcmpgtw(xmm0, xmm2, xmm1); // vco.lo

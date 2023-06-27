@@ -244,8 +244,8 @@ void lfv(u32 base, u32 vt, u32 e, s32 offset)
     addr &= ~7;
     s16 tmp[8];
     for (int i = 0; i < 4; ++i) {
-        tmp[i] = dmem[addr + (addr_offset + 4 * i & 15) & 0xFFF] << 7;
-        tmp[i + 4] = dmem[addr + (addr_offset + 4 * i + 8 & 15) & 0xFFF] << 7;
+        s16 val = dmem[addr + (addr_offset + 4 * i & 15) & 0xFFF] << 7;
+        tmp[lfv_table[2 * i]] = tmp[lfv_table[2 * i + 1]] = val;
     }
     for (auto byte = e; byte < std::min(e + 8, 16u); ++byte) {
         vpr_dst[byte ^ 1] = reinterpret_cast<u8*>(tmp)[byte ^ 1];
@@ -638,7 +638,7 @@ void vmacq(u32 vd)
     /* Given result = acc.mid | acc.high << 16: if !result.5, add 32 if result < 0, else if result >= 32,
      * subtract 32. */
     m128i mask = _mm_set1_epi16(32);
-    m128i addend = _mm_and_si128(_mm_not_si128(acc.mid), mask); /* 0 or 32 */
+    m128i addend = _mm_andnot_si128(acc.mid, mask); /* 0 or 32 */
     m128i acc_high_gtz = _mm_cmpgt_epi16(acc.high, _mm_setzero_si128());
     m128i acc_high_ltz = _mm_cmplt_epi16(acc.high, _mm_setzero_si128());
     m128i acc_high_eqz = _mm_cmpeq_epi16(acc.high, _mm_setzero_si128());

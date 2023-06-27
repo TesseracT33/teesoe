@@ -7,6 +7,7 @@
 namespace n64::rsp {
 
 void InterpretOneInstruction();
+void OnSingleStep();
 u32 RunInterpreter(u32 rsp_cycles);
 
 struct Interpreter : public mips::Interpreter<s32, s32, u32> {

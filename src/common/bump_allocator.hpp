@@ -4,34 +4,39 @@
 #include "types.hpp"
 
 #include <algorithm>
-#include <array>
 #include <vector>
 
 class BumpAllocator {
 public:
-    BumpAllocator(size_t size = 0) : memory{}, index{} { allocate(size); }
+    BumpAllocator(size_t size = 0) : memory_{}, index_{}, ran_out_of_memory_on_last_acquire_{} { allocate(size); }
 
     u8* acquire(size_t size)
     {
-        if (index >= memory.size()) {
-            log_warn("[JIT] ran out of space for pool allocator; resetting all available memory.");
-            std::ranges::fill(memory, 0);
-            index = 0;
+        if (index_ + size >= memory_.size()) {
+            log_warn("Bump allocator ran out of memory; resetting all available memory.");
+            std::ranges::fill(memory_, 0);
+            index_ = 0;
+            ran_out_of_memory_on_last_acquire_ = true;
+        } else {
+            ran_out_of_memory_on_last_acquire_ = false;
         }
-        u8* ret = &memory[index];
-        index += size;
-        return ret;
+        u8* alloc = &memory_[index_];
+        index_ += size;
+        return alloc;
     }
 
     void allocate(size_t size)
     {
-        memory.resize(size, 0);
-        index = 0;
+        memory_.resize(size, 0);
+        index_ = 0;
     }
 
-    void deallocate() { memory.clear(); }
+    void deallocate() { memory_.clear(); }
+
+    bool ran_out_of_memory_on_last_acquire() const { return ran_out_of_memory_on_last_acquire_; }
 
 private:
-    std::vector<u8> memory;
-    size_t index;
+    std::vector<u8> memory_;
+    size_t index_;
+    bool ran_out_of_memory_on_last_acquire_;
 };

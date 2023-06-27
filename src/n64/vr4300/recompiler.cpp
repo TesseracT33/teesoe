@@ -67,7 +67,7 @@ void BlockEpilogWithJmp(void* func)
 
 void BlockEpilogWithPcFlush(int pc_offset)
 {
-    c.mov(ptr(pc), jit_pc + pc_offset);
+    c.mov(GlobalVarPtr(pc), jit_pc + pc_offset);
     BlockEpilog();
 }
 
@@ -79,8 +79,8 @@ void BlockProlog()
 
 void BlockRecordCycles()
 {
-    c.add(ptr(cycle_counter), block_cycles);
-    c.add(ptr(cop0.count), block_cycles);
+    c.add(GlobalVarPtr(cycle_counter), block_cycles);
+    c.add(GlobalVarPtr(cop0.count), block_cycles);
 }
 
 bool CheckDwordOpCondJit()
@@ -95,9 +95,9 @@ bool CheckDwordOpCondJit()
 
 void DiscardBranchJit()
 {
-    c.mov(ptr(in_branch_delay_slot_taken), 0);
-    c.mov(ptr(in_branch_delay_slot_not_taken), 0);
-    c.mov(ptr(branch_state), std::to_underlying(BranchState::NoBranch));
+    c.mov(GlobalVarPtr(in_branch_delay_slot_taken), 0);
+    c.mov(GlobalVarPtr(in_branch_delay_slot_not_taken), 0);
+    c.mov(GlobalVarPtr(branch_state), std::to_underlying(BranchState::NoBranch));
     BlockEpilogWithPcFlush(8);
 }
 
@@ -157,12 +157,11 @@ void InvalidateRange(u32 addr_lo, u32 addr_hi)
 void JumpJit()
 {
     Label l_end = c.newLabel();
-    c.mov(rax, ptr(jump_addr));
-    c.mov(ptr(pc), rax);
-    c.mov(ptr(branch_state), std::to_underlying(BranchState::NoBranch));
-    c.mov(ptr(in_branch_delay_slot_taken), 0);
+    c.mov(rax, GlobalVarPtr(jump_addr));
+    c.mov(GlobalVarPtr(pc), rax);
+    c.mov(GlobalVarPtr(branch_state), std::to_underlying(BranchState::NoBranch));
+    c.mov(GlobalVarPtr(in_branch_delay_slot_taken), 0);
     c.and_(eax, 3);
-    c.test(eax, eax);
     c.je(l_end);
     // BlockEpilogWithJmp(AddressErrorException<MemOp::InstrFetch>);
     c.bind(l_end);
@@ -175,12 +174,9 @@ void LinkJit(u32 reg)
 
 void OnBranchNotTakenJit()
 {
-    c.xor_(eax, eax);
-    c.mov(ptr(in_branch_delay_slot_taken), al);
-    c.mov(eax, 1);
-    c.mov(ptr(in_branch_delay_slot_not_taken), al);
-    c.mov(eax, std::to_underlying(BranchState::DelaySlotNotTaken));
-    c.mov(ptr(branch_state), eax);
+    c.mov(GlobalVarPtr(in_branch_delay_slot_taken), 0);
+    c.mov(GlobalVarPtr(in_branch_delay_slot_not_taken), 1);
+    c.mov(GlobalVarPtr(branch_state), std::to_underlying(BranchState::DelaySlotNotTaken));
 }
 
 u32 RunRecompiler(u32 cpu_cycles)
@@ -215,7 +211,7 @@ u32 RunRecompiler(u32 cpu_cycles)
             // slot did not fit, execute only the first instruction in this block, before jumping.
             // The jump can be cancelled if the first instruction is also a branch.
             Label l_end = c.newLabel();
-            c.cmp(ptr(branch_state), std::to_underlying(BranchState::Perform));
+            c.cmp(GlobalVarPtr(branch_state), std::to_underlying(BranchState::Perform));
             c.jne(l_end);
             BlockEpilog();
             c.bind(l_end);

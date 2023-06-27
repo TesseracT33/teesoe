@@ -12,7 +12,7 @@ using namespace asmjit::x86;
 void Cop2Prolog()
 {
     Label l0 = c.newLabel();
-    c.bt(ptr(cop0.status), 30);
+    c.bt(GlobalVarPtr(cop0.status), 30);
     c.jc(l0);
     reg_alloc.Free(host_gpr_arg[0]);
     c.mov(host_gpr_arg[0].r32(), 2);

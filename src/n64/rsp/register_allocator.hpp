@@ -12,10 +12,8 @@ using namespace asmjit;
 inline constexpr std::array reg_alloc_volatile_gprs = [] {
     using namespace x86;
     if constexpr (os.linux) {
-        // return std::array{ r11, r10, r9, r8, rcx, rdx, rsi, rdi };
         return std::array{ r11, r10, r9, r8, rsi, rdi };
     } else {
-        // return std::array{ r11, r10, r9, r8, rdx, rcx };
         return std::array{ r11, r10, r9, r8 };
     }
 }();
@@ -35,23 +33,23 @@ inline constexpr std::array reg_alloc_volatile_vprs = [] {
         if constexpr (avx512) {
             // clang-format off
             return std::array{
-                xmm3, xmm4, xmm5, xmm6, xmm7, xmm16, xmm17, xmm18, xmm19, xmm20,
-                xmm21, xmm22, xmm23, xmm24, xmm25, xmm26, xmm27, xmm28, xmm29, xmm30, xmm31,
+                xmm16, xmm17, xmm18, xmm19, xmm20, xmm21, xmm22, xmm23, xmm24, xmm25, 
+                xmm26, xmm27, xmm28, xmm29, xmm30, xmm31, xmm7, xmm6, xmm5, xmm4, xmm3
             };
             // clang-format on
         } else {
-            return std::array{ xmm3, xmm4, xmm5, xmm6, xmm7 };
+            return std::array{ xmm7, xmm6, xmm5, xmm4, xmm3 };
         }
     } else {
         if constexpr (avx512) {
             // clang-format off
             return std::array{
-                xmm3, xmm4, xmm5, xmm16, xmm17, xmm18, xmm19, xmm20, xmm21, 
-                xmm22, xmm23, xmm24, xmm25, xmm26, xmm27, xmm28, xmm29, xmm30, xmm31,
+                xmm16, xmm17, xmm18, xmm19, xmm20, xmm21, xmm22, xmm23, xmm24, 
+                xmm25, xmm26, xmm27, xmm28, xmm29, xmm30, xmm31, xmm5, xmm4, xmm3
             };
             // clang-format on
         } else {
-            return std::array{ xmm3, xmm4, xmm5 };
+            return std::array{ xmm5, xmm4, xmm3 };
         }
     }
 }();
@@ -289,6 +287,39 @@ public:
         }
     }
 
+    void RestoreHost(HostGpr gpr)
+    {
+        if constexpr (arch.a64) {
+        } else {
+            c.mov(gpr.r64(), qword_ptr(x86::rsp, 8 * gpr.id()));
+        }
+    }
+
+    void RestoreHost(HostVpr128 vpr)
+    {
+        if constexpr (arch.a64) {
+        } else {
+            static_assert(gprs_stack_space % 16 == 0);
+            c.vmovaps(vpr, xmmword_ptr(x86::rsp, 16 * vpr.id() + gprs_stack_space));
+        }
+    }
+
+    void SaveHost(HostGpr gpr)
+    {
+        if constexpr (arch.a64) {
+        } else {
+            c.mov(qword_ptr(x86::rsp, 8 * gpr.id()), gpr.r64());
+        }
+    }
+
+    void SaveHost(HostVpr128 vpr)
+    {
+        if constexpr (arch.a64) {
+        } else {
+            c.vmovaps(xmmword_ptr(x86::rsp, 16 * vpr.id() + gprs_stack_space), vpr);
+        }
+    }
+
 private:
     enum : u32 {
         acc_low_idx = 32,
@@ -434,39 +465,6 @@ private:
                     }
                 }
             }
-        }
-    }
-
-    void RestoreHost(HostGpr gpr)
-    {
-        if constexpr (arch.a64) {
-        } else {
-            c.mov(gpr.r64(), qword_ptr(x86::rsp, 8 * gpr.id()));
-        }
-    }
-
-    void RestoreHost(HostVpr128 vpr)
-    {
-        if constexpr (arch.a64) {
-        } else {
-            static_assert(gprs_stack_space % 16 == 0);
-            c.vmovaps(vpr, xmmword_ptr(x86::rsp, 16 * vpr.id() + gprs_stack_space));
-        }
-    }
-
-    void SaveHost(HostGpr gpr)
-    {
-        if constexpr (arch.a64) {
-        } else {
-            c.mov(qword_ptr(x86::rsp, 8 * gpr.id()), gpr.r64());
-        }
-    }
-
-    void SaveHost(HostVpr128 vpr)
-    {
-        if constexpr (arch.a64) {
-        } else {
-            c.vmovaps(xmmword_ptr(x86::rsp, 16 * vpr.id() + gprs_stack_space), vpr);
         }
     }
 } inline reg_alloc{ compiler };

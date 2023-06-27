@@ -24,7 +24,7 @@ struct Recompiler : public mips::Recompiler<s32, s32, u32, RegisterAllocator> {
         Label l_end = c.newLabel();
         c.or_(GlobalVarPtr(sp.status), 3); // set halted, broke
         c.bt(GlobalVarPtr(sp.status), 6); // test intbreak
-        c.jnb(l_end);
+        c.jnc(l_end);
         reg_alloc.Free(host_gpr_arg[0]);
         c.mov(host_gpr_arg[0].r32(), std::to_underlying(mi::InterruptType::SP));
         reg_alloc.Call(mi::RaiseInterrupt); // todo: do jmp with block epilogue
@@ -34,13 +34,13 @@ struct Recompiler : public mips::Recompiler<s32, s32, u32, RegisterAllocator> {
 
     void j(u32 instr) const
     {
-        take_branch((instr << 2) & 0xFFF);
+        take_branch(instr << 2 & 0xFFF);
         branch_hit = true;
     }
 
     void jal(u32 instr) const
     {
-        take_branch((instr << 2) & 0xFFF);
+        take_branch(instr << 2 & 0xFFF);
         LinkJit(31);
         branch_hit = true;
     }
@@ -133,12 +133,24 @@ struct Recompiler : public mips::Recompiler<s32, s32, u32, RegisterAllocator> {
     }
 
     void mtc0(u32 rt, u32 rd) const
-    {
-        reg_alloc.Free(host_gpr_arg[0]);
-        reg_alloc.Free(host_gpr_arg[1]);
+    { // TODO: possible to start DMA to IMEM and cause invalidation of the currently executed block
+        reg_alloc.Free<2>({ host_gpr_arg[0], host_gpr_arg[1] });
         c.mov(host_gpr_arg[0].r32(), (rd & 7) << 2);
         c.mov(host_gpr_arg[1].r32(), GetGpr(rt));
         reg_alloc.Call(rd & 8 ? rdp::WriteReg : rsp::WriteReg);
+        if ((rd & 7) == 4) { // SP_STATUS
+            Label l_no_halt = c.newLabel(), l_no_sstep = c.newLabel();
+            c.bt(GlobalVarPtr(sp.status), 0); // halted
+            c.jnc(l_no_halt);
+            BlockEpilogWithPcFlush(4);
+
+            c.bind(l_no_halt);
+            c.bt(GlobalVarPtr(sp.status), 5); // sstep
+            c.jnc(l_no_sstep);
+            BlockEpilogWithPcFlush(4);
+
+            c.bind(l_no_sstep);
+        }
     }
 
     void sb(u32 rs, u32 rt, s16 imm) const

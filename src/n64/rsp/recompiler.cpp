@@ -27,12 +27,10 @@ struct Pool {
     std::array<Block*, 64> blocks;
 };
 
-static void BlockEpilogWithPcFlush(int pc_offset);
 static void BlockRecordCycles();
 static void ExecuteBlock(Block* block);
 static std::pair<Block*, bool> GetBlock(u32 pc);
 
-constexpr bool use_avx512 = false;
 constexpr size_t num_pools = 16; // imem size (0x1000) / bytes per pool (0x100)
 
 static BumpAllocator allocator;
@@ -72,21 +70,21 @@ void BlockProlog()
         log_error(std::format("Failed to attach asmjit compiler to code holder; returned {}",
           asmjit::DebugUtils::errorAsString(err)));
     }
-    if constexpr (enable_rsp_jit_error_logging) {
+    if constexpr (enable_rsp_jit_error_handler) {
         static AsmjitLogErrorHandler asmjit_log_error_handler{};
         code_holder.setErrorHandler(&asmjit_log_error_handler);
     }
-    if constexpr (enable_rsp_jit_block_logging) {
+    if constexpr (log_rsp_jit_blocks) {
         jit_logger.addFlags(FormatFlags::kMachineCode);
         code_holder.setLogger(&jit_logger);
     }
     FuncNode* func_node = c.addFunc(FuncSignatureT<void>());
     func_node->frame().setAvxEnabled();
     func_node->frame().setAvxCleanup();
-    if constexpr (use_avx512) {
+    if constexpr (avx512) {
         func_node->frame().setAvx512Enabled();
     }
-    if constexpr (enable_rsp_jit_block_logging) {
+    if constexpr (log_rsp_jit_blocks) {
         jit_logger.log("======== RSP BLOCK BEGIN ========\n");
     }
     // epilog_label = c.newLabel();
@@ -122,6 +120,7 @@ void ExecuteBlock(Block* block)
 std::pair<Block*, bool> GetBlock(u32 pc)
 {
     static_assert(std::has_single_bit(num_pools));
+acquire:
     Pool*& pool = pools[pc >> 8 & (num_pools - 1)]; // each pool 6 bits, each instruction 2 bits
     if (!pool) {
         pool = reinterpret_cast<Pool*>(allocator.acquire(sizeof(Pool)));
@@ -130,13 +129,16 @@ std::pair<Block*, bool> GetBlock(u32 pc)
     bool compiled = block != nullptr;
     if (!compiled) {
         block = reinterpret_cast<Block*>(allocator.acquire(sizeof(Block)));
+        if (allocator.ran_out_of_memory_on_last_acquire()) {
+            goto acquire;
+        }
     }
     return { block, compiled };
 }
 
 Status InitRecompiler()
 {
-    allocator.allocate(4_MiB);
+    allocator.allocate(32_MiB);
     pools.resize(num_pools, nullptr);
     return status_ok();
 }
@@ -147,9 +149,10 @@ void Invalidate(u32 addr)
         assert(addr <= 0x1000);
         Pool*& pool = pools[addr >> 8]; // each pool 6 bits, each instruction 2 bits
         if (pool) {
-            for (Block* block : pool->blocks) {
+            for (Block*& block : pool->blocks) {
                 if (block) {
                     jit_runtime.release(block->func);
+                    block = nullptr;
                 }
             }
             pool = nullptr;
@@ -178,10 +181,9 @@ u32 RunRecompiler(u32 rsp_cycles)
     if (sp.status.halted) return 0;
     cycle_counter = 0;
     if (sp.status.sstep) {
-        InterpretOneInstruction();
-        sp.status.halted = true;
+        OnSingleStep();
     } else {
-        while (cycle_counter < rsp_cycles && !sp.status.halted) {
+        while (cycle_counter < rsp_cycles && !sp.status.halted && !sp.status.sstep) {
             auto [block, compiled] = GetBlock(pc);
             assert(block);
             if (compiled) {
@@ -245,6 +247,8 @@ u32 RunRecompiler(u32 rsp_cycles)
                 pc = jump_addr;
                 jump_is_pending = in_branch_delay_slot = false;
             }
+        } else if (sp.status.sstep) {
+            OnSingleStep();
         }
     }
     return cycle_counter <= rsp_cycles ? 0 : cycle_counter - rsp_cycles;

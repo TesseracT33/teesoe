@@ -22,15 +22,20 @@ void InterpretOneInstruction()
     pc = (pc + 4) & 0xFFC;
 }
 
+void OnSingleStep()
+{
+    InterpretOneInstruction();
+    sp.status.halted = true;
+}
+
 u32 RunInterpreter(u32 rsp_cycles)
 {
     if (sp.status.halted) return 0;
     cycle_counter = 0;
     if (sp.status.sstep) {
-        InterpretOneInstruction();
-        sp.status.halted = true;
+        OnSingleStep();
     } else {
-        while (cycle_counter < rsp_cycles && !sp.status.halted) {
+        while (cycle_counter < rsp_cycles && !sp.status.halted && !sp.status.sstep) {
             InterpretOneInstruction();
         }
         if (sp.status.halted) {
@@ -38,6 +43,8 @@ u32 RunInterpreter(u32 rsp_cycles)
                 pc = jump_addr;
                 jump_is_pending = in_branch_delay_slot = false;
             }
+        } else if (sp.status.sstep) {
+            OnSingleStep();
         }
     }
     return cycle_counter <= rsp_cycles ? 0 : cycle_counter - rsp_cycles;

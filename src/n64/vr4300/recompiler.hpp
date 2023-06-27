@@ -57,6 +57,33 @@ inline u64 jit_pc;
 inline u32 block_cycles;
 inline bool branch_hit, branched;
 
+template<typename T> auto GlobalVarPtr(T const& obj)
+{
+    if constexpr (std::is_pointer_v<T>) {
+        return jit_mem_global_var(asmjit::x86::rbp, gpr.ptr(0), obj);
+    } else {
+        return jit_mem_global_var(asmjit::x86::rbp, gpr.ptr(0), &obj);
+    }
+}
+
+template<typename T> auto GlobalArrPtrWithImmOffset(T const& obj, u32 index, size_t ptr_size)
+{
+    if constexpr (std::is_pointer_v<T>) {
+        return jit_mem_global_arr_with_imm_index(asmjit::x86::rbp, index, gpr.ptr(0), obj, ptr_size);
+    } else {
+        return jit_mem_global_arr_with_imm_index(asmjit::x86::rbp, index, gpr.ptr(0), &obj, ptr_size);
+    }
+}
+
+template<typename T> auto GlobalArrPtrWithRegOffset(T const& obj, asmjit::x86::Gp index, size_t ptr_size)
+{
+    if constexpr (std::is_pointer_v<T>) {
+        return jit_mem_global_arr_with_reg_index(asmjit::x86::rbp, index.r64(), gpr.ptr(0), obj, ptr_size);
+    } else {
+        return jit_mem_global_arr_with_reg_index(asmjit::x86::rbp, index.r64(), gpr.ptr(0), &obj, ptr_size);
+    }
+}
+
 inline void JitCallInterpreterImpl(auto impl)
 {
     reg_alloc.Call(impl);
@@ -88,14 +115,14 @@ inline void TakeBranchJit(auto target)
 {
     using namespace asmjit::x86;
     auto& c = compiler;
-    c.mov(ptr(in_branch_delay_slot_taken), 1);
-    c.mov(ptr(in_branch_delay_slot_not_taken), 0);
-    c.mov(ptr(branch_state), std::to_underlying(mips::BranchState::DelaySlotTaken));
+    c.mov(GlobalVarPtr(in_branch_delay_slot_taken), 1);
+    c.mov(GlobalVarPtr(in_branch_delay_slot_not_taken), 0);
+    c.mov(GlobalVarPtr(branch_state), std::to_underlying(mips::BranchState::DelaySlotTaken));
     if constexpr (std::integral<decltype(target)>) {
         c.mov(rax, target);
-        c.mov(ptr(jump_addr), rax);
+        c.mov(GlobalVarPtr(jump_addr), rax);
     } else {
-        c.mov(ptr(jump_addr), target);
+        c.mov(GlobalVarPtr(jump_addr), target);
     }
 }
 
