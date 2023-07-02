@@ -107,7 +107,7 @@ void HandleException()
         if (in_delay_slot) cop0.epc -= 4;
         cop0.status.exl = 1;
         SignalInterruptFalse();
-        SetActiveVirtualToPhysicalFunctions();
+        SetVaddrToPaddrFuncs();
     }
     ResetBranch();
 }

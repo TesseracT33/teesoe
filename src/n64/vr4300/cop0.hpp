@@ -38,7 +38,7 @@ struct Cop0Reg {
     };
 };
 
-inline constexpr std::array cop0_reg_str_repr = {
+inline constexpr std::array cop0_reg_to_str = {
     "INDEX",
     "RANDOM",
     "ENTRY_LO_0",
@@ -72,7 +72,7 @@ inline constexpr std::array cop0_reg_str_repr = {
     "ERROR_EPC",
     "COP0_31",
 };
-static_assert(cop0_reg_str_repr.size() == 32);
+static_assert(cop0_reg_to_str.size() == 32);
 
 void OnCountCompareMatchEvent();
 template<bool initial_add = false> void ReloadCountCompareEvent();

@@ -12,8 +12,7 @@ void InterpretOneInstruction()
     u32 instr = FetchInstruction(pc);
     decoder::exec_rsp<CpuImpl::Interpreter>(instr);
     if (jump_is_pending) {
-        pc = jump_addr;
-        jump_is_pending = in_branch_delay_slot = false;
+        PerformBranch();
         return;
     }
     if (in_branch_delay_slot) {
@@ -40,8 +39,7 @@ u32 RunInterpreter(u32 rsp_cycles)
         }
         if (sp.status.halted) {
             if (jump_is_pending) { // note for future refactors: this makes rsp::op_break::BREAKWithinDelay pass
-                pc = jump_addr;
-                jump_is_pending = in_branch_delay_slot = false;
+                PerformBranch();
             }
         } else if (sp.status.sstep) {
             OnSingleStep();

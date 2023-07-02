@@ -11,6 +11,7 @@
 #include <array>
 #include <bit>
 #include <cassert>
+#include <concepts>
 #include <expected>
 #include <format>
 #include <limits>
@@ -18,8 +19,20 @@
 #include <type_traits>
 
 using AsmjitCompiler = std::conditional_t<arch.x64, asmjit::x86::Compiler, asmjit::a64::Compiler>;
-using HostGpr = std::conditional_t<arch.x64, asmjit::x86::Gpq, asmjit::a64::GpX>;
+using HostGpr32 = std::conditional_t<arch.x64, asmjit::x86::Gpd, asmjit::a64::GpW>;
+using HostGpr64 = std::conditional_t<arch.x64, asmjit::x86::Gpq, asmjit::a64::GpX>;
+using HostGpr = HostGpr64;
 using HostVpr128 = std::conditional_t<arch.x64, asmjit::x86::Xmm, asmjit::a64::VecV>;
+
+template<size_t size> struct SizeToHostReg {};
+
+template<> struct SizeToHostReg<4> {
+    using type = HostGpr32;
+};
+
+template<> struct SizeToHostReg<8> {
+    using type = HostGpr64;
+};
 
 struct AsmjitLogErrorHandler : public asmjit::ErrorHandler {
     void handleError(asmjit::Error err, char const* message, asmjit::BaseEmitter* origin) override
@@ -30,6 +43,8 @@ struct AsmjitLogErrorHandler : public asmjit::ErrorHandler {
 
 inline constexpr std::array host_gpr_arg = [] {
     if constexpr (arch.a64) {
+        using namespace asmjit::a64;
+        return std::array{ x0, x1, x2, x3, x4, x5, x6, x7 };
     } else {
         using namespace asmjit::x86;
         if constexpr (os.windows) {
@@ -40,18 +55,19 @@ inline constexpr std::array host_gpr_arg = [] {
     }
 }();
 
-inline asmjit::x86::Mem jit_mem_global_var(asmjit::x86::Gpq base_ptr_reg, auto const* base_ptr, auto const* obj_ptr)
+inline asmjit::x86::Mem
+  jit_mem_global_var(asmjit::x86::Gpq base_ptr_reg, auto const* base_ptr, auto const* obj_ptr, u32 ptr_size)
 {
     std::ptrdiff_t diff = reinterpret_cast<u8 const*>(obj_ptr) - reinterpret_cast<u8 const*>(base_ptr);
     assert(diff >= std::numeric_limits<s32>::min() && diff <= std::numeric_limits<s32>::max());
-    return asmjit::x86::ptr(base_ptr_reg, diff, sizeof(decltype(*obj_ptr)));
+    return asmjit::x86::ptr(base_ptr_reg, diff, ptr_size);
 }
 
 inline asmjit::x86::Mem jit_mem_global_arr_with_imm_index(asmjit::x86::Gpq base_ptr_reg,
   u32 index,
   auto const* base_ptr,
   auto const* arr_ptr,
-  size_t ptr_size)
+  u32 ptr_size)
 {
     std::ptrdiff_t diff = reinterpret_cast<u8 const*>(arr_ptr) + index - reinterpret_cast<u8 const*>(base_ptr);
     assert(diff >= std::numeric_limits<s32>::min() && diff <= std::numeric_limits<s32>::max());
@@ -62,14 +78,14 @@ inline asmjit::x86::Mem jit_mem_global_arr_with_reg_index(asmjit::x86::Gpq base_
   asmjit::x86::Gpq index,
   auto const* base_ptr,
   auto const* arr_ptr,
-  size_t ptr_size)
+  u32 ptr_size)
 {
     std::ptrdiff_t diff = reinterpret_cast<u8 const*>(arr_ptr) - reinterpret_cast<u8 const*>(base_ptr);
     assert(diff >= std::numeric_limits<s32>::min() && diff <= std::numeric_limits<s32>::max());
     return asmjit::x86::ptr(base_ptr_reg, index, 0u, diff, ptr_size);
 }
 
-inline void jit_x64_call(asmjit::x86::Compiler& c, auto func)
+inline void jit_x64_call_with_stack_alignment(asmjit::x86::Compiler& c, auto func)
 {
     using namespace asmjit::x86;
     if constexpr (os.linux) {
@@ -121,13 +137,28 @@ constexpr std::string_view host_reg_to_string(asmjit::x86::Gp gp)
 
 inline std::string host_reg_to_string(asmjit::x86::Xmm xmm)
 {
-    using namespace asmjit::x86;
     return std::format("xmm{}", xmm.id());
+}
+
+inline std::string host_reg_to_string(asmjit::x86::Ymm ymm)
+{
+    return std::format("ymm{}", ymm.id());
+}
+
+inline std::string host_reg_to_string(asmjit::x86::Zmm zmm)
+{
+    return std::format("zmm{}", zmm.id());
+}
+
+inline std::string host_reg_to_string(asmjit::arm::Vec vec)
+{
+    return std::format("v{}", vec.id());
 }
 
 constexpr bool is_volatile(HostGpr gpr)
 {
     if constexpr (arch.a64) {
+        return gpr.id() < 16;
     } else {
         using namespace asmjit::x86;
         if constexpr (os.windows) {
@@ -140,13 +171,14 @@ constexpr bool is_volatile(HostGpr gpr)
 
 constexpr bool is_volatile(HostVpr128 vpr)
 {
+    u32 id = vpr.id();
     if constexpr (arch.a64) {
+        return id < 16;
     } else {
-        using namespace asmjit::x86;
         if constexpr (os.windows) {
-            return one_of(vpr, xmm0, xmm1, xmm2, xmm3, xmm4, xmm5);
+            return id < 6 || id > 15;
         } else {
-            return one_of(vpr, xmm0, xmm1, xmm2, xmm3, xmm4, xmm5, xmm6, xmm7);
+            return id < 8 || id > 15;
         }
     }
 }

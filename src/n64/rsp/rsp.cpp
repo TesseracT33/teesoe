@@ -237,6 +237,12 @@ void OnDmaFinish()
     mi::RaiseInterrupt(mi::InterruptType::SP);
 }
 
+void PerformBranch()
+{
+    pc = jump_addr;
+    jump_is_pending = in_branch_delay_slot = false;
+}
+
 void PowerOn()
 {
     jump_is_pending = false;

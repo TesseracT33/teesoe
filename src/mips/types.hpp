@@ -15,6 +15,17 @@ enum class BranchState {
     Perform,
 };
 
+enum class Cond {
+    Eq,
+    Ge,
+    Geu,
+    Gt,
+    Le,
+    Lt,
+    Ltu,
+    Ne
+};
+
 enum class OperatingMode {
     User,
     Supervisor,

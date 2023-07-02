@@ -1,6 +1,6 @@
 #pragma once
 
-#include "mips/recompiler.hpp"
+#include "mips/recompiler_x64.hpp"
 #include "vr4300/recompiler.hpp"
 
 namespace n64::vr4300::x64 {
@@ -10,8 +10,8 @@ using namespace asmjit::x86;
 
 using RegAllocator = mips::RegisterAllocator<s64, reg_alloc_volatile_gprs.size(), reg_alloc_nonvolatile_gprs.size()>;
 
-struct Recompiler : public mips::Recompiler<s64, s64, u64, RegAllocator> {
-    using mips::Recompiler<s64, s64, u64, RegAllocator>::Recompiler;
+struct Recompiler : public mips::RecompilerX64<s64, s64, u64, RegAllocator> {
+    using mips::RecompilerX64<s64, s64, u64, RegAllocator>::RecompilerX64;
 
     void beq(u32 rs, u32 rt, s16 imm) const { branch<mips::Cond::Eq, false>(rs, rt, imm); }
 
@@ -224,6 +224,7 @@ struct Recompiler : public mips::Recompiler<s64, s64, u64, RegAllocator> {
         c.cmp(GlobalVarPtr(in_branch_delay_slot_taken), 1);
         c.je(l_end);
         TakeBranchJit((jit_pc + 4) & 0xFFFF'FFFF'F000'0000 | instr << 2 & 0xFFF'FFFF);
+
         c.bind(l_end);
         branch_hit = true;
     }
@@ -237,9 +238,11 @@ struct Recompiler : public mips::Recompiler<s64, s64, u64, RegAllocator> {
         c.mov(h31.r32(), 4);
         c.add(h31, GlobalVarPtr(jump_addr));
         c.jmp(l_end);
+
         c.bind(l_jump);
         c.mov(h31, jit_pc + 8);
         TakeBranchJit((jit_pc + 4) & 0xFFFF'FFFF'F000'0000 | instr << 2 & 0xFFF'FFFF);
+
         c.bind(l_end);
         branch_hit = true;
     }
@@ -253,6 +256,7 @@ struct Recompiler : public mips::Recompiler<s64, s64, u64, RegAllocator> {
         c.mov(hd.r32(), 4);
         c.add(hd, GlobalVarPtr(jump_addr));
         c.jmp(l_end);
+
         c.bind(l_jump);
         if (rs == rd) {
             c.mov(rax, hs);
@@ -262,6 +266,7 @@ struct Recompiler : public mips::Recompiler<s64, s64, u64, RegAllocator> {
             c.mov(hd, jit_pc + 8);
             TakeBranchJit(hs);
         }
+
         c.bind(l_end);
         branch_hit = true;
     }
@@ -273,6 +278,7 @@ struct Recompiler : public mips::Recompiler<s64, s64, u64, RegAllocator> {
         c.cmp(GlobalVarPtr(in_branch_delay_slot_taken), 1);
         c.je(l_end);
         TakeBranchJit(hs);
+
         c.bind(l_end);
         branch_hit = true;
     }
@@ -494,7 +500,7 @@ private:
         reg_alloc.Call(ReadVirtual<std::make_signed_t<Int>>);
 
         if constexpr (linked) {
-            c.mov(ecx, GlobalVarPtr(last_physical_address_on_load));
+            c.mov(ecx, GlobalVarPtr(last_paddr_on_load));
             c.shr(ecx, 4);
             c.mov(GlobalVarPtr(cop0.ll_addr), ecx);
             c.mov(GlobalVarPtr(ll_bit), 1);
@@ -512,7 +518,7 @@ private:
             if constexpr (std::same_as<Int, u8>) c.movzx(ht.r32(), al);
             if constexpr (std::same_as<Int, s16>) c.movsx(ht, ax);
             if constexpr (std::same_as<Int, u16>) c.movzx(ht.r32(), ax);
-            if constexpr (std::same_as<Int, s32>) c.movsx(ht, eax);
+            if constexpr (std::same_as<Int, s32>) c.movsxd(ht, eax);
             if constexpr (std::same_as<Int, u32>) c.mov(ht.r32(), eax);
             if constexpr (sizeof(Int) == 8) c.mov(ht, rax);
         }
@@ -522,13 +528,12 @@ private:
     {
         Label l_noexception = c.newLabel();
 
-        reg_alloc.Free(host_gpr_arg[0]);
+        reg_alloc.Free<2>({ rbx, host_gpr_arg[0] });
         Gpq hs = GetGpr(rs);
         c.lea(host_gpr_arg[0], ptr(hs, imm));
-        c.push(host_gpr_arg[0]);
+        c.mov(rbx, host_gpr_arg[0]);
 
-        reg_alloc.CallWithStackAlignment(ReadVirtual<std::make_signed_t<Int>, Alignment::UnalignedLeft>);
-        c.pop(host_gpr_arg[0]);
+        reg_alloc.Call(ReadVirtual<std::make_signed_t<Int>, Alignment::UnalignedLeft>);
         c.cmp(GlobalVarPtr(exception_occurred), 0);
         c.je(l_noexception);
 
@@ -564,9 +569,10 @@ private:
     {
         Label l_noexception = c.newLabel();
 
-        reg_alloc.Free(host_gpr_arg[0]);
+        reg_alloc.Free<2>({ rbx, host_gpr_arg[0] });
         Gpq hs = GetGpr(rs);
         c.lea(host_gpr_arg[0], ptr(hs, imm));
+        c.mov(rbx, host_gpr_arg[0]);
 
         reg_alloc.Call(ReadVirtual<std::make_signed_t<Int>, Alignment::UnalignedRight>);
         c.cmp(GlobalVarPtr(exception_occurred), 0);
@@ -632,8 +638,8 @@ private:
 
     template<std::integral Int> void store_conditional(u32 rs, u32 rt, s16 imm) const
     {
-        Label l_store, l_end = c.newLabel();
-        c.cmp(GlobalVarPtr(ll_bit), 0);
+        Label l_store = c.newLabel(), l_end = c.newLabel();
+        c.cmp(GlobalVarPtr(ll_bit), 1);
         c.je(l_store);
 
         if (rt) {
@@ -665,7 +671,7 @@ private:
     branch_hit,
     branched,
     [](u64 target) { TakeBranchJit(target); },
-    [](asmjit::x86::Gp target) { TakeBranchJit(target); },
+    [](HostGpr target) { TakeBranchJit(target); },
     LinkJit,
     BlockEpilog,
     BlockEpilogWithJmp,

@@ -22,6 +22,7 @@ void ClearInterruptPending(ExternalInterruptSource);
 u64 GetElapsedCycles();
 void InitRun(bool hle_pif);
 void NotifyIllegalInstrCode(u32 instr_code);
+void PerformBranch();
 void PowerOn();
 void Reset();
 void SetActiveCpuImpl(CpuImpl cpu_impl);

@@ -223,8 +223,7 @@ public:
         }
         if constexpr (arch.a64) {
         } else {
-            static_assert(register_stack_space == 128);
-            c.sub(x86::rsp, -register_stack_space); // sub rsp -128  smaller than  add rsp 128
+            c.add(x86::rsp, register_stack_space);
             c.ret();
         }
     }
@@ -237,7 +236,7 @@ public:
         }
         if constexpr (arch.a64) {
         } else {
-            c.sub(x86::rsp, -register_stack_space); // sub rsp -128  smaller than  add rsp 128
+            c.add(x86::rsp, register_stack_space);
             c.jmp(func);
         }
     }
@@ -247,7 +246,7 @@ public:
         state.Reset();
         if constexpr (arch.a64) {
         } else {
-            c.add(x86::rsp, -register_stack_space); // add rsp -128  smaller than  sub rsp 128
+            c.sub(x86::rsp, register_stack_space);
             if (is_nonvolatile(guest_gprs_pointer_reg)) {
                 SaveHost(guest_gprs_pointer_reg);
             }
@@ -261,7 +260,7 @@ public:
     void Call(auto func)
     {
         static_assert(
-          register_stack_space % 16 == 0); // Given this, the stack should already be aligned with the CALL, unless an
+          register_stack_space % 16 == 8); // Given this, the stack should already be aligned with the CALL, unless an
                                            // instruction impl used PUSH. TODO: make this more robust
         FlushAndDestroyAllVolatile();
         if constexpr (arch.a64) {
@@ -278,7 +277,7 @@ public:
         FlushAndDestroyAllVolatile();
         if constexpr (arch.a64) {
         } else {
-            jit_x64_call(c, func);
+            jit_x64_call_with_stack_alignment(c, func);
         }
         if (is_volatile(guest_gprs_pointer_reg)) {
             c.mov(guest_gprs_pointer_reg, guest_gprs.data());
@@ -341,7 +340,7 @@ public:
     }
 
 protected:
-    static constexpr int register_stack_space = 8 * 16; // todo: arm64
+    static constexpr int register_stack_space = 8 * 16 + 8; // +8 to offset stack for faster CALLs
     static constexpr bool mips32 = sizeof(GuestInt) == 4;
     static constexpr bool mips64 = sizeof(GuestInt) == 8;
     static_assert(mips32 || mips64);

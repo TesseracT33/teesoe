@@ -10,7 +10,6 @@
 
 #include <array>
 #include <bit>
-#include <cfenv>
 #include <cmath>
 #include <concepts>
 #include <cstring>
@@ -22,62 +21,11 @@
 
 namespace n64::vr4300 {
 
-template<typename T>
-concept FpuNum = std::same_as<f32, T> || std::same_as<f64, T> || std::same_as<s32, T> || std::same_as<s64, T>;
-
-template<Fmt> struct FmtToType {};
-
-template<> struct FmtToType<Fmt::Float32> {
-    using type = f32;
-};
-
-template<> struct FmtToType<Fmt::Float64> {
-    using type = f64;
-};
-
-template<> struct FmtToType<Fmt::Int32> {
-    using type = s32;
-};
-
-template<> struct FmtToType<Fmt::Int64> {
-    using type = s64;
-};
-
-enum class ComputeInstr1Op {
-    ABS,
-    NEG,
-    SQRT,
-};
-
-enum class ComputeInstr2Op {
-    ADD,
-    SUB,
-    MUL,
-    DIV,
-};
-
-enum class RoundInstr {
-    CEIL,
-    FLOOR,
-    ROUND,
-    TRUNC,
-};
-
-enum class FpuException {
-    InexactOp,
-    Underflow,
-    Overflow,
-    DivByZero,
-    InvalidOp,
-    UnimplementedOp
-};
-
 static void ClearAllExceptions();
 template<ComputeInstr1Op, std::floating_point> static void Compute(u32 fs, u32 fd);
 template<ComputeInstr2Op, std::floating_point> static void Compute(u32 fs, u32 ft, u32 fd);
 template<FpuNum, FpuNum> static void Convert(u32 fs, u32 fd);
 template<std::floating_point Float> static Float Flush(Float f);
-constexpr char FmtToChar(u32 fmt);
 bool FpuUsable();
 static bool GetAndTestExceptions();
 static bool GetAndTestExceptionsConvFloatToWord();
@@ -100,36 +48,6 @@ static bool SignalUnderflow();
 static bool SignalUnimplementedOp();
 template<bool update_flags = true> static bool TestExceptions();
 
-/* Floating point control register #31 */
-struct FCR31 {
-    u32 rm : 2; /* Rounding mode */
-
-    u32 flag_inexact   : 1;
-    u32 flag_underflow : 1;
-    u32 flag_overflow  : 1;
-    u32 flag_div_zero  : 1;
-    u32 flag_invalid   : 1;
-
-    u32 enable_inexact   : 1;
-    u32 enable_underflow : 1;
-    u32 enable_overflow  : 1;
-    u32 enable_div_zero  : 1;
-    u32 enable_invalid   : 1;
-
-    u32 cause_inexact       : 1;
-    u32 cause_underflow     : 1;
-    u32 cause_overflow      : 1;
-    u32 cause_div_zero      : 1;
-    u32 cause_invalid       : 1;
-    u32 cause_unimplemented : 1;
-
-    u32    : 5;
-    u32 c  : 1; /* Condition bit; set/cleared by the Compare instruction (or CTC1). */
-    u32 fs : 1; /* Flush subnormals: if set, and underflow and invalid exceptions are disabled,
-            an fp operation resulting in a denormalized number does not cause the unimplemented operation to trigger. */
-    u32    : 7;
-} static fcr31;
-
 /* Floating point control registers. Only #0 and #31 are "valid", and #0 is read-only. */
 struct FPUControl {
     u32 Get(u32 idx) const;
@@ -148,25 +66,6 @@ private:
     std::array<s64, 32> fpr;
 } static fpr;
 
-[[maybe_unused]] constexpr std::array compare_cond_strings = {
-    "F",
-    "UN",
-    "EQ",
-    "UEQ",
-    "OLT",
-    "ULT",
-    "OLE",
-    "ULE",
-    "SF",
-    "NGLE",
-    "SEQ",
-    "NGL",
-    "LT",
-    "NGE",
-    "LE",
-    "NGT",
-};
-
 u32 FPUControl::Get(u32 idx) const
 {
     if (idx == 31) return std::bit_cast<u32>(fcr31);
@@ -177,18 +76,8 @@ u32 FPUControl::Get(u32 idx) const
 void FPUControl::Set(u32 idx, u32 data)
 {
     if (idx != 31) return;
-    static constexpr u32 mask = 0x183'FFFF;
-    fcr31 = std::bit_cast<FCR31>(data & mask | std::bit_cast<u32>(fcr31) & ~mask);
-    auto new_rounding_mode = [] {
-        switch (fcr31.rm) {
-        case 0: return FE_TONEAREST; /* RN */
-        case 1: return FE_TOWARDZERO; /* RZ */
-        case 2: return FE_UPWARD; /* RP */
-        case 3: return FE_DOWNWARD; /* RM */
-        default: std::unreachable();
-        }
-    }();
-    std::fesetround(new_rounding_mode);
+    fcr31 = std::bit_cast<FCR31>(data & fcr31_write_mask | std::bit_cast<u32>(fcr31) & ~fcr31_write_mask);
+    std::fesetround(guest_to_host_rounding_mode[fcr31.rm]);
     TestExceptions<false>();
 }
 
@@ -257,17 +146,6 @@ template<FpuNum T> void FGR::SetMoveLoadStore(u32 idx, T value)
     } else {
         if (!cop0.status.fr) idx &= ~1;
         fpr[idx] = std::bit_cast<s64>(value);
-    }
-}
-
-constexpr char FmtToChar(Fmt fmt)
-{
-    switch (fmt) {
-    case Fmt::Float32: return 'S';
-    case Fmt::Float64: return 'D';
-    case Fmt::Int32: return 'W';
-    case Fmt::Int64: return 'L';
-    case Fmt::Invalid: return '?';
     }
 }
 
@@ -633,11 +511,7 @@ void dcfc1()
 
 void dctc1()
 {
-    if (FpuUsable()) {
-        SignalUnimplementedOp();
-        FloatingPointException();
-        AdvancePipeline(1);
-    }
+    dcfc1();
 }
 
 void dmfc1(u32 fs, u32 rt)

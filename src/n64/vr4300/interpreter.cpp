@@ -52,10 +52,7 @@ u32 RunInterpreter(u32 cpu_cycles)
         decoder::exec_cpu<CpuImpl::Interpreter>(instr);
         if (exception_occurred) continue;
         if (branch_state == BranchState::Perform) {
-            in_branch_delay_slot_taken = false;
-            branch_state = BranchState::NoBranch;
-            pc = jump_addr;
-            if (pc & 3) AddressErrorException<MemOp::InstrFetch>(pc);
+            PerformBranch();
         } else {
             in_branch_delay_slot_not_taken &= branch_state != BranchState::NoBranch;
             branch_state = branch_state == BranchState::DelaySlotTaken ? BranchState::Perform : BranchState::NoBranch;
@@ -426,7 +423,7 @@ void Interpreter::lhu(u32 rs, u32 rt, s16 imm) const
 void Interpreter::ll(u32 rs, u32 rt, s16 imm) const
 {
     s32 val = ReadVirtual<s32>(gpr[rs] + imm);
-    cop0.ll_addr = last_physical_address_on_load >> 4;
+    cop0.ll_addr = last_paddr_on_load >> 4;
     ll_bit = 1;
     if (!exception_occurred) {
         gpr.set(rt, val);
@@ -436,7 +433,7 @@ void Interpreter::ll(u32 rs, u32 rt, s16 imm) const
 void Interpreter::lld(u32 rs, u32 rt, s16 imm) const
 {
     s64 val = ReadVirtual<s64>(gpr[rs] + imm);
-    cop0.ll_addr = last_physical_address_on_load >> 4;
+    cop0.ll_addr = last_paddr_on_load >> 4;
     ll_bit = 1;
     if (!exception_occurred) {
         gpr.set(rt, val);

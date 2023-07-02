@@ -97,6 +97,16 @@ void NotifyIllegalInstrCode(u32 instr_code)
     log_error(std::format("Illegal CPU instruction code {:08X} encountered.\n", instr_code));
 }
 
+void PerformBranch()
+{
+    in_branch_delay_slot_taken = false;
+    branch_state = mips::BranchState::NoBranch;
+    pc = jump_addr;
+    if (pc & 3) {
+        AddressErrorException<MemOp::InstrFetch>(pc);
+    }
+}
+
 void PowerOn()
 {
     exception_occurred = false;

@@ -13,6 +13,13 @@ target_sources(teesoe PRIVATE
 	frontend/loader.cpp
 	frontend/message.cpp
 	frontend/vulkan.cpp
+
+	mips/disassembler.hpp
+	mips/interpreter.hpp
+	mips/recompiler.hpp
+	mips/recompiler_x64.hpp
+	mips/register_allocator.hpp
+	mips/types.hpp
 )
 
 target_include_directories(teesoe PRIVATE

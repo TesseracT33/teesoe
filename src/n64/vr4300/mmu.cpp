@@ -78,7 +78,7 @@ u32 FetchInstruction(u64 vaddr)
 u32 GetPhysicalPC()
 {
     bool cacheable_area;
-    return active_virtual_to_physical_fun_read(pc, cacheable_area);
+    return vaddr_to_paddr_read_func(pc, cacheable_area);
 }
 
 void InitializeMMU()
@@ -115,24 +115,30 @@ template<std::signed_integral Int, Alignment alignment, MemOp mem_op> Int ReadVi
         return {};
     }
     bool cacheable_area;
-    u32 physical_address = active_virtual_to_physical_fun_read(vaddr, cacheable_area);
+    u32 paddr = vaddr_to_paddr_read_func(vaddr, cacheable_area);
     if (exception_occurred) {
         return {};
     }
     if constexpr (mem_op == MemOp::InstrFetch && log_cpu_instructions) {
-        last_instr_fetch_phys_addr = physical_address;
+        last_paddr_on_instr_fetch = paddr;
     }
-    last_physical_address_on_load = physical_address;
-    if (cacheable_area) { /* TODO: figure out some way to avoid this branch, if possible */
-        /* cycle counter incremented in the function, depending on if cache hit/miss */
-        return ReadCacheableArea<Int, mem_op>(physical_address);
-    } else {
-        cycle_counter += cache_miss_cycle_delay; /* using the same number here */
-        return memory::Read<Int>(physical_address);
+    last_paddr_on_load = paddr;
+    auto ret = [=] {
+        if (cacheable_area) { /* TODO: figure out some way to avoid this branch, if possible */
+            /* cycle counter incremented in the function, depending on if cache hit/miss */
+            return ReadCacheableArea<Int, mem_op>(paddr);
+        } else {
+            cycle_counter += cache_miss_cycle_delay; /* using the same number here */
+            return memory::Read<Int>(paddr);
+        }
+    }();
+    if constexpr (log_cpu_reads && mem_op == MemOp::Read) {
+        log(std::format("CPU vAddr ${:016X} pAddr ${:08X} => ${:X}", vaddr, paddr, to_unsigned(ret)));
     }
+    return ret;
 }
 
-void SetActiveVirtualToPhysicalFunctions()
+void SetVaddrToPaddrFuncs()
 {
     using enum AddressingMode;
     using enum OperatingMode;
@@ -140,34 +146,34 @@ void SetActiveVirtualToPhysicalFunctions()
     if (cop0.status.ksu == 0 || cop0.status.erl == 1 || cop0.status.exl == 1) { /* Kernel mode */
         operating_mode = Kernel;
         if (cop0.status.kx == 0) {
-            active_virtual_to_physical_fun_read = VirtualToPhysicalAddressKernelMode32<MemOp::Read>;
-            active_virtual_to_physical_fun_write = VirtualToPhysicalAddressKernelMode32<MemOp::Write>;
+            vaddr_to_paddr_read_func = VirtualToPhysicalAddressKernelMode32<MemOp::Read>;
+            vaddr_to_paddr_write_func = VirtualToPhysicalAddressKernelMode32<MemOp::Write>;
             addressing_mode = _32bit;
         } else {
-            active_virtual_to_physical_fun_read = VirtualToPhysicalAddressKernelMode64<MemOp::Read>;
-            active_virtual_to_physical_fun_write = VirtualToPhysicalAddressKernelMode64<MemOp::Write>;
+            vaddr_to_paddr_read_func = VirtualToPhysicalAddressKernelMode64<MemOp::Read>;
+            vaddr_to_paddr_write_func = VirtualToPhysicalAddressKernelMode64<MemOp::Write>;
             addressing_mode = _64bit;
         }
     } else if (cop0.status.ksu == 1) { /* Supervisor mode */
         operating_mode = Supervisor;
         if (cop0.status.sx == 0) {
-            active_virtual_to_physical_fun_read = VirtualToPhysicalAddressSupervisorMode32<MemOp::Read>;
-            active_virtual_to_physical_fun_write = VirtualToPhysicalAddressSupervisorMode32<MemOp::Write>;
+            vaddr_to_paddr_read_func = VirtualToPhysicalAddressSupervisorMode32<MemOp::Read>;
+            vaddr_to_paddr_write_func = VirtualToPhysicalAddressSupervisorMode32<MemOp::Write>;
             addressing_mode = _32bit;
         } else {
-            active_virtual_to_physical_fun_read = VirtualToPhysicalAddressSupervisorMode64<MemOp::Read>;
-            active_virtual_to_physical_fun_write = VirtualToPhysicalAddressSupervisorMode64<MemOp::Write>;
+            vaddr_to_paddr_read_func = VirtualToPhysicalAddressSupervisorMode64<MemOp::Read>;
+            vaddr_to_paddr_write_func = VirtualToPhysicalAddressSupervisorMode64<MemOp::Write>;
             addressing_mode = _64bit;
         }
     } else if (cop0.status.ksu == 2) { /* User mode */
         operating_mode = User;
         if (cop0.status.ux == 0) {
-            active_virtual_to_physical_fun_read = VirtualToPhysicalAddressUserMode32<MemOp::Read>;
-            active_virtual_to_physical_fun_write = VirtualToPhysicalAddressUserMode32<MemOp::Write>;
+            vaddr_to_paddr_read_func = VirtualToPhysicalAddressUserMode32<MemOp::Read>;
+            vaddr_to_paddr_write_func = VirtualToPhysicalAddressUserMode32<MemOp::Write>;
             addressing_mode = _32bit;
         } else {
-            active_virtual_to_physical_fun_read = VirtualToPhysicalAddressUserMode64<MemOp::Read>;
-            active_virtual_to_physical_fun_write = VirtualToPhysicalAddressUserMode64<MemOp::Write>;
+            vaddr_to_paddr_read_func = VirtualToPhysicalAddressUserMode64<MemOp::Read>;
+            vaddr_to_paddr_write_func = VirtualToPhysicalAddressUserMode64<MemOp::Write>;
             addressing_mode = _64bit;
         }
     } else { /* Unknown?! */
@@ -175,6 +181,7 @@ void SetActiveVirtualToPhysicalFunctions()
         assert(false);
     }
     can_execute_dword_instrs = operating_mode == Kernel || addressing_mode == _64bit;
+    can_exec_cop0_instrs = operating_mode == Kernel || cop0.status.cu0;
 }
 
 template<MemOp mem_op> u32 VirtualToPhysicalAddressUserMode32(u64 vaddr, bool& cacheable_area)
@@ -369,7 +376,7 @@ template<size_t access_size, Alignment alignment> void WriteVirtual(u64 vaddr, s
         return;
     }
     bool cacheable_area;
-    u32 physical_address = active_virtual_to_physical_fun_write(vaddr, cacheable_area);
+    u32 physical_address = vaddr_to_paddr_write_func(vaddr, cacheable_area);
     if (exception_occurred) {
         return;
     }

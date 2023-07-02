@@ -6,7 +6,7 @@
 
 namespace n64::vr4300 {
 
-using VirtualToPhysicalAddressFun = u32 (*)(u64 /* in: v_addr */, bool& /* out: cached area? */);
+using VaddrToPaddrFunc = u32 (*)(u64 /* in: v_addr */, bool& /* out: cached area? */);
 
 enum class AddressingMode {
     _32bit,
@@ -15,8 +15,8 @@ enum class AddressingMode {
 
 enum class Alignment {
     Aligned,
-    UnalignedLeft, /* Load/Store (Double)Word Left instructions */
-    UnalignedRight /* Load/Store (Double)Word Right instructions */
+    UnalignedLeft, // LWL/LDL/SWL/SDL
+    UnalignedRight // LWR/LDR/SWR/SDR
 };
 
 enum class MemOp {
@@ -30,7 +30,7 @@ u32 GetPhysicalPC();
 void InitializeMMU();
 template<std::signed_integral Int, Alignment alignment = Alignment::Aligned, MemOp mem_op = MemOp::Read>
 Int ReadVirtual(u64 vaddr);
-void SetActiveVirtualToPhysicalFunctions();
+void SetVaddrToPaddrFuncs();
 template<size_t access_size, Alignment alignment = Alignment::Aligned> void WriteVirtual(u64 vaddr, s64 data);
 
 void tlbr();
@@ -38,12 +38,12 @@ void tlbwi();
 void tlbwr();
 void tlbp();
 
-inline VirtualToPhysicalAddressFun active_virtual_to_physical_fun_read;
-inline VirtualToPhysicalAddressFun active_virtual_to_physical_fun_write;
+inline VaddrToPaddrFunc vaddr_to_paddr_read_func;
+inline VaddrToPaddrFunc vaddr_to_paddr_write_func;
 
-inline bool can_execute_dword_instrs;
+inline bool can_execute_dword_instrs, can_exec_cop0_instrs;
 
-inline u32 last_physical_address_on_load;
-/* Used for logging. Set when memory is read during an instruction fetch. */
-inline u32 last_instr_fetch_phys_addr;
+inline u32 last_paddr_on_instr_fetch;
+inline u32 last_paddr_on_load;
+
 } // namespace n64::vr4300

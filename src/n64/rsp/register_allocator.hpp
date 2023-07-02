@@ -10,56 +10,76 @@ namespace n64::rsp {
 using namespace asmjit;
 
 inline constexpr std::array reg_alloc_volatile_gprs = [] {
-    using namespace x86;
-    if constexpr (os.linux) {
-        return std::array{ r11, r10, r9, r8, rsi, rdi };
+    if constexpr (arch.a64) {
+        using namespace a64;
+        return std::array{ x15, x14, x13, x12, x11, x10, x9, x8, x7, x6, x5, x4, x3 };
     } else {
-        return std::array{ r11, r10, r9, r8 };
+        using namespace x86;
+        if constexpr (os.linux) {
+            return std::array{ r11, r10, r9, r8, rsi, rdi };
+        } else {
+            return std::array{ r11, r10, r9, r8 };
+        }
     }
 }();
 
 inline constexpr std::array reg_alloc_nonvolatile_gprs = [] {
-    using namespace x86;
-    if constexpr (os.linux) {
-        return std::array{ r12, r13, r14, r15 };
+    if constexpr (arch.a64) {
+        using namespace a64;
+        return std::array{ x19, x20, x21, x22, x23, x24, x25, x26, x27, x28 };
     } else {
-        return std::array{ r12, r13, r14, r15, rdi, rsi };
+        using namespace x86;
+        if constexpr (os.linux) {
+            return std::array{ r12, r13, r14, r15 };
+        } else {
+            return std::array{ r12, r13, r14, r15, rdi, rsi };
+        }
     }
 }();
 
 inline constexpr std::array reg_alloc_volatile_vprs = [] {
-    using namespace x86;
-    if constexpr (os.linux) {
-        if constexpr (avx512) {
-            // clang-format off
+    if constexpr (arch.a64) {
+        using namespace a64;
+        return std::array{ v15, v14, v13, v12, v11, v10, v9, v8, v7, v6, v5, v4, v3 };
+    } else {
+        using namespace x86;
+        if constexpr (os.linux) {
+            if constexpr (avx512) {
+                // clang-format off
             return std::array{
                 xmm16, xmm17, xmm18, xmm19, xmm20, xmm21, xmm22, xmm23, xmm24, xmm25, 
                 xmm26, xmm27, xmm28, xmm29, xmm30, xmm31, xmm7, xmm6, xmm5, xmm4, xmm3
             };
-            // clang-format on
+                // clang-format on
+            } else {
+                return std::array{ xmm7, xmm6, xmm5, xmm4, xmm3 };
+            }
         } else {
-            return std::array{ xmm7, xmm6, xmm5, xmm4, xmm3 };
-        }
-    } else {
-        if constexpr (avx512) {
-            // clang-format off
+            if constexpr (avx512) {
+                // clang-format off
             return std::array{
                 xmm16, xmm17, xmm18, xmm19, xmm20, xmm21, xmm22, xmm23, xmm24, 
                 xmm25, xmm26, xmm27, xmm28, xmm29, xmm30, xmm31, xmm5, xmm4, xmm3
             };
-            // clang-format on
-        } else {
-            return std::array{ xmm5, xmm4, xmm3 };
+                // clang-format on
+            } else {
+                return std::array{ xmm5, xmm4, xmm3 };
+            }
         }
     }
 }();
 
 inline constexpr std::array reg_alloc_nonvolatile_vprs = [] {
-    using namespace x86;
-    if constexpr (os.linux) {
-        return std::array{ xmm8, xmm9, xmm10, xmm11, xmm12, xmm13, xmm14 };
+    if constexpr (arch.a64) {
+        using namespace a64;
+        return std::array{ v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31 };
     } else {
-        return std::array{ xmm6, xmm7, xmm8, xmm9, xmm10, xmm11, xmm12, xmm13, xmm14 };
+        using namespace x86;
+        if constexpr (os.linux) {
+            return std::array{ xmm8, xmm9, xmm10, xmm11, xmm12, xmm13, xmm14 };
+        } else {
+            return std::array{ xmm6, xmm7, xmm8, xmm9, xmm10, xmm11, xmm12, xmm13, xmm14 };
+        }
     }
 }();
 

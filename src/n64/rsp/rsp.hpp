@@ -32,6 +32,7 @@ u8* GetPointerToMemory(u32 addr);
 void Link(u32 reg);
 void NotifyIllegalInstr(std::string_view instr);
 void NotifyIllegalInstrCode(u32 instr_code);
+void PerformBranch();
 void PowerOn();
 u64 RdpReadCommand(u32 addr);
 template<std::signed_integral Int> Int ReadDMEM(u32 addr);

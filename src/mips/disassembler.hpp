@@ -73,7 +73,7 @@ public:
     auto bne(u32 rs, u32 rt, s16 imm) { return RsRtImm("bne", rs, rt, imm); }
     auto bnel(u32 rs, u32 rt, s16 imm) { return RsRtImm("bnel", rs, rt, imm); }
     auto break_() { return "break"; }
-    auto cache() { return "cache"; }
+    auto cache(u32 rs, u32 rt, s16 imm) { return RsRtImm("cache", rs, rt, imm); }
     auto dadd(u32 rs, u32 rt, u32 rd) { return RdRsRt("dadd", rd, rs, rt); }
     auto daddi(u32 rs, u32 rt, s16 imm) { return RtRsImm("daddi", rt, rs, imm); }
     auto daddiu(u32 rs, u32 rt, s16 imm) { return RtRsImm("daddiu", rt, rs, imm); }
@@ -106,7 +106,7 @@ public:
     auto ldr(u32 rs, u32 rt, s16 imm) { return RtRsImm("ldr", rt, rs, imm); }
     auto lh(u32 rs, u32 rt, s16 imm) { return RtRsImm("lh", rt, rs, imm); }
     auto lhu(u32 rs, u32 rt, s16 imm) { return RtRsImm("lhu", rt, rs, imm); }
-    auto ll(u32 rs, u32 rt, s16 imm) { return RtRsImm("ld", rt, rs, imm); }
+    auto ll(u32 rs, u32 rt, s16 imm) { return RtRsImm("ll", rt, rs, imm); }
     auto lld(u32 rs, u32 rt, s16 imm) { return RtRsImm("lld", rt, rs, imm); }
     auto lui(u32 rt, s16 imm) { return RtImm("lui", rt, imm); }
     auto lw(u32 rs, u32 rt, s16 imm) { return RtRsImm("lw", rt, rs, imm); }
@@ -163,11 +163,11 @@ public:
     auto xor_(u32 rs, u32 rt, u32 rd) { return RdRsRt("xor", rd, rs, rt); }
     auto xori(u32 rs, u32 rt, u16 imm) { return RtRsImm("xori", rt, rs, imm); }
 
-    auto dmfc0(u32 rt, u32 rd) { return RtRd("dmfc0", rt, rd); }
-    auto dmtc0(u32 rt, u32 rd) { return RdRt("dmtc0", rd, rt); }
+    auto dmfc0(u32 rt, u32 rd) { return std::format("dmfc0 {}, {}", GprIdxToName(rd), rt); }
+    auto dmtc0(u32 rt, u32 rd) { return std::format("dmtc0 {}, {}", rd, GprIdxToName(rt)); }
     auto eret() { return "eret"; }
-    auto mfc0(u32 rt, u32 rd) { return RtRd("mfc0", rt, rd); }
-    auto mtc0(u32 rt, u32 rd) { return RdRt("mtc0", rd, rt); }
+    auto mfc0(u32 rt, u32 rd) { return std::format("mfc0 {}, {}", GprIdxToName(rd), rt); }
+    auto mtc0(u32 rt, u32 rd) { return std::format("mtc0 {}, {}", rd, GprIdxToName(rt)); }
     auto tlbr() { return "tlbr"; }
     auto tlbwi() { return "tlbwi"; }
     auto tlbwr() { return "tlbwr"; }

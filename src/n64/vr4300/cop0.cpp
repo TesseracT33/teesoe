@@ -35,7 +35,8 @@ void Cop0Registers::OnWriteToCount()
 
 void Cop0Registers::OnWriteToStatus()
 {
-    SetActiveVirtualToPhysicalFunctions();
+    can_exec_cop0_instrs = operating_mode == mips::OperatingMode::Kernel || cop0.status.cu0;
+    SetVaddrToPaddrFuncs();
     CheckInterrupts();
 }
 
@@ -239,12 +240,10 @@ void dmfc0(u32 rt, u32 rd)
 {
     if (operating_mode != OperatingMode::Kernel) {
         if (!cop0.status.cu0) {
-            CoprocessorUnusableException(0);
-            return;
+            return CoprocessorUnusableException(0);
         }
         if (addressing_mode == AddressingMode::_32bit) {
-            ReservedInstructionException();
-            return;
+            return ReservedInstructionException();
         }
     }
     gpr.set(rt, cop0.Get(rd));
@@ -254,12 +253,10 @@ void dmtc0(u32 rt, u32 rd)
 {
     if (operating_mode != OperatingMode::Kernel) {
         if (!cop0.status.cu0) {
-            CoprocessorUnusableException(0);
-            return;
+            return CoprocessorUnusableException(0);
         }
         if (addressing_mode == AddressingMode::_32bit) {
-            ReservedInstructionException();
-            return;
+            return ReservedInstructionException();
         }
     }
     cop0.Set(rd, gpr[rt]);
@@ -267,9 +264,8 @@ void dmtc0(u32 rt, u32 rd)
 
 void eret()
 {
-    if (operating_mode != OperatingMode::Kernel && !cop0.status.cu0) {
-        CoprocessorUnusableException(0);
-        return;
+    if (!can_exec_cop0_instrs) {
+        return CoprocessorUnusableException(0);
     }
     if (cop0.status.erl == 0) {
         pc = cop0.epc;
@@ -289,24 +285,24 @@ void eret()
         ResetBranch();
         exception_occurred = true; // stop pc from being incremented by 4 directly after. TODO: add a new BranchState?
     }
-    SetActiveVirtualToPhysicalFunctions();
+    SetVaddrToPaddrFuncs();
 }
 
 void mfc0(u32 rt, u32 rd)
 {
-    if (operating_mode != OperatingMode::Kernel && !cop0.status.cu0) {
-        CoprocessorUnusableException(0);
-    } else {
+    if (can_exec_cop0_instrs) {
         gpr.set(rt, s32(cop0.Get(rd)));
+    } else {
+        CoprocessorUnusableException(0);
     }
 }
 
 void mtc0(u32 rt, u32 rd)
 {
-    if (operating_mode != OperatingMode::Kernel && !cop0.status.cu0) {
-        CoprocessorUnusableException(0);
-    } else {
+    if (can_exec_cop0_instrs) {
         cop0.Set(rd, s32(gpr[rt]));
+    } else {
+        CoprocessorUnusableException(0);
     }
 }
 

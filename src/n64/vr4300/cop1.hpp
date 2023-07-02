@@ -2,6 +2,10 @@
 
 #include "types.hpp"
 
+#include <array>
+#include <cfenv>
+#include <concepts>
+
 namespace n64::vr4300 {
 
 enum class Fmt {
@@ -11,6 +15,113 @@ enum class Fmt {
     Int64 = 21,
     Invalid,
 };
+
+template<typename T>
+concept FpuNum = std::same_as<f32, T> || std::same_as<f64, T> || std::same_as<s32, T> || std::same_as<s64, T>;
+
+template<Fmt> struct FmtToType {};
+
+template<> struct FmtToType<Fmt::Float32> {
+    using type = f32;
+};
+
+template<> struct FmtToType<Fmt::Float64> {
+    using type = f64;
+};
+
+template<> struct FmtToType<Fmt::Int32> {
+    using type = s32;
+};
+
+template<> struct FmtToType<Fmt::Int64> {
+    using type = s64;
+};
+
+enum class ComputeInstr1Op {
+    ABS,
+    NEG,
+    SQRT,
+};
+
+enum class ComputeInstr2Op {
+    ADD,
+    SUB,
+    MUL,
+    DIV,
+};
+
+enum class RoundInstr {
+    CEIL,
+    FLOOR,
+    ROUND,
+    TRUNC,
+};
+
+enum class FpuException {
+    InexactOp,
+    Underflow,
+    Overflow,
+    DivByZero,
+    InvalidOp,
+    UnimplementedOp
+};
+
+/* Floating point control register #31 */
+struct FCR31 {
+    u32 rm : 2; /* Rounding mode */
+
+    u32 flag_inexact   : 1;
+    u32 flag_underflow : 1;
+    u32 flag_overflow  : 1;
+    u32 flag_div_zero  : 1;
+    u32 flag_invalid   : 1;
+
+    u32 enable_inexact   : 1;
+    u32 enable_underflow : 1;
+    u32 enable_overflow  : 1;
+    u32 enable_div_zero  : 1;
+    u32 enable_invalid   : 1;
+
+    u32 cause_inexact       : 1;
+    u32 cause_underflow     : 1;
+    u32 cause_overflow      : 1;
+    u32 cause_div_zero      : 1;
+    u32 cause_invalid       : 1;
+    u32 cause_unimplemented : 1;
+
+    u32    : 5;
+    u32 c  : 1; /* Condition bit; set/cleared by the Compare instruction (or CTC1). */
+    u32 fs : 1; /* Flush subnormals: if set, and underflow and invalid exceptions are disabled,
+            an fp operation resulting in a denormalized number does not cause the unimplemented operation to trigger. */
+    u32    : 7;
+} inline fcr31;
+
+struct FCR31BitIndex {
+    enum {
+        FlagInexact = 2,
+        FlagUnderflow,
+        FlagOverflow,
+        FlagDivZero,
+        FlagInvalid,
+
+        EnableInexact,
+        EnableUnderflow,
+        EnableOverflow,
+        EnableDivZero,
+        EnableInvalid,
+
+        CauseInexact,
+        CauseUnderflow,
+        CauseOverflow,
+        CauseDivZero,
+        CauseInvalid,
+        CauseUnimplemented,
+    };
+};
+
+constexpr std::array guest_to_host_rounding_mode{ FE_TONEAREST, FE_TOWARDZERO, FE_UPWARD, FE_DOWNWARD };
+
+constexpr u32 fcr31_write_mask = 0x183'FFFF;
 
 void bc1f(s16 imm);
 void bc1fl(s16 imm);

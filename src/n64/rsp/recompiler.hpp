@@ -23,16 +23,16 @@ inline u32 block_cycles;
 
 void BlockEpilogWithPcFlush(int pc_offset);
 
-template<typename T> auto GlobalVarPtr(T const& obj)
+template<typename T> auto GlobalVarPtr(T const& obj, u32 ptr_size = sizeof(T))
 {
     if constexpr (std::is_pointer_v<T>) {
-        return jit_mem_global_var(asmjit::x86::rbp, gpr.ptr(0), obj);
+        return jit_mem_global_var(asmjit::x86::rbp, gpr.ptr(0), obj, ptr_size);
     } else {
-        return jit_mem_global_var(asmjit::x86::rbp, gpr.ptr(0), &obj);
+        return jit_mem_global_var(asmjit::x86::rbp, gpr.ptr(0), &obj, ptr_size);
     }
 }
 
-template<typename T> auto GlobalArrPtrWithImmOffset(T const& obj, u32 index, size_t ptr_size)
+template<typename T> auto GlobalArrPtrWithImmOffset(T const& obj, u32 index, u32 ptr_size)
 {
     if constexpr (std::is_pointer_v<T>) {
         return jit_mem_global_arr_with_imm_index(asmjit::x86::rbp, index, gpr.ptr(0), obj, ptr_size);
@@ -41,7 +41,7 @@ template<typename T> auto GlobalArrPtrWithImmOffset(T const& obj, u32 index, siz
     }
 }
 
-template<typename T> auto GlobalArrPtrWithRegOffset(T const& obj, asmjit::x86::Gp index, size_t ptr_size)
+template<typename T> auto GlobalArrPtrWithRegOffset(T const& obj, asmjit::x86::Gp index, u32 ptr_size)
 {
     if constexpr (std::is_pointer_v<T>) {
         return jit_mem_global_arr_with_reg_index(asmjit::x86::rbp, index.r64(), gpr.ptr(0), obj, ptr_size);

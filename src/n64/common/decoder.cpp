@@ -62,23 +62,24 @@
         LOG_RSP(instr, __VA_ARGS__);        \
     }
 
-#define COP1_FMT(instr_name, ...)                                                                              \
-    switch (instr >> 21 & 31) {                                                                                \
-    case std::to_underlying(vr4300::Fmt::Float32):                                                             \
-        interpr_jit_shared_impl<Cpu::VR4300, cpu_impl, vr4300::instr_name<vr4300::Fmt::Float32>>(__VA_ARGS__); \
-        break;                                                                                                 \
-    case std::to_underlying(vr4300::Fmt::Float64):                                                             \
-        interpr_jit_shared_impl<Cpu::VR4300, cpu_impl, vr4300::instr_name<vr4300::Fmt::Float64>>(__VA_ARGS__); \
-        break;                                                                                                 \
-    case std::to_underlying(vr4300::Fmt::Int32):                                                               \
-        interpr_jit_shared_impl<Cpu::VR4300, cpu_impl, vr4300::instr_name<vr4300::Fmt::Int32>>(__VA_ARGS__);   \
-        break;                                                                                                 \
-    case std::to_underlying(vr4300::Fmt::Int64):                                                               \
-        interpr_jit_shared_impl<Cpu::VR4300, cpu_impl, vr4300::instr_name<vr4300::Fmt::Int64>>(__VA_ARGS__);   \
-        break;                                                                                                 \
-    default:                                                                                                   \
-        interpr_jit_shared_impl<Cpu::VR4300, cpu_impl, vr4300::instr_name<vr4300::Fmt::Invalid>>(__VA_ARGS__); \
-        break;                                                                                                 \
+#define COP1_FMT_IMPL(instr, fmt, ...)                \
+    if constexpr (cpu_impl == CpuImpl::Interpreter) { \
+        vr4300::instr<fmt>(__VA_ARGS__);              \
+    } else if constexpr (arch.a64) {                  \
+        /* vr4300::a64::instr<fmt>(__VA_ARGS__);*/    \
+    } else {                                          \
+        vr4300::x64::instr<fmt>(__VA_ARGS__);         \
+    }
+
+#define COP1_FMT(instr_name, ...)                                                                                   \
+    switch (instr >> 21 & 31) {                                                                                     \
+    case std::to_underlying(vr4300::Fmt::Float32): COP1_FMT_IMPL(instr_name, vr4300::Fmt::Float32, __VA_ARGS__);    \
+      break;                                                                                                        \
+    case std::to_underlying(vr4300::Fmt::Float64): COP1_FMT_IMPL(instr_name, vr4300::Fmt::Float64, __VA_ARGS__);    \
+      break;                                                                                                        \
+    case std::to_underlying(vr4300::Fmt::Int32): COP1_FMT_IMPL(instr_name, vr4300::Fmt::Int32, __VA_ARGS__); break; \
+    case std::to_underlying(vr4300::Fmt::Int64): COP1_FMT_IMPL(instr_name, vr4300::Fmt::Int64, __VA_ARGS__); break; \
+    default: COP1_FMT_IMPL(instr_name, vr4300::Fmt::Invalid, __VA_ARGS__); break;                                   \
     }
 
 #define COP_RSP(instr, ...)                               \
@@ -93,13 +94,20 @@
         }                                                 \
     }
 
-#define COP_VR4300(instr, ...)                                                          \
-    {                                                                                   \
-        if constexpr (cpu == Cpu::VR4300) {                                             \
-            interpr_jit_shared_impl<Cpu::VR4300, cpu_impl, vr4300::instr>(__VA_ARGS__); \
-        } else {                                                                        \
-            rsp::NotifyIllegalInstr(#instr);                                            \
-        }                                                                               \
+#define COP_VR4300(instr, ...)                                \
+    {                                                         \
+        LOG_VR4300(instr, __VA_ARGS__);                       \
+        if constexpr (cpu == Cpu::VR4300) {                   \
+            if constexpr (cpu_impl == CpuImpl::Interpreter) { \
+                vr4300::instr(__VA_ARGS__);                   \
+            } else if constexpr (arch.a64) {                  \
+                /*vr4300::a64::instr(__VA_ARGS__);*/          \
+            } else {                                          \
+                vr4300::x64::instr(__VA_ARGS__);              \
+            }                                                 \
+        } else {                                              \
+            rsp::NotifyIllegalInstr(#instr);                  \
+        }                                                     \
     }
 
 #define CPU(instr, ...)                                             \
@@ -163,45 +171,6 @@ template<Cpu cpu, bool make_string> static void reserved_instruction(auto instr)
 template<Cpu cpu, CpuImpl cpu_impl, bool make_string> static void special(u32 instr);
 u32 vt_e_bug(u32 vt_e, u32 vd_e);
 
-template<Cpu cpu, CpuImpl cpu_impl, auto func, typename... Args> void interpr_jit_shared_impl(Args... args)
-{
-    if constexpr (cpu_impl == CpuImpl::Interpreter) {
-        func(args...);
-    } else {
-        jit_call_interpreter_impl<cpu, func>(args...);
-    }
-}
-
-template<Cpu cpu, auto impl> void jit_call_interpreter_impl()
-{
-    if constexpr (cpu == Cpu::VR4300) {
-        jit_x64_call(vr4300::compiler, impl);
-    } else {
-        jit_x64_call(rsp::compiler, impl);
-    }
-}
-
-template<Cpu cpu, auto impl, typename Arg, typename... Args>
-void jit_call_interpreter_impl(Arg first_arg, Args... remaining_args)
-{
-    static int r_idx{};
-    static auto* const compiler = [] {
-        if constexpr (cpu == Cpu::VR4300) {
-            return &vr4300::compiler;
-        } else {
-            return &rsp::compiler;
-        }
-    }();
-    compiler->mov(host_gpr_arg[r_idx], first_arg);
-    if (sizeof...(remaining_args)) {
-        r_idx++;
-        jit_call_interpreter_impl<cpu, impl>(remaining_args...);
-    } else {
-        r_idx = 0;
-        jit_x64_call(*compiler, impl);
-    }
-}
-
 template<Cpu cpu, CpuImpl cpu_impl, bool make_string> void cop0(u32 instr)
 {
     if constexpr (cpu == Cpu::VR4300) {
@@ -237,8 +206,7 @@ template<Cpu cpu, CpuImpl cpu_impl, bool make_string> void cop0(u32 instr)
 template<Cpu cpu, CpuImpl cpu_impl, bool make_string> void cop1(u32 instr)
 {
     if constexpr (cpu == Cpu::RSP) {
-        rsp::NotifyIllegalInstrCode(instr);
-        return;
+        return rsp::NotifyIllegalInstrCode(instr);
     }
 
     switch (instr >> 21 & 31) {
@@ -516,7 +484,6 @@ template<Cpu cpu, bool make_string> void reserved_instruction(auto instr)
     } else {
         rsp::NotifyIllegalInstrCode(instr);
     }
-    // TODO: log
 }
 
 template<Cpu cpu, CpuImpl cpu_impl, bool make_string> void special(u32 instr)

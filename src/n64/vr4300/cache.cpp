@@ -48,20 +48,16 @@ void cache(u32 rs, u32 rt, s16 imm)
        address by using the TLB, and a cache operation indicated by a 5-bit sub op
        code is executed to that address. */
     uint cycles = 1;
-    /* The below makes everything crash and burn */
-#if 0
-		if (!cop0.status.cu0 || operating_mode != OperatingMode::Kernel) {
-			CoprocessorUnusableException(0);
-			AdvancePipeline(cycles);
-			return;
-		}
-#endif
+    if (!can_exec_cop0_instrs) {
+        CoprocessorUnusableException(0);
+        AdvancePipeline(cycles);
+        return;
+    }
     auto cache = rt & 3;
     auto op = rt >> 2;
     auto virt_addr = gpr[rs] + imm;
     bool cacheable_area;
-    auto paddr = active_virtual_to_physical_fun_read(virt_addr,
-      cacheable_area); /* may go unused below, but could also cause a TLB exception */
+    auto paddr = vaddr_to_paddr_read_func(virt_addr, cacheable_area);
     if (exception_occurred) {
         AdvancePipeline(cycles);
         return;
@@ -188,7 +184,7 @@ template<std::signed_integral Int, MemOp mem_op> Int ReadCacheableArea(u32 paddr
 { /* Precondition: paddr is aligned to sizeof(Int) */
     static_assert(one_of(mem_op, MemOp::InstrFetch, MemOp::Read));
     if constexpr (log_cpu_instructions && mem_op == MemOp::InstrFetch) {
-        last_instr_fetch_phys_addr = paddr;
+        last_paddr_on_instr_fetch = paddr;
     }
     auto ReadFromCacheLine = [paddr](auto const& cache_line) mutable {
         // RDRAM is stored in LE, word-wise

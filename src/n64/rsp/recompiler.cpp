@@ -44,7 +44,6 @@ static AsmjitCompiler& c = compiler;
 
 void BlockEpilog()
 {
-    // c.bind(epilog_label);
     BlockRecordCycles();
     reg_alloc.BlockEpilog();
     c.ret();
@@ -52,7 +51,6 @@ void BlockEpilog()
 
 void BlockEpilogWithPcFlush(int pc_offset)
 {
-    // c.bind(epilog_label);
     c.mov(GlobalVarPtr(pc), jit_pc + pc_offset);
     BlockEpilog();
 }
@@ -104,14 +102,9 @@ void BlockRecordCycles()
 void ExecuteBlock(Block* block)
 {
     (*block)();
-    if (jump_is_pending) { // we returned after the first instruction in the block
-        pc = jump_addr;
-        jump_is_pending = in_branch_delay_slot = false;
-    } else if (block->ends_with_branch_and_delay_slot) {
-        if (in_branch_delay_slot) { // todo: does not work if branch delay slot instr contained another branch instr
-            pc = jump_addr;
-            jump_is_pending = in_branch_delay_slot = false;
-        }
+    // todo: does not work if branch delay slot instr contained another branch instr
+    if (jump_is_pending || block->ends_with_branch_and_delay_slot && in_branch_delay_slot) {
+        PerformBranch();
     } else if (in_branch_delay_slot) { // block ends in branch, but delay slot did not fit
         jump_is_pending = true;
     }
@@ -196,10 +189,10 @@ u32 RunRecompiler(u32 rsp_cycles)
                 BlockProlog();
 
                 auto Instr = [] {
+                    block_cycles++;
                     u32 instr = FetchInstruction(jit_pc);
                     decoder::exec_rsp<CpuImpl::Recompiler>(instr);
                     jit_pc = (jit_pc + 4) & 0xFFC;
-                    block_cycles++;
                     if constexpr (log_rsp_jit_register_status) {
                         jit_logger.log(reg_alloc.GetStatusString().c_str());
                     }
@@ -209,11 +202,11 @@ u32 RunRecompiler(u32 rsp_cycles)
                 // If the previously executed block ended with a branch instruction, meaning that the branch delay
                 // slot did not fit, execute only the first instruction in this block, before returning.
                 // The jump can be cancelled if the first instruction is also a branch.
-                Label l_end = c.newLabel();
+                Label l_nobranch = c.newLabel();
                 c.cmp(GlobalVarPtr(jump_is_pending), 0);
-                c.je(l_end);
+                c.je(l_nobranch);
                 BlockEpilog();
-                c.bind(l_end);
+                c.bind(l_nobranch);
 
                 while (!branched && (jit_pc & 255)) {
                     branched = branch_hit; // If the branch delay slot instruction fits within the block boundary,

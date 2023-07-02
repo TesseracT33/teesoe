@@ -24,6 +24,7 @@ target_sources(teesoe PRIVATE
 	rsp/rsp.cpp
 	rsp/vu_interpreter.cpp
 	
+	rsp/x64/cpu.hpp
 	rsp/x64/vu.hpp
 
 	vr4300/cache.cpp

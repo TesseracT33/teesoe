@@ -57,12 +57,12 @@ inline u64 jit_pc;
 inline u32 block_cycles;
 inline bool branch_hit, branched;
 
-template<typename T> auto GlobalVarPtr(T const& obj)
+template<typename T> auto GlobalVarPtr(T const& obj, u32 ptr_size = sizeof(T))
 {
     if constexpr (std::is_pointer_v<T>) {
-        return jit_mem_global_var(asmjit::x86::rbp, gpr.ptr(0), obj);
+        return jit_mem_global_var(asmjit::x86::rbp, gpr.ptr(0), obj, ptr_size);
     } else {
-        return jit_mem_global_var(asmjit::x86::rbp, gpr.ptr(0), &obj);
+        return jit_mem_global_var(asmjit::x86::rbp, gpr.ptr(0), &obj, ptr_size);
     }
 }
 
@@ -122,7 +122,7 @@ inline void TakeBranchJit(auto target)
         c.mov(rax, target);
         c.mov(GlobalVarPtr(jump_addr), rax);
     } else {
-        c.mov(GlobalVarPtr(jump_addr), target);
+        c.mov(GlobalVarPtr(jump_addr), target.r64());
     }
 }
 

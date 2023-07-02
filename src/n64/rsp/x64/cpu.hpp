@@ -1,7 +1,7 @@
 #pragma once
 
 #include "interface/mi.hpp"
-#include "mips/recompiler.hpp"
+#include "mips/recompiler_x64.hpp"
 #include "rdp/rdp.hpp"
 #include "rsp/recompiler.hpp"
 #include "rsp/register_allocator.hpp"
@@ -12,8 +12,8 @@ namespace n64::rsp::x64 {
 using namespace asmjit;
 using namespace asmjit::x86;
 
-struct Recompiler : public mips::Recompiler<s32, s32, u32, RegisterAllocator> {
-    using mips::Recompiler<s32, s32, u32, RegisterAllocator>::Recompiler;
+struct Recompiler : public mips::RecompilerX64<s32, s32, u32, RegisterAllocator> {
+    using mips::RecompilerX64<s32, s32, u32, RegisterAllocator>::RecompilerX64;
 
     void add(u32 rs, u32 rt, u32 rd) const { addu(rs, rt, rd); }
 
@@ -216,7 +216,7 @@ struct Recompiler : public mips::Recompiler<s32, s32, u32, RegisterAllocator> {
     branch_hit,
     branched,
     [](u32 target) { TakeBranchJit(target); },
-    [](asmjit::x86::Gp target) { TakeBranchJit(target); },
+    [](HostGpr32 target) { TakeBranchJit(target); },
     LinkJit,
 };
 
