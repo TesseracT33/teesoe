@@ -42,6 +42,7 @@ struct RegisterAllocatorState {
         guest_reg_pointer_gpr{ guest_reg_pointer_gpr },
         host_access_index{},
         guest_to_host{},
+        reserved_args(0),
         volatile_bindings_begin_it{ bindings.begin() },
         volatile_bindings_end_it{ bindings.begin() + num_volatile_regs },
         nonvolatile_bindings_begin_it{ bindings.begin() + num_volatile_regs },
@@ -73,6 +74,7 @@ struct RegisterAllocatorState {
     std::array<Binding*, num_guest_regs> guest_to_host;
     u64 host_access_index;
     HostGpr guest_reg_pointer_gpr;
+    int reserved_args;
     typename decltype(bindings)::iterator volatile_bindings_begin_it, volatile_bindings_end_it,
       nonvolatile_bindings_begin_it, nonvolatile_bindings_end_it;
 
@@ -96,7 +98,9 @@ struct RegisterAllocatorState {
             u64 min_access = std::numeric_limits<u64>::max();
 
             for (Binding& b : bindings) {
-                if (std::ranges::find(hosts, b.host) != hosts.end()) continue;
+                if (std::ranges::find(hosts, b.host) != hosts.end() || IsReserved(b.host)) {
+                    continue;
+                }
                 if (!b.Occupied()) {
                     found_free = true;
                     replacement = &b;
@@ -160,6 +164,18 @@ struct RegisterAllocatorState {
         return false;
     }
 
+    bool IsReserved(HostReg reg) const
+    {
+        if constexpr (std::same_as<HostReg, HostGpr>) {
+            return std::find(host_gpr_arg.begin(), host_gpr_arg.begin() + reserved_args, reg.r64())
+                != host_gpr_arg.begin() + reserved_args;
+        } else if constexpr (std::same_as<HostReg, HostVpr128>) {
+            return reg.id() < reserved_args;
+        } else {
+            static_assert(always_false<sizeof(HostReg)>);
+        }
+    }
+
     void MoveHost(HostReg dst, HostReg src) const
     {
         if constexpr (std::same_as<HostReg, HostGpr>) {
@@ -167,13 +183,13 @@ struct RegisterAllocatorState {
             } else {
                 c.mov(dst, src);
             }
-        } else if (std::same_as<HostReg, HostVpr128>) {
+        } else if constexpr (std::same_as<HostReg, HostVpr128>) {
             if constexpr (arch.a64) {
             } else {
                 c.vmovaps(dst, src);
             }
         } else {
-            always_false<0>;
+            static_assert(always_false<sizeof(HostReg)>);
         }
     }
 
@@ -184,6 +200,7 @@ struct RegisterAllocatorState {
         }
         guest_to_host = {};
         host_access_index = 0; // todo: what to set?
+        reserved_args = 0;
     }
 
     void ResetBinding(Binding& b)
@@ -217,7 +234,7 @@ public:
 
     void BlockEpilog()
     {
-        FlushAll();
+        FlushAndRestoreAll();
         if (is_nonvolatile(guest_gprs_pointer_reg)) {
             RestoreHost(guest_gprs_pointer_reg);
         }
@@ -230,7 +247,7 @@ public:
 
     void BlockEpilogWithJmp(void* func)
     {
-        FlushAll();
+        FlushAndRestoreAll();
         if (is_nonvolatile(guest_gprs_pointer_reg)) {
             RestoreHost(guest_gprs_pointer_reg);
         }
@@ -239,6 +256,7 @@ public:
             c.add(x86::rsp, register_stack_space);
             c.jmp(func);
         }
+        state.reserved_args = 0;
     }
 
     void BlockProlog()
@@ -254,9 +272,6 @@ public:
         }
     }
 
-    // In an instruction implementation, make sure to call this after GetHostGpr
-    HostGpr AcquireTemporary() { return {}; }
-
     void Call(auto func)
     {
         static_assert(
@@ -270,6 +285,7 @@ public:
         if (is_volatile(guest_gprs_pointer_reg)) {
             c.mov(guest_gprs_pointer_reg, guest_gprs.data());
         }
+        state.reserved_args = 0;
     }
 
     void CallWithStackAlignment(auto func)
@@ -282,13 +298,21 @@ public:
         if (is_volatile(guest_gprs_pointer_reg)) {
             c.mov(guest_gprs_pointer_reg, guest_gprs.data());
         }
+        state.reserved_args = 0;
+    }
+
+    void FlushAll()
+    {
+        for (Binding& binding : state.bindings) {
+            Flush(binding, false);
+        }
     }
 
     void FlushAllVolatile()
     {
         for (Binding& binding : state.bindings) {
-            if (binding.is_volatile && binding.Occupied()) {
-                Flush(binding, true);
+            if (binding.is_volatile) {
+                Flush(binding, false);
             }
         }
     }
@@ -296,8 +320,8 @@ public:
     void FlushAndDestroyAllVolatile()
     {
         for (Binding& binding : state.bindings) {
-            if (binding.is_volatile && binding.Occupied()) {
-                FlushAndDestroyBinding(binding, true);
+            if (binding.is_volatile) {
+                FlushAndDestroyBinding(binding, false);
             }
         }
     }
@@ -313,15 +337,58 @@ public:
           [this](HostGpr gpr) { SaveHost(gpr); });
     }
 
+    void FreeArgs(int args)
+    {
+        assert(args > 0);
+        switch (args) { // the prettiest code you've seen
+        case 1: Free<1>({ host_gpr_arg[0] }); break;
+        case 2: Free<2>({ host_gpr_arg[0], host_gpr_arg[1] }); break;
+        case 3: Free<3>({ host_gpr_arg[0], host_gpr_arg[1], host_gpr_arg[2] }); break;
+        case 4: Free<4>({ host_gpr_arg[0], host_gpr_arg[1], host_gpr_arg[2], host_gpr_arg[3] }); break;
+        default: assert(false);
+        }
+    }
+
     HostGpr GetHostGpr(u32 guest) { return GetHostGpr(guest, false); }
 
     HostGpr GetHostGprMarkDirty(u32 guest) { return GetHostGpr(guest, guest != 0); }
 
     std::string GetStatusString() const { return state.GetStatusString(); }
 
-    HostGpr GetTemporary() { return {}; }
+    HostGpr GetTemporary()
+    {
+        Binding* binding{};
+        bool found_free{};
+        u64 min_access = std::numeric_limits<u64>::max();
+
+        for (auto b = state.volatile_bindings_begin_it; b != state.volatile_bindings_end_it; ++b) {
+            if (state.IsReserved(b->host)) {
+                continue;
+            }
+            if (!b->Occupied()) {
+                found_free = true;
+                binding = &*b;
+                break;
+            } else if (b->access_index < min_access) {
+                min_access = b->access_index;
+                binding = &*b;
+            }
+        }
+
+        if (!found_free) {
+            FlushAndDestroyBinding(*binding, false);
+        }
+        return binding->host;
+    }
 
     bool IsBound(auto reg) const { return state.IsBound(reg); }
+
+    void ReserveArgs(int args)
+    {
+        assert(state.reserved_args == 0);
+        FreeArgs(args);
+        state.reserved_args = args;
+    }
 
     void RestoreHost(HostGpr gpr)
     {
@@ -362,19 +429,10 @@ protected:
                     c.mov(qword_ptr(guest_gprs_pointer_reg, 8 * b.guest.value()), b.host.r64());
                 }
             }
+            // b.dirty = false; // TODO: uncommenting this breaks this things, why?
         }
         if (!b.is_volatile && restore) {
             RestoreHost(b.host);
-        }
-    }
-
-    // This should only be used as part of an instruction epilogue. Thus, there is no need
-    // to destroy bindings. In fact, this would be undesirable, since this function could not
-    // be called in an epilog emitted mid-block, as part of a code path dependent on a run-time branch.
-    void FlushAll()
-    {
-        for (Binding& binding : state.bindings) {
-            Flush(binding, true);
         }
     }
 
@@ -382,6 +440,16 @@ protected:
     {
         Flush(b, restore);
         state.ResetBinding(b);
+    }
+
+    // This should only be used as part of an instruction epilogue. Thus, there is no need
+    // to destroy bindings. In fact, this would be undesirable, since this function could not
+    // be called in an epilog emitted mid-block, as part of a code path dependent on a run-time branch.
+    void FlushAndRestoreAll()
+    {
+        for (Binding& binding : state.bindings) {
+            Flush(binding, true);
+        }
     }
 
     HostGpr GetHostGpr(u32 guest, bool make_dirty)
@@ -398,6 +466,9 @@ protected:
 
         auto FindReg = [&](auto start_it, auto end_it) {
             for (auto b = start_it; b != end_it; ++b) {
+                if (state.IsReserved(b->host)) {
+                    continue;
+                }
                 if (!b->Occupied()) {
                     found_free = true;
                     binding = &*b;

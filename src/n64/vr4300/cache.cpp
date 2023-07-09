@@ -50,8 +50,7 @@ void cache(u32 rs, u32 rt, s16 imm)
     uint cycles = 1;
     if (!can_exec_cop0_instrs) {
         CoprocessorUnusableException(0);
-        AdvancePipeline(cycles);
-        return;
+        return AdvancePipeline(cycles);
     }
     auto cache = rt & 3;
     auto op = rt >> 2;
@@ -59,8 +58,7 @@ void cache(u32 rs, u32 rt, s16 imm)
     bool cacheable_area;
     auto paddr = vaddr_to_paddr_read_func(virt_addr, cacheable_area);
     if (exception_occurred) {
-        AdvancePipeline(cycles);
-        return;
+        return AdvancePipeline(cycles);
     }
 
     auto HandleOp = [&](auto& cache_line) {

@@ -10,9 +10,9 @@ public:
     using mips::Disassembler::div;
     using mips::Disassembler::sub;
 
-    auto dmfc0(u32 rt, u32 rd) { return std::format("dmfc0 {}, {}", mips::GprIdxToName(rd), cop0_reg_to_str[rt]); }
+    auto dmfc0(u32 rt, u32 rd) { return std::format("dmfc0 {}, {}", mips::GprIdxToName(rt), cop0_reg_to_str[rd]); }
     auto dmtc0(u32 rt, u32 rd) { return std::format("dmtc0 {}, {}", cop0_reg_to_str[rd], mips::GprIdxToName(rt)); }
-    auto mfc0(u32 rt, u32 rd) { return std::format("mfc0 {}, {}", mips::GprIdxToName(rd), cop0_reg_to_str[rt]); }
+    auto mfc0(u32 rt, u32 rd) { return std::format("mfc0 {}, {}", mips::GprIdxToName(rt), cop0_reg_to_str[rd]); }
     auto mtc0(u32 rt, u32 rd) { return std::format("mtc0 {}, {}", cop0_reg_to_str[rd], mips::GprIdxToName(rt)); }
 
     auto bc1f(u16 imm) { return std::format("bc1f ${:04X}", imm); }
@@ -68,6 +68,8 @@ public:
     auto dmtc2(u32 rt) { return std::format("dmtc2 {}", mips::GprIdxToName(rt)); }
     auto mfc2(u32 rt) { return std::format("mfc2 {}", mips::GprIdxToName(rt)); }
     auto mtc2(u32 rt) { return std::format("mtc2 {}", mips::GprIdxToName(rt)); }
+
+    auto cop2_reserved() { return "COP2 RESERVED"; }
 
 protected:
     constexpr std::string_view FmtToStr(Fmt fmt)

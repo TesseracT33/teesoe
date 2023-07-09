@@ -12,9 +12,9 @@ using namespace asmjit::x86;
 void Cop2Prolog()
 {
     Label l0 = c.newLabel();
-    c.bt(GlobalVarPtr(cop0.status), 30);
+    c.bt(GlobalVarPtr(cop0.status), 30); // cu2
     c.jc(l0);
-    reg_alloc.Free(host_gpr_arg[0]);
+    reg_alloc.ReserveArgs(1);
     c.mov(host_gpr_arg[0].r32(), 2);
     BlockEpilogWithJmp(CoprocessorUnusableException);
     c.bind(l0);
@@ -24,6 +24,13 @@ void cfc2(u32 rt)
 {
     Cop2Prolog();
     if (rt) c.movsxd(reg_alloc.GetHostGprMarkDirty(rt), GlobalVarPtr(cop2_latch));
+}
+
+void cop2_reserved()
+{
+    Cop2Prolog();
+    BlockEpilogWithJmp(ReservedInstructionCop2Exception);
+    compiler_exception_occurred = true;
 }
 
 void ctc2(u32 rt)

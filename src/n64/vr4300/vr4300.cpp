@@ -105,6 +105,10 @@ void PerformBranch()
     if (pc & 3) {
         AddressErrorException<MemOp::InstrFetch>(pc);
     }
+    if constexpr (log_cpu_branches) {
+        log(
+          std::format("CPU branch to 0x{:016X}; RA = 0x{:016X}; SP = 0x{:016X}", u64(pc), u64(gpr[31]), u64(gpr[29])));
+    }
 }
 
 void PowerOn()

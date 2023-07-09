@@ -15,6 +15,8 @@ namespace n64::vr4300 {
 
 void BlockEpilog();
 void BlockEpilogWithJmp(void* func);
+void BlockEpilogWithJmpAndPcFlush(void* func, int pc_offset);
+void BlockEpilogWithPcFlush(int pc_offset);
 void BlockProlog();
 void BlockRecordCycles();
 void DiscardBranchJit();
@@ -26,6 +28,8 @@ void LinkJit(u32 reg);
 void OnBranchNotTakenJit();
 u32 RunRecompiler(u32 cpu_cycles);
 void TearDownRecompiler();
+
+inline bool compiler_exception_occurred;
 
 inline constexpr std::array reg_alloc_volatile_gprs = [] {
     using namespace asmjit::x86;
@@ -96,12 +100,16 @@ inline void JitCallInterpreterImpl(auto impl, Arg first_arg, Args... remaining_a
       "This function does not support passing arguments by the stack");
     static int r_idx{};
     if (r_idx == 0) {
-        reg_alloc.FlushAllVolatile();
+        reg_alloc.FlushAll();
     }
-    if constexpr (sizeof(first_arg) <= 4) {
+    if (first_arg == 0) {
+        compiler.xor_(host_gpr_arg[r_idx].r32(), host_gpr_arg[r_idx].r32());
+    } else if constexpr (sizeof(first_arg) <= 4) {
         compiler.mov(host_gpr_arg[r_idx].r32(), first_arg);
-    } else {
+    } else if constexpr (sizeof(first_arg) <= 8) {
         compiler.mov(host_gpr_arg[r_idx].r64(), first_arg);
+    } else {
+        always_false<sizeof(first_arg)>;
     }
     if constexpr (sizeof...(remaining_args)) {
         r_idx++;

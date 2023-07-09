@@ -66,6 +66,18 @@ enum class FpuException {
     UnimplementedOp
 };
 
+/* General-purpose floating point registers. */
+struct FGR {
+    template<FpuNum T> T GetFs(u32 idx) const;
+    template<FpuNum T> T GetFt(u32 idx) const;
+    template<FpuNum T> T GetMoveLoadStore(u32 idx) const;
+    template<FpuNum T> void Set(u32 idx, T data);
+    template<FpuNum T> void SetMoveLoadStore(u32 idx, T data);
+
+private:
+    std::array<s64, 32> fpr;
+} inline fpr;
+
 /* Floating point control register #31 */
 struct FCR31 {
     u32 rm : 2; /* Rounding mode */

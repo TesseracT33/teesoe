@@ -19,6 +19,15 @@ void cfc2(u32 rt)
     }
 }
 
+void cop2_reserved()
+{
+    if (cop0.status.cu2) {
+        ReservedInstructionCop2Exception();
+    } else {
+        CoprocessorUnusableException(2);
+    }
+}
+
 void ctc2(u32 rt)
 {
     if (cop0.status.cu2) {

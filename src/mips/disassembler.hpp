@@ -163,10 +163,10 @@ public:
     auto xor_(u32 rs, u32 rt, u32 rd) { return RdRsRt("xor", rd, rs, rt); }
     auto xori(u32 rs, u32 rt, u16 imm) { return RtRsImm("xori", rt, rs, imm); }
 
-    auto dmfc0(u32 rt, u32 rd) { return std::format("dmfc0 {}, {}", GprIdxToName(rd), rt); }
+    auto dmfc0(u32 rt, u32 rd) { return std::format("dmfc0 {}, {}", GprIdxToName(rt), rd); }
     auto dmtc0(u32 rt, u32 rd) { return std::format("dmtc0 {}, {}", rd, GprIdxToName(rt)); }
     auto eret() { return "eret"; }
-    auto mfc0(u32 rt, u32 rd) { return std::format("mfc0 {}, {}", GprIdxToName(rd), rt); }
+    auto mfc0(u32 rt, u32 rd) { return std::format("mfc0 {}, {}", GprIdxToName(rt), rd); }
     auto mtc0(u32 rt, u32 rd) { return std::format("mtc0 {}, {}", rd, GprIdxToName(rt)); }
     auto tlbr() { return "tlbr"; }
     auto tlbwi() { return "tlbwi"; }

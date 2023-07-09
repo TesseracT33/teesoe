@@ -1,10 +1,14 @@
 #pragma once
 
 #include "common/types.hpp"
+#include "common/util.hpp"
+#include "disassembler.hpp"
 
 #include <array>
 #include <concepts>
+#include <format>
 #include <span>
+#include <string>
 
 namespace mips {
 
@@ -40,9 +44,20 @@ template<std::signed_integral Int> struct Gpr {
         gpr[idx] = data;
         gpr[0] = 0;
     }
-    std::span<const Int, 32> view() const { return gpr; }
 
     Int operator[](u32 idx) const { return gpr[idx]; } // return by value so that writes have to be made through 'set'
+
+    std::span<const Int, 32> view() const { return gpr; }
+
+    std::string Format() const
+    {
+        std::string str;
+        str.reserve(32 * 24);
+        for (int i = 0; i < 32; ++i) {
+            str += std::format("{}\t{:#x}\n", GprIdxToName(i), to_unsigned(gpr[i]));
+        }
+        return str;
+    }
 
 private:
     std::array<Int, 32> gpr{};

@@ -12,8 +12,8 @@ namespace n64::rsp::x64 {
 using namespace asmjit;
 using namespace asmjit::x86;
 
-struct Recompiler : public mips::RecompilerX64<s32, s32, u32, RegisterAllocator> {
-    using mips::RecompilerX64<s32, s32, u32, RegisterAllocator>::RecompilerX64;
+struct Recompiler : public mips::RecompilerX64<s32, u32, RegisterAllocator> {
+    using mips::RecompilerX64<s32, u32, RegisterAllocator>::RecompilerX64;
 
     void add(u32 rs, u32 rt, u32 rd) const { addu(rs, rt, rd); }
 
@@ -210,11 +210,11 @@ struct Recompiler : public mips::RecompilerX64<s32, s32, u32, RegisterAllocator>
 } inline constexpr cpu_recompiler{
     compiler,
     reg_alloc,
-    lo_dummy,
-    hi_dummy,
     jit_pc,
     branch_hit,
     branched,
+    [] { return GlobalVarPtr(lo_dummy); },
+    [] { return GlobalVarPtr(hi_dummy); },
     [](u32 target) { TakeBranchJit(target); },
     [](HostGpr32 target) { TakeBranchJit(target); },
     LinkJit,

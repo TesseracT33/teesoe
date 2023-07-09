@@ -1,10 +1,11 @@
 #include "exceptions.hpp"
 #include "cop0.hpp"
+#include "interpreter.hpp"
 #include "log.hpp"
 #include "n64_build_options.hpp"
+#include "recompiler.hpp"
 #include "util.hpp"
 #include "vr4300.hpp"
-#include "vr4300/interpreter.hpp"
 
 #include <format>
 
@@ -53,7 +54,7 @@ void ColdResetException()
     cop0.config.ep = 0;
     cop0.config.be = 1;
     cop0.random = 31;
-    cop0.OnWriteToStatus();
+    OnWriteToStatus();
 }
 
 void CoprocessorUnusableException(int cop)

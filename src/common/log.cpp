@@ -73,7 +73,7 @@ void file_out(std::string_view output)
                 file_output_repeat_counter = 0;
             }
             prev_file_output = output;
-            file_log << output << '\n';
+            file_log << output << std::endl;
         }
     }
 }

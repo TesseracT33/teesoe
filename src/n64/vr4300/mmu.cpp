@@ -48,7 +48,6 @@ void TlbEntry::Read() const
     cop0.entry_lo[0] = entry_lo[0];
     cop0.entry_lo[1] = entry_lo[1];
     cop0.entry_lo[0].g = cop0.entry_lo[1].g = global;
-    // cop0.entry_hi = std::bit_cast<Cop0Registers::EntryHi>(std::bit_cast<u64>(entry_hi) & ~u64(page_mask));
     cop0.entry_hi = entry_hi;
     cop0.page_mask = page_mask;
 }
@@ -209,7 +208,7 @@ template<MemOp mem_op> u32 VirtualToPhysicalAddressUserMode64(u64 vaddr, bool& c
 template<MemOp mem_op> u32 VirtualToPhysicalAddressSupervisorMode32(u64 vaddr, bool& cacheable_area)
 {
     /* $8000'0000-$BFFF'FFFF; $E000'0000-$FFFF'FFFF */
-    if ((vaddr & 1 << 31) && (vaddr & 0b11 << 29) != 0b10 << 29) {
+    if ((vaddr & 1 << 31) && (vaddr & 3 << 29) != 2 << 29) {
         AddressErrorException<mem_op>(vaddr);
         return 0;
     }
@@ -366,14 +365,12 @@ template<size_t access_size, Alignment alignment> void WriteVirtual(u64 vaddr, s
     if constexpr (access_size > 1) {
         if constexpr (alignment == Alignment::Aligned) {
             if (offset) {
-                AddressErrorException<MemOp::Write>(vaddr);
-                return;
+                return AddressErrorException<MemOp::Write>(vaddr);
             }
         }
     }
     if (addressing_mode == AddressingMode::_32bit && s32(vaddr) != vaddr) {
-        AddressErrorException<MemOp::Write>(vaddr);
-        return;
+        return AddressErrorException<MemOp::Write>(vaddr);
     }
     bool cacheable_area;
     u32 physical_address = vaddr_to_paddr_write_func(vaddr, cacheable_area);
@@ -407,8 +404,7 @@ template<size_t access_size, Alignment alignment> void WriteVirtual(u64 vaddr, s
 void tlbp()
 {
     if (operating_mode != OperatingMode::Kernel && !cop0.status.cu0) {
-        CoprocessorUnusableException(0);
-        return;
+        return CoprocessorUnusableException(0);
     }
     auto index = std::ranges::find_if(tlb_entries, [](TlbEntry const& entry) {
         u64 vpn2_mask = 0xFF'FFFF'E000 & ~u64(entry.page_mask);

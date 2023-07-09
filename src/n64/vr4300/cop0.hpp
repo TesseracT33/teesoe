@@ -75,6 +75,11 @@ inline constexpr std::array cop0_reg_to_str = {
 static_assert(cop0_reg_to_str.size() == 32);
 
 void OnCountCompareMatchEvent();
+void OnWriteToCause();
+void OnWriteToCompare();
+void OnWriteToCount();
+void OnWriteToStatus();
+void OnWriteToWired();
 template<bool initial_add = false> void ReloadCountCompareEvent();
 
 void dmfc0(u32 rt, u32 rd);
@@ -255,11 +260,6 @@ struct Cop0Registers {
     u64 Get(size_t reg_index) const;
     template<bool raw = false> void Set(size_t reg_index, std::signed_integral auto value);
     void SetRaw(size_t reg_index, std::signed_integral auto value) { Set<true>(reg_index, value); }
-    void OnWriteToCause();
-    void OnWriteToCompare();
-    void OnWriteToCount();
-    void OnWriteToStatus();
-    void OnWriteToWired();
 } inline cop0;
 
 inline u32 last_cop0_write;

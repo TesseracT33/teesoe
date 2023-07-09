@@ -167,7 +167,7 @@ template<Cpu cpu, CpuImpl cpu_impl, bool make_string> static void cop1(u32 instr
 template<Cpu cpu, CpuImpl cpu_impl, bool make_string> static void cop2(u32 instr);
 template<Cpu cpu, CpuImpl cpu_impl, bool make_string> static void cop3(u32 instr);
 template<Cpu cpu, CpuImpl cpu_impl, bool make_string> static void regimm(u32 instr);
-template<Cpu cpu, bool make_string> static void reserved_instruction(auto instr);
+template<Cpu cpu, CpuImpl cpu_impl, bool make_string> static void reserved_instruction(auto instr);
 template<Cpu cpu, CpuImpl cpu_impl, bool make_string> static void special(u32 instr);
 u32 vt_e_bug(u32 vt_e, u32 vd_e);
 
@@ -192,7 +192,7 @@ template<Cpu cpu, CpuImpl cpu_impl, bool make_string> void cop0(u32 instr)
         case 1: COP_VR4300(dmfc0, RT, RD); break;
         case 4: COP_VR4300(mtc0, RT, RD); break;
         case 5: COP_VR4300(dmtc0, RT, RD); break;
-        default: reserved_instruction<cpu, make_string>(instr);
+        default: reserved_instruction<cpu, cpu_impl, make_string>(instr);
         }
     } else {
         switch (instr >> 21 & 31) {
@@ -224,7 +224,7 @@ template<Cpu cpu, CpuImpl cpu_impl, bool make_string> void cop1(u32 instr)
         case 1: COP_VR4300(bc1t, IMM16); break;
         case 2: COP_VR4300(bc1fl, IMM16); break;
         case 3: COP_VR4300(bc1tl, IMM16); break;
-        default: reserved_instruction<cpu, make_string>(instr);
+        default: reserved_instruction<cpu, cpu_impl, make_string>(instr);
         }
         break;
     }
@@ -272,9 +272,7 @@ template<Cpu cpu, CpuImpl cpu_impl, bool make_string> void cop2(u32 instr)
         case 5: COP_VR4300(dmtc2, RT); break;
         case 6: COP_VR4300(ctc2, RT); break;
         case 7: COP_VR4300(dctc2); break;
-        default:
-            vr4300::cop0.status.cu2 ? vr4300::ReservedInstructionCop2Exception()
-                                    : vr4300::CoprocessorUnusableException(2);
+        default: COP_VR4300(cop2_reserved); break;
         }
     } else {
         if (instr & 1 << 25) {
@@ -341,13 +339,27 @@ template<Cpu cpu, CpuImpl cpu_impl, bool make_string> void cop2(u32 instr)
 template<Cpu cpu, CpuImpl cpu_impl, bool make_string> void cop3(u32 instr)
 {
     if constexpr (cpu == Cpu::VR4300) {
+        using namespace vr4300;
         if (instr >> 21 & 31) {
-            vr4300::cop0.status.cu3 ? vr4300::ReservedInstructionException() : vr4300::CoprocessorUnusableException(3);
+            if constexpr (cpu_impl == CpuImpl::Interpreter) {
+                vr4300::cop0.status.cu3 ? ReservedInstructionException() : CoprocessorUnusableException(3);
+            } else {
+                auto& c = compiler;
+                asmjit::Label l0 = c.newLabel();
+                c.bt(GlobalVarPtr(vr4300::cop0.status), 31); // cu3
+                c.jc(l0);
+                reg_alloc.Free(host_gpr_arg[0]);
+                c.mov(host_gpr_arg[0].r32(), 3);
+                BlockEpilogWithJmp(CoprocessorUnusableException);
+                c.bind(l0);
+                BlockEpilogWithJmp(ReservedInstructionException);
+                compiler_exception_occurred = true;
+            }
         } else { // MFC3
-            reserved_instruction<cpu, make_string>(instr);
+            reserved_instruction<cpu, cpu_impl, make_string>(instr);
         }
     } else {
-        reserved_instruction<cpu, make_string>(instr);
+        reserved_instruction<cpu, cpu_impl, make_string>(instr);
     }
 }
 
@@ -413,7 +425,7 @@ template<Cpu cpu, CpuImpl cpu_impl, bool make_string> void disassemble(u32 instr
         case 8: COP_RSP(lhv, BASE, VT, ELEM_LO, IMM7); break;
         case 9: COP_RSP(lfv, BASE, VT, ELEM_LO, IMM7); break;
         case 11: COP_RSP(ltv, BASE, VT, ELEM_LO, IMM7); break;
-        default: reserved_instruction<cpu, make_string>(instr);
+        default: reserved_instruction<cpu, cpu_impl, make_string>(instr);
         }
         break;
     case 0x34: CPU_VR4300(lld, RS, RT, IMM16); break;
@@ -435,13 +447,13 @@ template<Cpu cpu, CpuImpl cpu_impl, bool make_string> void disassemble(u32 instr
         case 9: COP_RSP(sfv, BASE, VT, ELEM_LO, IMM7); break;
         case 10: COP_RSP(swv, BASE, VT, ELEM_LO, IMM7); break;
         case 11: COP_RSP(stv, BASE, VT, ELEM_LO, IMM7); break;
-        default: reserved_instruction<cpu, make_string>(instr);
+        default: reserved_instruction<cpu, cpu_impl, make_string>(instr);
         }
         break;
     case 0x3C: CPU_VR4300(scd, RS, RT, IMM16); break;
     case 0x3D: COP_VR4300(sdc1, BASE, FT, IMM16); break;
     case 0x3F: CPU_VR4300(sd, RS, RT, IMM16); break;
-    default: reserved_instruction<cpu, make_string>(instr);
+    default: reserved_instruction<cpu, cpu_impl, make_string>(instr);
     }
 }
 
@@ -472,15 +484,21 @@ template<Cpu cpu, CpuImpl cpu_impl, bool make_string> void regimm(u32 instr)
     case 0x11: CPU(bgezal, RS, IMM16); break;
     case 0x12: CPU_VR4300(bltzall, RS, IMM16); break;
     case 0x13: CPU_VR4300(bgezall, RS, IMM16); break;
-    default: reserved_instruction<cpu, make_string>(instr);
+    default: reserved_instruction<cpu, cpu_impl, make_string>(instr);
     }
 }
 
-template<Cpu cpu, bool make_string> void reserved_instruction(auto instr)
+template<Cpu cpu, CpuImpl cpu_impl, bool make_string> void reserved_instruction(auto instr)
 {
     if constexpr (make_string) {
     } else if constexpr (cpu == Cpu::VR4300) {
-        vr4300::ReservedInstructionException();
+        using namespace vr4300;
+        if constexpr (cpu_impl == CpuImpl::Interpreter) {
+            ReservedInstructionException();
+        } else {
+            reg_alloc.BlockEpilogWithJmp(ReservedInstructionException);
+            compiler_exception_occurred = true;
+        }
     } else {
         rsp::NotifyIllegalInstrCode(instr);
     }
@@ -541,7 +559,7 @@ template<Cpu cpu, CpuImpl cpu_impl, bool make_string> void special(u32 instr)
     case 0x3C: CPU_VR4300(dsll32, RT, RD, SA); break;
     case 0x3E: CPU_VR4300(dsrl32, RT, RD, SA); break;
     case 0x3F: CPU_VR4300(dsra32, RT, RD, SA); break;
-    default: reserved_instruction<cpu, make_string>(instr);
+    default: reserved_instruction<cpu, cpu_impl, make_string>(instr);
     }
 }
 

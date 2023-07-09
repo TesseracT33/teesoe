@@ -101,9 +101,9 @@ void WriteReg(u32 addr, u32 data)
         static constexpr s32 clear_dp_mask = 1 << 10;
         static constexpr s32 set_dp_mask = 1 << 11;
 
-        auto ClearMask = [&](InterruptType interrupt_type) { mi.mask &= ~std::to_underlying(interrupt_type); };
+        auto ClearMask = [](InterruptType interrupt_type) { mi.mask &= ~std::to_underlying(interrupt_type); };
 
-        auto SetMask = [&](InterruptType interrupt_type) { mi.mask |= std::to_underlying(interrupt_type); };
+        auto SetMask = [](InterruptType interrupt_type) { mi.mask |= std::to_underlying(interrupt_type); };
 
         /* TODO: unclear what would happen if two adjacent bits would be set */
         if (data & clear_sp_mask) {

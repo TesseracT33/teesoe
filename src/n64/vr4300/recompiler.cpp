@@ -69,6 +69,13 @@ void BlockEpilogWithJmp(void* func)
     reg_alloc.BlockEpilogWithJmp(func);
 }
 
+void BlockEpilogWithJmpAndPcFlush(void* func, int pc_offset)
+{
+    c.mov(rax, jit_pc + pc_offset);
+    c.mov(GlobalVarPtr(pc), rax);
+    BlockEpilogWithJmp(func);
+}
+
 void BlockEpilogWithPcFlush(int pc_offset)
 {
     c.mov(rax, jit_pc + pc_offset);
@@ -140,6 +147,18 @@ void ExecuteBlock(Block* block)
         in_branch_delay_slot_not_taken &= branch_state != BranchState::NoBranch;
         branch_state = branch_state == BranchState::DelaySlotTaken ? BranchState::Perform : BranchState::NoBranch;
     }
+}
+
+void FinalizeAndExecuteBlock(Block*& block)
+{
+    c.endFunc();
+    c.finalize();
+    asmjit::Error err = jit_runtime.add(&block->func, &code_holder);
+    if (err) {
+        message::error(std::format("Failed to add code to asmjit runtime! Returned error code {}.", err));
+    }
+
+    ExecuteBlock(block);
 }
 
 std::pair<Block*, bool> GetBlock(u32 pc)
@@ -223,16 +242,13 @@ u32 RunRecompiler(u32 cpu_cycles)
     cycle_counter = 0;
     while (cycle_counter < cpu_cycles) {
         exception_occurred = false;
-        if (pc == 0xFFFFFFFF800558C8) {
-            int a = 3;
-        }
 
         auto [block, compiled] = GetBlock(GetPhysicalPC());
         assert(block);
         if (compiled) {
             ExecuteBlock(block);
         } else {
-            branch_hit = branched = false;
+            branch_hit = branched = compiler_exception_occurred = false;
             block_cycles = 0;
             jit_pc = pc;
 
@@ -241,19 +257,22 @@ u32 RunRecompiler(u32 cpu_cycles)
             auto Instr = [] {
                 block_cycles++;
                 u32 instr = FetchInstruction(jit_pc);
-                if (exception_occurred) {
-                    // TODO
-                    exception_occurred = false;
-                    assert(false);
-                    return;
-                }
+                if (compiler_exception_occurred) return; // todo: handle this. need to compile exception handling
                 decoder::exec_cpu<CpuImpl::Recompiler>(instr);
+                if (compiler_exception_occurred) return;
                 jit_pc += 4;
                 if constexpr (log_cpu_jit_register_status) {
                     jit_logger.log(reg_alloc.GetStatusString().c_str());
                 }
             };
+
             Instr();
+
+            if (compiler_exception_occurred) {
+                BlockEpilog();
+                FinalizeAndExecuteBlock(block);
+                continue;
+            }
 
             // If the previously executed block ended with a branch instruction, meaning that the branch delay
             // slot did not fit, execute only the first instruction in this block, before jumping.
@@ -264,7 +283,7 @@ u32 RunRecompiler(u32 cpu_cycles)
             BlockEpilog();
             c.bind(l_nobranch);
 
-            while (!branched && (jit_pc & 255)) {
+            while (!branched && !compiler_exception_occurred && (jit_pc & 255)) {
                 branched = branch_hit; // If the branch delay slot instruction fits within the block boundary,
                                        // include it before stopping
                 Instr();
@@ -275,14 +294,7 @@ u32 RunRecompiler(u32 cpu_cycles)
             block->ends_with_branch_and_delay_slot = branched && branch_hit;
 
             BlockEpilogWithPcFlush(0);
-            c.endFunc();
-            c.finalize();
-            asmjit::Error err = jit_runtime.add(&block->func, &code_holder);
-            if (err) {
-                message::error(std::format("Failed to add code to asmjit runtime! Returned error code {}.", err));
-            }
-
-            ExecuteBlock(block);
+            FinalizeAndExecuteBlock(block);
         }
     }
     return cycle_counter - cpu_cycles;

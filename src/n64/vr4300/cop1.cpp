@@ -54,18 +54,6 @@ struct FPUControl {
     void Set(u32 idx, u32 value);
 } static fpu_control;
 
-/* General-purpose floating point registers. */
-struct FGR {
-    template<FpuNum T> T GetFs(u32 idx) const;
-    template<FpuNum T> T GetFt(u32 idx) const;
-    template<FpuNum T> T GetMoveLoadStore(u32 idx) const;
-    template<FpuNum T> void Set(u32 idx, T data);
-    template<FpuNum T> void SetMoveLoadStore(u32 idx, T data);
-
-private:
-    std::array<s64, 32> fpr;
-} static fpr;
-
 u32 FPUControl::Get(u32 idx) const
 {
     if (idx == 31) return std::bit_cast<u32>(fcr31);
@@ -871,7 +859,7 @@ template<FpuNum From, FpuNum To> static void Convert(u32 fs, u32 fd)
         if (!IsValidInputCvtRound<To>(source)) return;
     }
     if constexpr (std::same_as<From, s64> && std::floating_point<To>) {
-        if (source >= s64(0x0080'0000'0000'0000) || source < s64(0xFF80'0000'0000'0000)) {
+        if (source >= 0x0080'0000'0000'0000_s64 || source < 0xFF80'0000'0000'0000_s64) {
             SignalUnimplementedOp();
             FloatingPointException();
             return;

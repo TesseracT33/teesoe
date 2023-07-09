@@ -8,9 +8,9 @@ namespace mips {
 using namespace asmjit;
 using namespace asmjit::x86;
 
-template<std::signed_integral GprInt, std::signed_integral LoHiInt, std::integral PcInt, typename RegisterAllocator>
-struct RecompilerX64 : public Recompiler<GprInt, LoHiInt, PcInt, RegisterAllocator> {
-    using Base = Recompiler<GprInt, LoHiInt, PcInt, RegisterAllocator>;
+template<std::signed_integral GprInt, std::integral PcInt, typename RegisterAllocator>
+struct RecompilerX64 : public Recompiler<GprInt, PcInt, RegisterAllocator> {
+    using Base = Recompiler<GprInt, PcInt, RegisterAllocator>;
     using Base::Base;
     using Base::block_epilog;
     using Base::block_epilog_with_jmp;
@@ -18,16 +18,16 @@ struct RecompilerX64 : public Recompiler<GprInt, LoHiInt, PcInt, RegisterAllocat
     using Base::branched;
     using Base::c;
     using Base::check_can_exec_dword_instr;
+    using Base::get_hi_ptr;
+    using Base::get_lo_ptr;
     using Base::GetDirtyGpr;
     using Base::GetDirtyGpr32;
     using Base::GetGpr;
     using Base::GetGpr32;
-    using Base::hi;
     using Base::indirect_jump;
     using Base::integer_overflow_exception;
     using Base::jit_pc;
     using Base::link;
-    using Base::lo;
     using Base::mips32;
     using Base::mips64;
     using Base::reg_alloc;
@@ -299,16 +299,16 @@ struct RecompilerX64 : public Recompiler<GprInt, LoHiInt, PcInt, RegisterAllocat
 
     void mfhi(u32 rd) const
     {
-        // if (rd) {
-        //     c.mov(GetDirtyGpr(rd), GlobalVarPtr(hi));
-        // }
+        if (rd) {
+            c.mov(GetDirtyGpr(rd), get_hi_ptr());
+        }
     }
 
     void mflo(u32 rd) const
     {
-        /*if (rd) {
-            c.mov(GetDirtyGpr(rd), GlobalVarPtr(lo));
-        }*/
+        if (rd) {
+            c.mov(GetDirtyGpr(rd), get_lo_ptr());
+        }
     }
 
     void movn(u32 rs, u32 rt, u32 rd) const
@@ -327,14 +327,9 @@ struct RecompilerX64 : public Recompiler<GprInt, LoHiInt, PcInt, RegisterAllocat
         c.cmove(hd, hs);
     }
 
-    void mthi(u32 rs) const
-    { /*c.mov(GlobalVarPtr(hi), GetGpr(rs));*/
-    }
+    void mthi(u32 rs) const { c.mov(get_hi_ptr(), GetGpr(rs)); }
 
-    void mtlo(u32 rs) const
-    { /*
-        c.mov(GlobalVarPtr(lo), GetGpr(rs));*/
-    }
+    void mtlo(u32 rs) const { c.mov(get_lo_ptr(), GetGpr(rs)); }
 
     void nor(u32 rs, u32 rt, u32 rd) const
     {

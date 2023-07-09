@@ -120,7 +120,7 @@ public:
 
     void BlockEpilog()
     {
-        FlushAll();
+        FlushAndRestoreAll();
         if (is_nonvolatile(guest_gprs_pointer_reg)) {
             RestoreHost(guest_gprs_pointer_reg);
         }
@@ -139,7 +139,7 @@ public:
 
     void BlockEpilogWithJmp(void* func)
     {
-        FlushAll();
+        FlushAndRestoreAll();
         if (is_nonvolatile(guest_gprs_pointer_reg)) {
             RestoreHost(guest_gprs_pointer_reg);
         }
@@ -208,16 +208,26 @@ public:
         }
     }
 
+    void FlushAll()
+    {
+        for (auto& binding : gpr_state.bindings) {
+            Flush(binding, false);
+        }
+        for (auto& binding : vpr_state.bindings) {
+            Flush(binding, false);
+        }
+    }
+
     void FlushAllVolatile()
     {
         for (auto& b : gpr_state.bindings) {
-            if (b.is_volatile && b.Occupied()) {
-                Flush(b, true);
+            if (b.is_volatile) {
+                Flush(b, false);
             }
         }
         for (auto& b : vpr_state.bindings) {
-            if (b.is_volatile && b.Occupied()) {
-                Flush(b, true);
+            if (b.is_volatile) {
+                Flush(b, false);
             }
         }
     }
@@ -225,13 +235,13 @@ public:
     void FlushAndDestroyAllVolatile()
     {
         for (auto& b : gpr_state.bindings) {
-            if (b.is_volatile && b.Occupied()) {
-                FlushAndDestroyBinding(b, true);
+            if (b.is_volatile) {
+                FlushAndDestroyBinding(b, false);
             }
         }
         for (auto& b : vpr_state.bindings) {
-            if (b.is_volatile && b.Occupied()) {
-                FlushAndDestroyBinding(b, true);
+            if (b.is_volatile) {
+                FlushAndDestroyBinding(b, false);
             }
         }
     }
@@ -383,22 +393,10 @@ private:
                     }
                 }
             }
+            // binding.dirty = false; // TODO: uncommenting this breaks this things, why?
         }
         if (!binding.is_volatile && restore) {
             RestoreHost(binding.host);
-        }
-    }
-
-    // This should only be used as part of an instruction epilogue. Thus, there is no need
-    // to destroy bindings. In fact, this would be undesirable, since this function could not
-    // be called in an epilog emitted mid-block, as part of a code path dependent on a run-time branch.
-    void FlushAll()
-    {
-        for (auto& binding : gpr_state.bindings) {
-            Flush(binding, true);
-        }
-        for (auto& binding : vpr_state.bindings) {
-            Flush(binding, true);
         }
     }
 
@@ -407,6 +405,19 @@ private:
         Flush(binding, restore);
         if constexpr (std::same_as<decltype(binding.host), HostGpr>) gpr_state.ResetBinding(binding);
         else vpr_state.ResetBinding(binding);
+    }
+
+    // This should only be used as part of an instruction epilogue. Thus, there is no need
+    // to destroy bindings. In fact, this would be undesirable, since this function could not
+    // be called in an epilog emitted mid-block, as part of a code path dependent on a run-time branch.
+    void FlushAndRestoreAll()
+    {
+        for (auto& b : gpr_state.bindings) {
+            Flush(b, true);
+        }
+        for (auto& b : vpr_state.bindings) {
+            Flush(b, true);
+        }
     }
 
     HostGpr GetHostGpr(u32 guest, bool make_dirty) { return GetHost<HostGpr>(guest, make_dirty); }

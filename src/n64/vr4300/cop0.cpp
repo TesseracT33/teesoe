@@ -17,34 +17,6 @@ using mips::OperatingMode;
 
 namespace n64::vr4300 {
 
-void Cop0Registers::OnWriteToCause()
-{
-    CheckInterrupts();
-}
-
-void Cop0Registers::OnWriteToCompare()
-{
-    cause.ip &= ~0x80; /* TODO: not sure if anything else needs to be done? */
-    ReloadCountCompareEvent();
-}
-
-void Cop0Registers::OnWriteToCount()
-{
-    ReloadCountCompareEvent();
-}
-
-void Cop0Registers::OnWriteToStatus()
-{
-    can_exec_cop0_instrs = operating_mode == mips::OperatingMode::Kernel || cop0.status.cu0;
-    SetVaddrToPaddrFuncs();
-    CheckInterrupts();
-}
-
-void Cop0Registers::OnWriteToWired()
-{
-    random_generator.SetRange(wired);
-}
-
 u64 Cop0Registers::Get(size_t reg_index) const
 {
     auto Read = [](auto reg) {
@@ -151,7 +123,7 @@ template<bool raw> void Cop0Registers::Set(size_t reg_index, std::signed_integra
         break;
 
     case Cop0Reg::count:
-        count = u64(value) << 1; /* See the declaration of 'count' */
+        count = u64(u32(value)) << 1; /* See the declaration of 'count' */
         OnWriteToCount();
         break;
 
@@ -161,7 +133,7 @@ template<bool raw> void Cop0Registers::Set(size_t reg_index, std::signed_integra
         break;
 
     case Cop0Reg::compare:
-        compare = u64(value) << 1; /* See the declaration of 'compare' */
+        compare = u64(u32(value)) << 1; /* See the declaration of 'compare' */
         OnWriteToCompare();
         break;
 
@@ -221,6 +193,35 @@ void OnCountCompareMatchEvent()
     ReloadCountCompareEvent();
 }
 
+void OnWriteToCause()
+{
+    CheckInterrupts();
+}
+
+void OnWriteToCompare()
+{
+    cop0.cause.ip &= ~0x80;
+    CheckInterrupts();
+    ReloadCountCompareEvent();
+}
+
+void OnWriteToCount()
+{
+    ReloadCountCompareEvent();
+}
+
+void OnWriteToStatus()
+{
+    can_exec_cop0_instrs = operating_mode == mips::OperatingMode::Kernel || cop0.status.cu0;
+    SetVaddrToPaddrFuncs();
+    CheckInterrupts();
+}
+
+void OnWriteToWired()
+{
+    random_generator.SetRange(cop0.wired);
+}
+
 template<bool initial_add> void ReloadCountCompareEvent()
 {
     u64 cycles_until_count_compare_match = (cop0.compare - cop0.count) & 0x1'FFFF'FFFF;
@@ -267,12 +268,12 @@ void eret()
     if (!can_exec_cop0_instrs) {
         return CoprocessorUnusableException(0);
     }
-    if (cop0.status.erl == 0) {
-        pc = cop0.epc;
-        cop0.status.exl = 0;
-    } else {
+    if (cop0.status.erl) {
         pc = cop0.error_epc;
         cop0.status.erl = 0;
+    } else {
+        pc = cop0.epc;
+        cop0.status.exl = 0;
     }
     CheckInterrupts();
     ll_bit = 0;
@@ -283,7 +284,7 @@ void eret()
         AddressErrorException<MemOp::InstrFetch>(pc);
     } else {
         ResetBranch();
-        exception_occurred = true; // stop pc from being incremented by 4 directly after. TODO: add a new BranchState?
+        exception_occurred = true; // stop pc from being incremented by 4 directly after.
     }
     SetVaddrToPaddrFuncs();
 }

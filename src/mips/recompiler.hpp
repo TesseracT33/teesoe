@@ -8,23 +8,23 @@
 
 namespace mips {
 
-template<std::signed_integral GprInt, std::signed_integral LoHiInt, std::integral PcInt, typename RegisterAllocator>
-struct Recompiler {
+template<std::signed_integral GprInt, std::integral PcInt, typename RegisterAllocator> struct Recompiler {
     using BlockEpilogHandler = void (*)();
     using BlockEpilogWithJmpHandler = void (*)(void*);
     using CheckCanExecDwordInstrHandler = bool (*)();
     using ExceptionHandler = void (*)();
+    using GetLoHiPtrHandler = std::conditional_t<arch.a64, asmjit::a64::Mem, asmjit::x86::Mem> (*)();
     using IndirectJumpHandler = void (*)(SizeToHostReg<sizeof(PcInt)>::type target);
     using LinkHandler = void (*)(u32 reg);
     using TakeBranchHandler = void (*)(PcInt target);
 
     consteval Recompiler(AsmjitCompiler& compiler,
       RegisterAllocator& reg_alloc,
-      LoHiInt& lo,
-      LoHiInt& hi,
       PcInt& jit_pc,
       bool& branch_hit,
       bool& branched,
+      GetLoHiPtrHandler get_lo_ptr_handler,
+      GetLoHiPtrHandler get_hi_ptr_handler,
       TakeBranchHandler take_branch_handler,
       IndirectJumpHandler indirect_jump_handler,
       LinkHandler link_handler,
@@ -35,11 +35,11 @@ struct Recompiler {
       CheckCanExecDwordInstrHandler check_can_exec_dword_instr = nullptr) // MIPS64 only
       : c(compiler),
         reg_alloc(reg_alloc),
-        lo(lo),
-        hi(hi),
         jit_pc(jit_pc),
         branch_hit(branch_hit),
         branched(branched),
+        get_lo_ptr(get_lo_ptr_handler),
+        get_hi_ptr(get_hi_ptr_handler),
         take_branch(take_branch_handler),
         indirect_jump(indirect_jump_handler),
         link(link_handler),
@@ -51,13 +51,12 @@ struct Recompiler {
     {
     }
 
-    LoHiInt& lo;
-    LoHiInt& hi;
-    PcInt& jit_pc;
     AsmjitCompiler& c;
     RegisterAllocator& reg_alloc;
+    PcInt& jit_pc;
     bool& branch_hit;
     bool& branched;
+    GetLoHiPtrHandler const get_lo_ptr, get_hi_ptr;
     TakeBranchHandler const take_branch;
     IndirectJumpHandler const indirect_jump;
     LinkHandler const link;

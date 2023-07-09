@@ -241,6 +241,9 @@ void PerformBranch()
 {
     pc = jump_addr;
     jump_is_pending = in_branch_delay_slot = false;
+    if constexpr (log_rsp_branches) {
+        log(std::format("RSP branch to 0x{:08X}; RA = 0x{:08X}; SP = 0x{:08X}", u32(pc), u32(gpr[31]), u32(gpr[29])));
+    }
 }
 
 void PowerOn()
