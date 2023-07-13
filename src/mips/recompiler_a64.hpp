@@ -14,8 +14,7 @@ template<std::signed_integral GprInt, std::integral PcInt, typename RegisterAllo
 struct RecompilerA64 : public Recompiler<GprInt, PcInt, RegisterAllocator> {
     using Base = Recompiler<GprInt, PcInt, RegisterAllocator>;
     using Base::Base;
-    using Base::block_epilog;
-    using Base::block_epilog_with_jmp;
+    using Base::block_epilog_with_jmp_and_pc_flush_and_pc_flush;
     using Base::branch_hit;
     using Base::branched;
     using Base::c;
@@ -48,7 +47,7 @@ struct RecompilerA64 : public Recompiler<GprInt, PcInt, RegisterAllocator> {
         }
         c.b(l_end);
         c.bind(l_exception);
-        block_epilog_with_jmp(integer_overflow_exception);
+        block_epilog_with_jmp_and_pc_flush(integer_overflow_exception);
         c.bind(l_end);
     }
 
@@ -69,7 +68,7 @@ struct RecompilerA64 : public Recompiler<GprInt, PcInt, RegisterAllocator> {
         }
         c.b(l_end);
         c.bind(l_exception);
-        block_epilog_with_jmp(integer_overflow_exception);
+        block_epilog_with_jmp_and_pc_flush(integer_overflow_exception);
         c.bind(l_end);
     }
 
@@ -140,7 +139,7 @@ struct RecompilerA64 : public Recompiler<GprInt, PcInt, RegisterAllocator> {
         if (rd) c.mov(GetDirtyGpr(rd), x0);
         c.b(l_end);
         c.bind(l_exception);
-        block_epilog_with_jmp(integer_overflow_exception);
+        block_epilog_with_jmp_and_pc_flush(integer_overflow_exception);
         c.bind(l_end);
     }
 
@@ -159,7 +158,7 @@ struct RecompilerA64 : public Recompiler<GprInt, PcInt, RegisterAllocator> {
         if (rt) c.mov(GetDirtyGpr(rt), x0);
         c.b(l_end);
         c.bind(l_exception);
-        block_epilog_with_jmp(integer_overflow_exception);
+        block_epilog_with_jmp_and_pc_flush(integer_overflow_exception);
         c.bind(l_end);
     }
 
@@ -269,7 +268,7 @@ struct RecompilerA64 : public Recompiler<GprInt, PcInt, RegisterAllocator> {
         if (rd) c.mov(GetDirtyGpr(rd), x0);
         c.b(l_end);
         c.bind(l_exception);
-        block_epilog_with_jmp(integer_overflow_exception);
+        block_epilog_with_jmp_and_pc_flush(integer_overflow_exception);
         c.bind(l_end);
     }
 
@@ -488,7 +487,7 @@ struct RecompilerA64 : public Recompiler<GprInt, PcInt, RegisterAllocator> {
         }
         c.b(l_end);
         c.bind(l_exception);
-        block_epilog_with_jmp(integer_overflow_exception);
+        block_epilog_with_jmp_and_pc_flush(integer_overflow_exception);
         c.bind(l_end);
     }
 
@@ -595,7 +594,7 @@ protected:
         if constexpr (cc == Cond::Lt) c.jge(l_end);
         if constexpr (cc == Cond::Ltu) c.jae(l_end);
         if constexpr (cc == Cond::Ne) c.je(l_end);
-        block_epilog_with_jmp(trap_exception);
+        block_epilog_with_jmp_and_pc_flush(trap_exception);
         c.bind(l_end);
         branched = true;
     }

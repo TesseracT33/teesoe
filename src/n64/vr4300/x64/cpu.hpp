@@ -74,7 +74,11 @@ struct Recompiler : public mips::RecompilerX64<s64, u64, RegAllocator> {
 
     void bnel(u32 rs, u32 rt, s16 imm) const { branch<mips::Cond::Ne, true>(rs, rt, imm); }
 
-    void break_() const { BlockEpilogWithJmp(BreakpointException); }
+    void break_() const
+    {
+        BlockEpilogWithJmpAndPcFlush(BreakpointException);
+        branched = true;
+    }
 
     void ddiv(u32 rs, u32 rt) const
     {
@@ -299,7 +303,7 @@ struct Recompiler : public mips::RecompilerX64<s64, u64, RegAllocator> {
         if (!CheckDwordOpCondJit()) return;
 
         Label l_noexception = c.newLabel();
-
+        FlushPc();
         reg_alloc.ReserveArgs(1);
         Gpq hs = GetGpr(rs);
         c.lea(host_gpr_arg[0], ptr(hs, imm));
@@ -329,7 +333,7 @@ struct Recompiler : public mips::RecompilerX64<s64, u64, RegAllocator> {
         if (!CheckDwordOpCondJit()) return;
 
         Label l_noexception = c.newLabel();
-
+        FlushPc();
         reg_alloc.ReserveArgs(1);
         Gpq hs = GetGpr(rs);
         c.lea(host_gpr_arg[0], ptr(hs, imm));
@@ -373,6 +377,7 @@ struct Recompiler : public mips::RecompilerX64<s64, u64, RegAllocator> {
     {
         Label l_noexception = c.newLabel();
 
+        FlushPc();
         reg_alloc.ReserveArgs(1);
         Gpq hs = GetGpr(rs);
         c.lea(host_gpr_arg[0], ptr(hs, imm));
@@ -402,6 +407,7 @@ struct Recompiler : public mips::RecompilerX64<s64, u64, RegAllocator> {
     {
         Label l_noexception = c.newLabel();
 
+        FlushPc();
         reg_alloc.ReserveArgs(1);
         Gpq hs = GetGpr(rs);
         c.lea(host_gpr_arg[0], ptr(hs, imm));
@@ -466,6 +472,7 @@ struct Recompiler : public mips::RecompilerX64<s64, u64, RegAllocator> {
     {
         if (!CheckDwordOpCondJit()) return;
         Label l_end = c.newLabel();
+        FlushPc();
         reg_alloc.ReserveArgs(2);
         Gpq hs = GetGpr(rs), ht = GetGpr(rt);
         c.lea(host_gpr_arg[0], ptr(hs, imm));
@@ -484,6 +491,7 @@ struct Recompiler : public mips::RecompilerX64<s64, u64, RegAllocator> {
     {
         if (!CheckDwordOpCondJit()) return;
         Label l_end = c.newLabel();
+        FlushPc();
         reg_alloc.ReserveArgs(2);
         Gpq hs = GetGpr(rs), ht = GetGpr(rt);
         c.lea(host_gpr_arg[0], ptr(hs, imm));
@@ -507,13 +515,18 @@ struct Recompiler : public mips::RecompilerX64<s64, u64, RegAllocator> {
            load/store instruction is executed. Is executed as a NOP on the VR4300. */
     }
 
-    void syscall() const { BlockEpilogWithJmp(SyscallException); }
+    void syscall() const
+    {
+        BlockEpilogWithJmpAndPcFlush(SyscallException);
+        branched = true;
+    }
 
     void sw(u32 rs, u32 rt, s16 imm) const { store<s32>(rs, rt, imm); }
 
     void swl(u32 rs, u32 rt, s16 imm) const
     {
         Label l_end = c.newLabel();
+        FlushPc();
         reg_alloc.ReserveArgs(2);
         Gpq hs = GetGpr(rs), ht = GetGpr(rt);
         c.lea(host_gpr_arg[0], ptr(hs, imm));
@@ -532,6 +545,7 @@ struct Recompiler : public mips::RecompilerX64<s64, u64, RegAllocator> {
     void swr(u32 rs, u32 rt, s16 imm) const
     {
         Label l_end = c.newLabel();
+        FlushPc();
         reg_alloc.ReserveArgs(2);
         Gpq hs = GetGpr(rs), ht = GetGpr(rt);
         c.lea(host_gpr_arg[0], ptr(hs, imm));
@@ -592,6 +606,7 @@ private:
     {
         Label l_noexception = c.newLabel();
 
+        FlushPc();
         reg_alloc.ReserveArgs(2);
         Gpq hs = GetGpr(rs);
         c.lea(host_gpr_arg[0], ptr(hs, imm));
@@ -626,6 +641,7 @@ private:
     {
         Label l_noexception = c.newLabel();
 
+        FlushPc();
         reg_alloc.ReserveArgs(1);
         Gpq hs = GetGpr(rs);
         reg_alloc.Free(rbx);
@@ -681,6 +697,7 @@ private:
     template<std::integral Int> void store(u32 rs, u32 rt, s16 imm) const
     {
         Label l_end = c.newLabel();
+        FlushPc();
         reg_alloc.ReserveArgs(2);
         Gpq hs = GetGpr(rs), ht = GetGpr(rt);
         c.lea(host_gpr_arg[0], ptr(hs, imm));
@@ -707,6 +724,7 @@ private:
         c.jmp(l_end);
 
         c.bind(l_store);
+        FlushPc();
         reg_alloc.ReserveArgs(2);
         Gpq hs = GetGpr(rs), ht = GetGpr(rt);
         c.lea(host_gpr_arg[0], ptr(hs, imm));
@@ -731,8 +749,7 @@ private:
     [](u64 target) { TakeBranchJit(target); },
     [](HostGpr target) { TakeBranchJit(target); },
     LinkJit,
-    BlockEpilog,
-    BlockEpilogWithJmp,
+    BlockEpilogWithJmpAndPcFlush,
     IntegerOverflowException,
     TrapException,
     CheckDwordOpCondJit,

@@ -174,10 +174,10 @@ template<MemOp mem_op> void TlbMissException(u64 bad_vaddr)
 {
     if constexpr (log_exceptions) log(std::format("EXCEPTION: TLB Miss; vaddr {:016X}", bad_vaddr));
     static constexpr s32 base_addr[2][2] = {
-        s32(0x8000'0000),
-        s32(0x8000'0180),
-        s32(0xBFC0'0200),
-        s32(0xBFC0'0380),
+        0x8000'0000_s32,
+        0x8000'0180_s32,
+        0xBFC0'0200_s32,
+        0xBFC0'0380_s32,
     };
     u64 vector = base_addr[cop0.status.bev][cop0.status.exl];
     HandleException(); // changes status.exl
@@ -221,10 +221,10 @@ template<MemOp mem_op> void XtlbMissException(u64 bad_vaddr)
 {
     if constexpr (log_exceptions) log(std::format("EXCEPTION: XTLB Miss; vaddr {:016X}", bad_vaddr));
     static constexpr s32 base_addr[2][2] = {
-        s32(0x8000'0080),
-        s32(0x8000'0180),
-        s32(0xBFC0'0280),
-        s32(0xBFC0'0380),
+        0x8000'0080_s32,
+        0x8000'0180_s32,
+        0xBFC0'0280_s32,
+        0xBFC0'0380_s32,
     };
     u64 vector = base_addr[cop0.status.bev][cop0.status.exl];
     HandleException(); // changes status.exl

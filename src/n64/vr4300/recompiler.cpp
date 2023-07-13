@@ -71,15 +71,13 @@ void BlockEpilogWithJmp(void* func)
 
 void BlockEpilogWithJmpAndPcFlush(void* func, int pc_offset)
 {
-    c.mov(rax, jit_pc + pc_offset);
-    c.mov(GlobalVarPtr(pc), rax);
+    FlushPc(pc_offset);
     BlockEpilogWithJmp(func);
 }
 
 void BlockEpilogWithPcFlush(int pc_offset)
 {
-    c.mov(rax, jit_pc + pc_offset);
-    c.mov(GlobalVarPtr(pc), rax);
+    FlushPc(pc_offset);
     BlockEpilog();
 }
 
@@ -125,6 +123,7 @@ bool CheckDwordOpCondJit()
         return true;
     } else {
         BlockEpilogWithJmp(ReservedInstructionException);
+        branched = true;
         return false;
     }
 }
@@ -159,6 +158,12 @@ void FinalizeAndExecuteBlock(Block*& block)
     }
 
     ExecuteBlock(block);
+}
+
+void FlushPc(int pc_offset)
+{
+    c.mov(rax, jit_pc + pc_offset);
+    c.mov(GlobalVarPtr(pc), rax);
 }
 
 std::pair<Block*, bool> GetBlock(u32 pc)
@@ -242,7 +247,6 @@ u32 RunRecompiler(u32 cpu_cycles)
     cycle_counter = 0;
     while (cycle_counter < cpu_cycles) {
         exception_occurred = false;
-
         auto [block, compiled] = GetBlock(GetPhysicalPC());
         assert(block);
         if (compiled) {

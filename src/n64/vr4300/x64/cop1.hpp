@@ -19,9 +19,11 @@ void OnCop1Unusable();
 void CallCop1InterpreterImpl(auto impl, u32 fs, u32 fd)
 {
     Label l_noexception = c.newLabel();
+    FlushPc();
     reg_alloc.FreeArgs(2);
     fs ? c.mov(host_gpr_arg[0].r32(), fs) : c.xor_(host_gpr_arg[0].r32(), host_gpr_arg[0].r32());
     fd ? c.mov(host_gpr_arg[1].r32(), fd) : c.xor_(host_gpr_arg[1].r32(), host_gpr_arg[1].r32());
+    reg_alloc.Call(impl);
     c.cmp(GlobalVarPtr(exception_occurred), 0);
     c.je(l_noexception);
     BlockEpilog();
@@ -31,10 +33,12 @@ void CallCop1InterpreterImpl(auto impl, u32 fs, u32 fd)
 void CallCop1InterpreterImpl(auto impl, u32 fs, u32 ft, u32 fd)
 {
     Label l_noexception = c.newLabel();
+    FlushPc();
     reg_alloc.FreeArgs(3);
     fs ? c.mov(host_gpr_arg[0].r32(), fs) : c.xor_(host_gpr_arg[0].r32(), host_gpr_arg[0].r32());
     ft ? c.mov(host_gpr_arg[1].r32(), ft) : c.xor_(host_gpr_arg[1].r32(), host_gpr_arg[1].r32());
     fd ? c.mov(host_gpr_arg[2].r32(), fd) : c.xor_(host_gpr_arg[2].r32(), host_gpr_arg[2].r32());
+    reg_alloc.Call(impl);
     c.cmp(GlobalVarPtr(exception_occurred), 0);
     c.je(l_noexception);
     BlockEpilog();
@@ -84,7 +88,7 @@ void OnCop1Unusable()
 {
     reg_alloc.ReserveArgs(1);
     c.mov(host_gpr_arg[0].r32(), 1);
-    BlockEpilogWithJmp(CoprocessorUnusableException);
+    BlockEpilogWithJmpAndPcFlush(CoprocessorUnusableException);
     branched = true;
 }
 
@@ -93,7 +97,7 @@ void OnInvalidFormat()
     if (!CheckCop1Usable()) return;
     c.bts(GlobalVarPtr(fcr31), FCR31BitIndex::CauseUnimplemented);
     block_cycles++;
-    BlockEpilogWithJmp(FloatingPointException);
+    BlockEpilogWithJmpAndPcFlush(FloatingPointException);
     branched = true;
 }
 
@@ -120,9 +124,9 @@ inline void bc1tl(s16 imm)
 inline void cfc1(u32 fs, u32 rt)
 {
     if (!cop0.status.cu1) return OnCop1Unusable();
-    Gpq ht = reg_alloc.GetHostGprMarkDirty(rt);
+    Gpq ht = GetDirtyGpr(rt);
     if (fs == 31) c.movsxd(ht, GlobalVarPtr(fcr31));
-    else if (fs == 0) c.mov(ht, 0xA00);
+    else if (fs == 0) c.mov(ht.r32(), 0xA00);
     else c.xor_(ht.r32(), ht.r32());
 }
 
@@ -130,14 +134,17 @@ inline void ctc1(u32 fs, u32 rt)
 {
     if (!cop0.status.cu1) return OnCop1Unusable();
     if (fs != 31) return;
-    Gpd ht = reg_alloc.GetHostGpr(rt).r32();
+    Gpd ht = GetGpr(rt).r32();
     c.mov(eax, ht);
     c.and_(eax, fcr31_write_mask);
     c.and_(GlobalVarPtr(fcr31), ~fcr31_write_mask);
     c.or_(GlobalVarPtr(fcr31), eax);
     c.and_(eax, 3);
+    c.shl(eax, 2);
+    reg_alloc.FreeArgs(1);
     c.mov(host_gpr_arg[0].r32(), GlobalArrPtrWithRegOffset(guest_to_host_rounding_mode, rax, 4));
     reg_alloc.Call(fesetround);
+    reg_alloc.Call(TestExceptions<false>);
 }
 
 inline void dcfc1()
@@ -145,7 +152,7 @@ inline void dcfc1()
     if (!CheckCop1Usable()) return;
     c.bts(GlobalVarPtr(fcr31), FCR31BitIndex::CauseUnimplemented);
     block_cycles++;
-    BlockEpilogWithJmp(FloatingPointException);
+    BlockEpilogWithJmpAndPcFlush(FloatingPointException);
     branched = true;
 }
 
@@ -176,6 +183,7 @@ inline void ldc1(u32 base, u32 ft, s16 imm)
 {
     if (!cop0.status.cu1) return OnCop1Unusable();
     if (!cop0.status.fr) ft &= ~1;
+    FlushPc();
     Label l_no_exception = c.newLabel();
     reg_alloc.ReserveArgs(1);
     Gpq hbase = GetGpr(base);
@@ -195,6 +203,7 @@ inline void ldc1(u32 base, u32 ft, s16 imm)
 inline void lwc1(u32 base, u32 ft, s16 imm)
 {
     if (!cop0.status.cu1) return OnCop1Unusable();
+    FlushPc();
     Label l_no_exception = c.newLabel();
     reg_alloc.ReserveArgs(1);
     Gpq hbase = GetGpr(base);
@@ -243,6 +252,7 @@ inline void sdc1(u32 base, u32 ft, s16 imm)
 {
     if (!cop0.status.cu1) return OnCop1Unusable();
     if (!cop0.status.fr) ft &= ~1;
+    FlushPc();
     Label l_end = c.newLabel();
     reg_alloc.ReserveArgs(2);
     Gpq hbase = GetGpr(base);
@@ -261,6 +271,7 @@ inline void sdc1(u32 base, u32 ft, s16 imm)
 inline void swc1(u32 base, u32 ft, s16 imm)
 {
     if (!cop0.status.cu1) return OnCop1Unusable();
+    FlushPc();
     Label l_end = c.newLabel();
     reg_alloc.ReserveArgs(2);
     Gpq hbase = GetGpr(base);
@@ -370,7 +381,8 @@ template<Fmt fmt> inline void mov(u32 fs, u32 fd)
         } else {
             reg_alloc.ReserveArgs(1);
             c.mov(host_gpr_arg[0], 1);
-            reg_alloc.BlockEpilogWithJmp(CoprocessorUnusableException);
+            BlockEpilogWithJmpAndPcFlush(CoprocessorUnusableException);
+            branched = true;
         }
     } else {
         OnInvalidFormat();

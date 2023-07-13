@@ -15,12 +15,13 @@ namespace n64::vr4300 {
 
 void BlockEpilog();
 void BlockEpilogWithJmp(void* func);
-void BlockEpilogWithJmpAndPcFlush(void* func, int pc_offset);
-void BlockEpilogWithPcFlush(int pc_offset);
+void BlockEpilogWithJmpAndPcFlush(void* func, int pc_offset = 0);
+void BlockEpilogWithPcFlush(int pc_offset = 0);
 void BlockProlog();
 void BlockRecordCycles();
 void DiscardBranchJit();
 bool CheckDwordOpCondJit();
+void FlushPc(int pc_offset = 0);
 Status InitRecompiler();
 void Invalidate(u32 addr);
 void InvalidateRange(u32 addr_lo, u32 addr_hi);

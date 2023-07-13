@@ -9,8 +9,7 @@
 namespace mips {
 
 template<std::signed_integral GprInt, std::integral PcInt, typename RegisterAllocator> struct Recompiler {
-    using BlockEpilogHandler = void (*)();
-    using BlockEpilogWithJmpHandler = void (*)(void*);
+    using BlockEpilogWithJmpAndPcFlushHandler = void (*)(void*, int);
     using CheckCanExecDwordInstrHandler = bool (*)();
     using ExceptionHandler = void (*)();
     using GetLoHiPtrHandler = std::conditional_t<arch.a64, asmjit::a64::Mem, asmjit::x86::Mem> (*)();
@@ -28,8 +27,8 @@ template<std::signed_integral GprInt, std::integral PcInt, typename RegisterAllo
       TakeBranchHandler take_branch_handler,
       IndirectJumpHandler indirect_jump_handler,
       LinkHandler link_handler,
-      BlockEpilogHandler block_epilog = nullptr, // only for cpus supporting exceptions
-      BlockEpilogWithJmpHandler block_epilog_with_jmp = nullptr, // only for cpus supporting exceptions
+      BlockEpilogWithJmpAndPcFlushHandler block_epilog_with_jmp_and_pc_flush =
+        nullptr, // only for cpus supporting exceptions
       ExceptionHandler integer_overflow_exception = nullptr,
       ExceptionHandler trap_exception = nullptr,
       CheckCanExecDwordInstrHandler check_can_exec_dword_instr = nullptr) // MIPS64 only
@@ -44,8 +43,7 @@ template<std::signed_integral GprInt, std::integral PcInt, typename RegisterAllo
         indirect_jump(indirect_jump_handler),
         link(link_handler),
         check_can_exec_dword_instr(check_can_exec_dword_instr),
-        block_epilog(block_epilog),
-        block_epilog_with_jmp(block_epilog_with_jmp),
+        block_epilog_with_jmp_and_pc_flush(block_epilog_with_jmp_and_pc_flush),
         integer_overflow_exception(integer_overflow_exception),
         trap_exception(trap_exception)
     {
@@ -61,8 +59,7 @@ template<std::signed_integral GprInt, std::integral PcInt, typename RegisterAllo
     IndirectJumpHandler const indirect_jump;
     LinkHandler const link;
     CheckCanExecDwordInstrHandler const check_can_exec_dword_instr;
-    BlockEpilogHandler const block_epilog;
-    BlockEpilogWithJmpHandler const block_epilog_with_jmp;
+    BlockEpilogWithJmpAndPcFlushHandler const block_epilog_with_jmp_and_pc_flush;
     ExceptionHandler const integer_overflow_exception, trap_exception;
 
     static constexpr bool mips32 = sizeof(GprInt) == 4;

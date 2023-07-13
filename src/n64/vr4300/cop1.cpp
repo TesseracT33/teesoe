@@ -46,7 +46,6 @@ static bool SignalInvalidOp();
 static bool SignalOverflow();
 static bool SignalUnderflow();
 static bool SignalUnimplementedOp();
-template<bool update_flags = true> static bool TestExceptions();
 
 /* Floating point control registers. Only #0 and #31 are "valid", and #0 is read-only. */
 struct FPUControl {
@@ -935,5 +934,8 @@ INST_FMT_SPEC(mul, u32, u32, u32);
 INST_FMT_SPEC(neg, u32, u32);
 INST_FMT_SPEC(sqrt, u32, u32);
 INST_FMT_SPEC(sub, u32, u32, u32);
+
+template bool TestExceptions<false>();
+template bool TestExceptions<true>();
 
 } // namespace n64::vr4300

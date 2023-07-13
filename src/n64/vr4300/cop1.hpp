@@ -178,5 +178,6 @@ template<Fmt> void sqrt(u32 fs, u32 fd);
 template<Fmt> void sub(u32 fs, u32 ft, u32 fd);
 
 void InitCop1();
+template<bool update_flags = true> bool TestExceptions();
 
 } // namespace n64::vr4300

@@ -16,7 +16,7 @@ inline void OnCop0Unusable()
 {
     reg_alloc.ReserveArgs(1);
     c.xor_(host_gpr_arg[0].r32(), host_gpr_arg[0].r32());
-    BlockEpilogWithJmp(CoprocessorUnusableException);
+    BlockEpilogWithJmpAndPcFlush(CoprocessorUnusableException);
     branched = true;
 }
 
@@ -139,6 +139,7 @@ template<size_t size> inline void WriteCop0(Gpq src, u32 idx)
         Label l_noexception = c.newLabel();
         c.lea(rax, ptr(src.r32(), src.r32()));
         c.mov(GlobalVarPtr(cop0.compare), rax);
+        FlushPc();
         reg_alloc.Call(OnWriteToCompare);
         c.cmp(GlobalVarPtr(exception_occurred), 0);
         c.je(l_noexception);
@@ -153,6 +154,7 @@ template<size_t size> inline void WriteCop0(Gpq src, u32 idx)
     case Cop0Reg::cause: {
         WriteMasked(cop0.cause, 0x300);
         Label l_noexception = c.newLabel();
+        FlushPc();
         reg_alloc.Call(OnWriteToCause);
         c.cmp(GlobalVarPtr(exception_occurred), 0);
         c.je(l_noexception);
@@ -176,11 +178,12 @@ template<size_t size> inline void WriteCop0(Gpq src, u32 idx)
 inline void cache(u32 rs, u32 rt, s16 imm)
 {
     Label l_no_exception = c.newLabel();
+    FlushPc();
     reg_alloc.FlushAll();
     rs ? c.mov(host_gpr_arg[0].r32(), rs) : c.xor_(host_gpr_arg[0].r32(), host_gpr_arg[0].r32());
     rt ? c.mov(host_gpr_arg[1].r32(), rt) : c.xor_(host_gpr_arg[1].r32(), host_gpr_arg[1].r32());
     imm ? c.mov(host_gpr_arg[2].r32(), imm) : c.xor_(host_gpr_arg[2].r32(), host_gpr_arg[2].r32());
-    reg_alloc.Call(vr4300::cache); // TODO: impl is calling AdvancePipeline
+    reg_alloc.Call(vr4300::cache);
     c.cmp(GlobalVarPtr(exception_occurred), 0);
     c.je(l_no_exception);
     BlockEpilog();
@@ -234,6 +237,7 @@ inline void eret()
         c.mov(eax, host_gpr_arg[0].r32());
         c.and_(eax, 3);
         c.jz(l2);
+        FlushPc();
         reg_alloc.Call(AddressErrorException<MemOp::InstrFetch>);
         c.jmp(l3);
 

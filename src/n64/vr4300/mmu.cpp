@@ -95,18 +95,16 @@ template<std::signed_integral Int, Alignment alignment, MemOp mem_op> Int ReadVi
     /* For aligned accesses, check if the address is misaligned. No need to do it for instruction fetches.
        The PC can be misaligned after an ERET instruction, but we manually check there if the PC read from the EPC
        register is misaligned. */
-    if constexpr (sizeof(Int) > 1) {
-        if constexpr (mem_op == MemOp::Read) {
-            if constexpr (alignment == Alignment::Aligned) {
-                if (vaddr & (sizeof(Int) - 1)) {
-                    AddressErrorException<mem_op>(vaddr);
-                    return {};
-                }
-            } else {
-                /* For unaligned accesses, always read from the last boundary, with the number of bytes being sizeof
-                   Int. The rest is taken care of by the function which handles the load instruction. */
-                vaddr &= ~(sizeof(Int) - 1);
+    if constexpr (sizeof(Int) > 1 && mem_op == MemOp::Read) {
+        if constexpr (alignment == Alignment::Aligned) {
+            if (vaddr & (sizeof(Int) - 1)) {
+                AddressErrorException<mem_op>(vaddr);
+                return {};
             }
+        } else {
+            /* For unaligned accesses, always read from the last boundary, with the number of bytes being sizeof
+               Int. The rest is taken care of by the function which handles the load instruction. */
+            vaddr &= ~(sizeof(Int) - 1);
         }
     }
     if (addressing_mode == AddressingMode::_32bit && s32(vaddr) != vaddr) {
