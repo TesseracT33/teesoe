@@ -31,6 +31,7 @@ u32 RunRecompiler(u32 cpu_cycles);
 void TearDownRecompiler();
 
 inline bool compiler_exception_occurred;
+inline bool compiler_last_instr_was_branch;
 
 inline constexpr std::array reg_alloc_volatile_gprs = [] {
     using namespace asmjit::x86;
@@ -126,7 +127,7 @@ inline void TakeBranchJit(auto target)
     auto& c = compiler;
     c.mov(GlobalVarPtr(in_branch_delay_slot_taken), 1);
     c.mov(GlobalVarPtr(in_branch_delay_slot_not_taken), 0);
-    c.mov(GlobalVarPtr(branch_state), std::to_underlying(mips::BranchState::DelaySlotTaken));
+    c.mov(GlobalVarPtr(branch_state), std::to_underlying(mips::BranchState::Perform));
     if constexpr (std::integral<decltype(target)>) {
         c.mov(rax, target);
         c.mov(GlobalVarPtr(jump_addr), rax);

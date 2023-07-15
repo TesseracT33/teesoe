@@ -18,7 +18,7 @@ void TearDownRecompiler();
 
 inline AsmjitCompiler compiler;
 inline u32 jit_pc;
-inline bool branch_hit, branched;
+inline bool branch_hit, branched, compiler_last_instr_was_branch;
 inline u32 block_cycles;
 
 void BlockEpilogWithPcFlush(int pc_offset);

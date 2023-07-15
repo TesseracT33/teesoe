@@ -20,7 +20,6 @@ namespace n64::rsp {
 struct Block {
     void (*func)();
     void operator()() const { func(); }
-    bool ends_with_branch_and_delay_slot;
 };
 
 struct Pool {
@@ -29,7 +28,9 @@ struct Pool {
 
 static void BlockRecordCycles();
 static void ExecuteBlock(Block* block);
+static void FinalizeAndExecuteBlock(Block*& block);
 static std::pair<Block*, bool> GetBlock(u32 pc);
+static void UpdateBranchStateJit();
 
 constexpr size_t num_pools = 16; // imem size (0x1000) / bytes per pool (0x100)
 
@@ -102,12 +103,22 @@ void BlockRecordCycles()
 void ExecuteBlock(Block* block)
 {
     (*block)();
-    // todo: does not work if branch delay slot instr contained another branch instr
-    if (jump_is_pending || block->ends_with_branch_and_delay_slot && in_branch_delay_slot) {
-        PerformBranch();
-    } else if (in_branch_delay_slot) { // block ends in branch, but delay slot did not fit
-        jump_is_pending = true;
+}
+
+void FinalizeAndExecuteBlock(Block*& block)
+{
+    c.endFunc();
+    asmjit::Error err = c.finalize();
+    if (err) {
+        message::error(
+          std::format("Failed to finalize code block; returned {}", asmjit::DebugUtils::errorAsString(err)));
     }
+    err = jit_runtime.add(&block->func, &code_holder);
+    if (err) {
+        message::error(std::format("Failed to add code to asmjit runtime! Returned error code {}.", err));
+    }
+
+    ExecuteBlock(block);
 }
 
 std::pair<Block*, bool> GetBlock(u32 pc)
@@ -200,13 +211,11 @@ u32 RunRecompiler(u32 rsp_cycles)
                 Instr();
 
                 // If the previously executed block ended with a branch instruction, meaning that the branch delay
-                // slot did not fit, execute only the first instruction in this block, before returning.
+                // slot did not fit, execute only the first instruction in this block, before jumping.
                 // The jump can be cancelled if the first instruction is also a branch.
-                Label l_nobranch = c.newLabel();
-                c.cmp(GlobalVarPtr(jump_is_pending), 0);
-                c.je(l_nobranch);
-                BlockEpilog();
-                c.bind(l_nobranch);
+                if (!branch_hit) {
+                    UpdateBranchStateJit();
+                }
 
                 while (!branched && (jit_pc & 255)) {
                     branched = branch_hit; // If the branch delay slot instruction fits within the block boundary,
@@ -217,22 +226,11 @@ u32 RunRecompiler(u32 rsp_cycles)
                 // If the block ends with a branch delay slot instruction, need to signal that we should evaluate
                 // jumping immeditely after the execution of this block. Only branches/jumps can set branch_hit. Thus,
                 // break will set the below to false.
-                block->ends_with_branch_and_delay_slot = branched && branch_hit;
-
-                BlockEpilogWithPcFlush(0);
-                c.endFunc();
-                asmjit::Error err = c.finalize();
-                if (err) {
-                    message::error(std::format("Failed to finalize code block; returned {}",
-                      asmjit::DebugUtils::errorAsString(err)));
-                }
-                err = jit_runtime.add(&block->func, &code_holder);
-                if (err) {
-                    message::error(std::format("Failed to add code to asmjit runtime; returned {}",
-                      asmjit::DebugUtils::errorAsString(err)));
+                if (branch_hit && !compiler_last_instr_was_branch) {
+                    UpdateBranchStateJit();
                 }
 
-                ExecuteBlock(block);
+                FinalizeAndExecuteBlock(block);
             }
         }
         if (sp.status.halted) {
@@ -251,6 +249,15 @@ void TearDownRecompiler()
 {
     allocator.deallocate();
     pools.clear();
+}
+
+void UpdateBranchStateJit()
+{
+    Label l_nobranch = c.newLabel();
+    c.cmp(GlobalVarPtr(jump_is_pending), 0);
+    c.je(l_nobranch);
+    BlockEpilog();
+    c.bind(l_nobranch);
 }
 
 } // namespace n64::rsp

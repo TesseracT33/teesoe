@@ -71,7 +71,7 @@ template<bool cond, bool likely> void Cop1Branch(s16 imm)
     c.mov(rax, jit_pc + 4 + (imm << 2));
     TakeBranchJit(rax);
     c.bind(l_end);
-    branch_hit = true;
+    branch_hit = compiler_last_instr_was_branch = true;
 }
 
 Gpq GetGpr(u32 idx)

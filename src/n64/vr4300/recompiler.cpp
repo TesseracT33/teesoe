@@ -31,7 +31,6 @@ using mips::BranchState;
 struct Block {
     void (*func)();
     void operator()() const { func(); }
-    bool ends_with_branch_and_delay_slot;
 };
 
 // Permute on (dword ops enabled) x (cop0 enabled) x (cop1 enabled) x (cop1 fr bit set)
@@ -45,6 +44,7 @@ struct Pool {
 static void BlockEpilogWithPcFlush(int pc_offset);
 static void ExecuteBlock(Block* block);
 static std::pair<Block*, bool> GetBlock(u32 pc);
+static void UpdateBranchStateJit();
 
 constexpr size_t num_pools = 0x80'0000;
 
@@ -139,13 +139,6 @@ void DiscardBranchJit()
 void ExecuteBlock(Block* block)
 {
     (*block)();
-    if (branch_state == BranchState::Perform
-        || branch_state == BranchState::DelaySlotTaken && block->ends_with_branch_and_delay_slot) {
-        PerformBranch();
-    } else {
-        in_branch_delay_slot_not_taken &= branch_state != BranchState::NoBranch;
-        branch_state = branch_state == BranchState::DelaySlotTaken ? BranchState::Perform : BranchState::NoBranch;
-    }
 }
 
 void FinalizeAndExecuteBlock(Block*& block)
@@ -239,7 +232,7 @@ void OnBranchNotTakenJit()
 {
     c.mov(GlobalVarPtr(in_branch_delay_slot_taken), 0);
     c.mov(GlobalVarPtr(in_branch_delay_slot_not_taken), 1);
-    c.mov(GlobalVarPtr(branch_state), std::to_underlying(BranchState::DelaySlotNotTaken));
+    c.mov(GlobalVarPtr(branch_state), std::to_underlying(BranchState::NoBranch));
 }
 
 u32 RunRecompiler(u32 cpu_cycles)
@@ -247,6 +240,9 @@ u32 RunRecompiler(u32 cpu_cycles)
     cycle_counter = 0;
     while (cycle_counter < cpu_cycles) {
         exception_occurred = false;
+        if (pc == 0xFFFFFFFF80000478) {
+            int a = 3;
+        }
         auto [block, compiled] = GetBlock(GetPhysicalPC());
         assert(block);
         if (compiled) {
@@ -259,6 +255,7 @@ u32 RunRecompiler(u32 cpu_cycles)
             BlockProlog();
 
             auto Instr = [] {
+                compiler_last_instr_was_branch = false;
                 block_cycles++;
                 u32 instr = FetchInstruction(jit_pc);
                 if (compiler_exception_occurred) return; // todo: handle this. need to compile exception handling
@@ -281,11 +278,9 @@ u32 RunRecompiler(u32 cpu_cycles)
             // If the previously executed block ended with a branch instruction, meaning that the branch delay
             // slot did not fit, execute only the first instruction in this block, before jumping.
             // The jump can be cancelled if the first instruction is also a branch.
-            Label l_nobranch = c.newLabel();
-            c.cmp(GlobalVarPtr(branch_state), std::to_underlying(BranchState::Perform));
-            c.jne(l_nobranch);
-            BlockEpilog();
-            c.bind(l_nobranch);
+            if (!compiler_last_instr_was_branch) {
+                UpdateBranchStateJit();
+            }
 
             while (!branched && !compiler_exception_occurred && (jit_pc & 255)) {
                 branched = branch_hit; // If the branch delay slot instruction fits within the block boundary,
@@ -293,9 +288,9 @@ u32 RunRecompiler(u32 cpu_cycles)
                 Instr();
             }
 
-            // If the block ends with a branch delay slot instruction, need to signal that we should evaluate
-            // jumping immeditely after the execution of this block. Only branches/jumps can set branch_hit.
-            block->ends_with_branch_and_delay_slot = branched && branch_hit;
+            if (branch_hit && !compiler_last_instr_was_branch) {
+                UpdateBranchStateJit();
+            }
 
             BlockEpilogWithPcFlush(0);
             FinalizeAndExecuteBlock(block);
@@ -308,6 +303,16 @@ void TearDownRecompiler()
 {
     allocator.deallocate();
     pools.clear();
+}
+
+void UpdateBranchStateJit()
+{
+    Label l_nobranch = c.newLabel();
+    c.cmp(GlobalVarPtr(branch_state), std::to_underlying(BranchState::Perform));
+    c.jne(l_nobranch);
+    BlockEpilogWithJmp(PerformBranch);
+    c.bind(l_nobranch);
+    c.mov(GlobalVarPtr(in_branch_delay_slot_not_taken), 0);
 }
 
 } // namespace n64::vr4300
