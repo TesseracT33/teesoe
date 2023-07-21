@@ -114,8 +114,10 @@ void BlockRecordCycles()
     assert(block_cycles > 0);
     if (block_cycles == 1) {
         c.inc(GlobalVarPtr(cycle_counter));
+        c.inc(GlobalVarPtr(cop0.count));
     } else {
         c.add(GlobalVarPtr(cycle_counter), block_cycles);
+        c.add(GlobalVarPtr(cop0.count), block_cycles);
     }
 }
 
