@@ -211,7 +211,7 @@ protected:
 
     std::string RdRtSa(std::string_view instr, u32 rd, u32 rt, u32 sa)
     {
-        return std::format("{} {}, {}, {}", instr, GprIdxToName(rd), GprIdxToName(rt), GprIdxToName(sa));
+        return std::format("{} {}, {}, {}", instr, GprIdxToName(rd), GprIdxToName(rt), sa);
     }
 };
 

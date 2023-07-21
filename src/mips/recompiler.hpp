@@ -9,7 +9,7 @@
 namespace mips {
 
 template<std::signed_integral GprInt, std::integral PcInt, typename RegisterAllocator> struct Recompiler {
-    using BlockEpilogWithJmpAndPcFlushHandler = void (*)(void*, int);
+    using BlockEpilogWithPcFlushAndJmpHandler = void (*)(void*, int);
     using CheckCanExecDwordInstrHandler = bool (*)();
     using ExceptionHandler = void (*)();
     using GetLoHiPtrHandler = std::conditional_t<arch.a64, asmjit::a64::Mem, asmjit::x86::Mem> (*)();
@@ -27,7 +27,7 @@ template<std::signed_integral GprInt, std::integral PcInt, typename RegisterAllo
       TakeBranchHandler take_branch_handler,
       IndirectJumpHandler indirect_jump_handler,
       LinkHandler link_handler,
-      BlockEpilogWithJmpAndPcFlushHandler block_epilog_with_jmp_and_pc_flush =
+      BlockEpilogWithPcFlushAndJmpHandler block_epilog_with_pc_flush_and_jmp =
         nullptr, // only for cpus supporting exceptions
       ExceptionHandler integer_overflow_exception = nullptr,
       ExceptionHandler trap_exception = nullptr,
@@ -43,7 +43,7 @@ template<std::signed_integral GprInt, std::integral PcInt, typename RegisterAllo
         indirect_jump(indirect_jump_handler),
         link(link_handler),
         check_can_exec_dword_instr(check_can_exec_dword_instr),
-        block_epilog_with_jmp_and_pc_flush(block_epilog_with_jmp_and_pc_flush),
+        block_epilog_with_pc_flush_and_jmp(block_epilog_with_pc_flush_and_jmp),
         integer_overflow_exception(integer_overflow_exception),
         trap_exception(trap_exception)
     {
@@ -59,7 +59,7 @@ template<std::signed_integral GprInt, std::integral PcInt, typename RegisterAllo
     IndirectJumpHandler const indirect_jump;
     LinkHandler const link;
     CheckCanExecDwordInstrHandler const check_can_exec_dword_instr;
-    BlockEpilogWithJmpAndPcFlushHandler const block_epilog_with_jmp_and_pc_flush;
+    BlockEpilogWithPcFlushAndJmpHandler const block_epilog_with_pc_flush_and_jmp;
     ExceptionHandler const integer_overflow_exception, trap_exception;
 
     static constexpr bool mips32 = sizeof(GprInt) == 4;

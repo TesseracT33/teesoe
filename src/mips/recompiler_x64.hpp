@@ -12,7 +12,7 @@ template<std::signed_integral GprInt, std::integral PcInt, typename RegisterAllo
 struct RecompilerX64 : public Recompiler<GprInt, PcInt, RegisterAllocator> {
     using Base = Recompiler<GprInt, PcInt, RegisterAllocator>;
     using Base::Base;
-    using Base::block_epilog_with_jmp_and_pc_flush;
+    using Base::block_epilog_with_pc_flush_and_jmp;
     using Base::branch_hit;
     using Base::branched;
     using Base::c;
@@ -37,9 +37,10 @@ struct RecompilerX64 : public Recompiler<GprInt, PcInt, RegisterAllocator> {
     {
         Label l_noexception = c.newLabel();
         Gpd hs = GetGpr32(rs), ht = GetGpr32(rt);
-        c.lea(eax, ptr(hs, ht));
+        c.mov(eax, hs);
+        c.add(eax, ht);
         c.jno(l_noexception);
-        block_epilog_with_jmp_and_pc_flush(integer_overflow_exception, 0);
+        block_epilog_with_pc_flush_and_jmp(integer_overflow_exception, 0);
         c.bind(l_noexception);
         if (rd) {
             Gp hd = GetDirtyGpr(rd);
@@ -51,9 +52,10 @@ struct RecompilerX64 : public Recompiler<GprInt, PcInt, RegisterAllocator> {
     {
         Label l_noexception = c.newLabel();
         Gpd hs = GetGpr32(rs);
-        c.lea(eax, ptr(hs, imm));
+        c.mov(eax, hs);
+        c.add(eax, imm);
         c.jno(l_noexception);
-        block_epilog_with_jmp_and_pc_flush(integer_overflow_exception, 0);
+        block_epilog_with_pc_flush_and_jmp(integer_overflow_exception, 0);
         c.bind(l_noexception);
         if (rt) {
             Gp ht = GetDirtyGpr(rt);
@@ -128,9 +130,10 @@ struct RecompilerX64 : public Recompiler<GprInt, PcInt, RegisterAllocator> {
         if (!check_can_exec_dword_instr()) return;
         Label l_noexception = c.newLabel();
         Gpq hs = GetGpr(rs), ht = GetGpr(rt);
-        c.lea(rax, ptr(hs, ht));
+        c.mov(rax, hs);
+        c.add(rax, ht);
         c.jno(l_noexception);
-        block_epilog_with_jmp_and_pc_flush(integer_overflow_exception, 0);
+        block_epilog_with_pc_flush_and_jmp(integer_overflow_exception, 0);
         c.bind(l_noexception);
         if (rd) c.mov(GetDirtyGpr(rd), rax);
     }
@@ -140,9 +143,10 @@ struct RecompilerX64 : public Recompiler<GprInt, PcInt, RegisterAllocator> {
         if (!check_can_exec_dword_instr()) return;
         Label l_noexception = c.newLabel();
         Gpq hs = GetGpr(rs);
-        c.lea(rax, ptr(hs, imm));
+        c.mov(rax, hs);
+        c.add(rax, imm);
         c.jno(l_noexception);
-        block_epilog_with_jmp_and_pc_flush(integer_overflow_exception, 0);
+        block_epilog_with_pc_flush_and_jmp(integer_overflow_exception, 0);
         c.bind(l_noexception);
         if (rt) c.mov(GetDirtyGpr(rt), rax);
     }
@@ -249,7 +253,7 @@ struct RecompilerX64 : public Recompiler<GprInt, PcInt, RegisterAllocator> {
         c.mov(rax, hs);
         c.sub(rax, ht);
         c.jno(l_noexception);
-        block_epilog_with_jmp_and_pc_flush(integer_overflow_exception, 0);
+        block_epilog_with_pc_flush_and_jmp(integer_overflow_exception, 0);
         c.bind(l_noexception);
         if (rd) c.mov(GetDirtyGpr(rd), rax);
     }
@@ -470,7 +474,7 @@ struct RecompilerX64 : public Recompiler<GprInt, PcInt, RegisterAllocator> {
         c.mov(eax, hs);
         c.sub(eax, ht);
         c.jno(l_noexception);
-        block_epilog_with_jmp_and_pc_flush(integer_overflow_exception, 0);
+        block_epilog_with_pc_flush_and_jmp(integer_overflow_exception, 0);
         c.bind(l_noexception);
         if (rd) {
             Gp hd = GetDirtyGpr(rd);
@@ -589,7 +593,7 @@ protected:
         if constexpr (cc == Cond::Lt) c.jge(l_end);
         if constexpr (cc == Cond::Ltu) c.jae(l_end);
         if constexpr (cc == Cond::Ne) c.je(l_end);
-        block_epilog_with_jmp_and_pc_flush(trap_exception, 0);
+        block_epilog_with_pc_flush_and_jmp(trap_exception, 0);
         c.bind(l_end);
         branched = true;
     }

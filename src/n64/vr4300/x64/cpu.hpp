@@ -76,7 +76,7 @@ struct Recompiler : public mips::RecompilerX64<s64, u64, RegAllocator> {
 
     void break_() const
     {
-        BlockEpilogWithJmpAndPcFlush(BreakpointException);
+        BlockEpilogWithPcFlushAndJmp(BreakpointException);
         branched = true;
     }
 
@@ -517,7 +517,7 @@ struct Recompiler : public mips::RecompilerX64<s64, u64, RegAllocator> {
 
     void syscall() const
     {
-        BlockEpilogWithJmpAndPcFlush(SyscallException);
+        BlockEpilogWithPcFlushAndJmp(SyscallException);
         branched = true;
     }
 
@@ -572,8 +572,7 @@ private:
         likely ? DiscardBranchJit() : OnBranchNotTakenJit();
         c.jmp(l_end);
         c.bind(l_branch);
-        c.mov(rax, jit_pc + 4 + (imm << 2));
-        TakeBranchJit(rax);
+        TakeBranchJit(jit_pc + 4 + (imm << 2));
         c.bind(l_end);
         branch_hit = true;
     }
@@ -590,16 +589,15 @@ private:
         likely ? DiscardBranchJit() : OnBranchNotTakenJit();
         c.jmp(l_end);
         c.bind(l_branch);
-        c.mov(rax, jit_pc + 4 + (imm << 2));
-        TakeBranchJit(rax);
+        TakeBranchJit(jit_pc + 4 + (imm << 2));
         c.bind(l_end);
         branch_hit = true;
     }
 
     template<mips::Cond cc, bool likely> void branch_and_link(auto... args) const
     {
+        LinkJit(31);
         branch<cc, likely>(args...);
-        link(31);
     }
 
     template<std::integral Int, bool linked> void load(u32 rs, u32 rt, s16 imm) const
@@ -749,7 +747,7 @@ private:
     [](u64 target) { TakeBranchJit(target); },
     [](HostGpr target) { TakeBranchJit(target); },
     LinkJit,
-    BlockEpilogWithJmpAndPcFlush,
+    BlockEpilogWithPcFlushAndJmp,
     IntegerOverflowException,
     TrapException,
     CheckDwordOpCondJit,

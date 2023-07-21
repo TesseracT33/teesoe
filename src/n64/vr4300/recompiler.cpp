@@ -42,6 +42,7 @@ struct Pool {
 };
 
 static void BlockEpilogWithPcFlush(int pc_offset);
+static void EmitInstruction();
 static void ExecuteBlock(Block* block);
 static std::pair<Block*, bool> GetBlock(u32 pc);
 static void UpdateBranchStateJit();
@@ -53,6 +54,7 @@ static asmjit::CodeHolder code_holder;
 static asmjit::FileLogger jit_logger(stdout);
 static asmjit::JitRuntime jit_runtime;
 static std::vector<Pool*> pools;
+static bool block_has_branch_instr;
 
 static AsmjitCompiler& c = compiler;
 
@@ -69,7 +71,7 @@ void BlockEpilogWithJmp(void* func)
     reg_alloc.BlockEpilogWithJmp(func);
 }
 
-void BlockEpilogWithJmpAndPcFlush(void* func, int pc_offset)
+void BlockEpilogWithPcFlushAndJmp(void* func, int pc_offset)
 {
     FlushPc(pc_offset);
     BlockEpilogWithJmp(func);
@@ -122,7 +124,7 @@ bool CheckDwordOpCondJit()
     if (can_execute_dword_instrs) {
         return true;
     } else {
-        BlockEpilogWithJmp(ReservedInstructionException);
+        BlockEpilogWithPcFlushAndJmp(ReservedInstructionException);
         branched = true;
         return false;
     }
@@ -134,6 +136,25 @@ void DiscardBranchJit()
     c.mov(GlobalVarPtr(in_branch_delay_slot_not_taken), 0);
     c.mov(GlobalVarPtr(branch_state), std::to_underlying(BranchState::NoBranch));
     BlockEpilogWithPcFlush(8);
+}
+
+void EmitInstruction()
+{
+    block_cycles++;
+    branch_hit = compiler_exception_occurred = false;
+    u32 instr = FetchInstruction(jit_pc);
+    if (compiler_exception_occurred) {
+        return; // todo: handle this. need to compile exception handling
+    }
+    decoder::exec_cpu<CpuImpl::Recompiler>(instr);
+    if (compiler_exception_occurred) {
+        return;
+    }
+    jit_pc += 4;
+    block_has_branch_instr |= branch_hit;
+    if constexpr (log_cpu_jit_register_status) {
+        jit_logger.log(reg_alloc.GetStatusString().c_str());
+    }
 }
 
 void ExecuteBlock(Block* block)
@@ -196,7 +217,6 @@ Status InitRecompiler()
 void Invalidate(u32 addr)
 {
     if (cpu_impl == CpuImpl::Recompiler) {
-        // assert(addr <= 0x1000);
         Pool*& pool = pools[addr >> 8]; // each pool 6 bits, each instruction 2 bits
         if (!pool) return;
         for (BlockPack*& block_pack : pool->blocks) {
@@ -240,34 +260,19 @@ u32 RunRecompiler(u32 cpu_cycles)
     cycle_counter = 0;
     while (cycle_counter < cpu_cycles) {
         exception_occurred = false;
-        if (pc == 0xFFFFFFFF80000478) {
-            int a = 3;
-        }
+
         auto [block, compiled] = GetBlock(GetPhysicalPC());
         assert(block);
         if (compiled) {
             ExecuteBlock(block);
         } else {
-            branch_hit = branched = compiler_exception_occurred = false;
+            branched = block_has_branch_instr = false;
             block_cycles = 0;
             jit_pc = pc;
 
             BlockProlog();
 
-            auto Instr = [] {
-                compiler_last_instr_was_branch = false;
-                block_cycles++;
-                u32 instr = FetchInstruction(jit_pc);
-                if (compiler_exception_occurred) return; // todo: handle this. need to compile exception handling
-                decoder::exec_cpu<CpuImpl::Recompiler>(instr);
-                if (compiler_exception_occurred) return;
-                jit_pc += 4;
-                if constexpr (log_cpu_jit_register_status) {
-                    jit_logger.log(reg_alloc.GetStatusString().c_str());
-                }
-            };
-
-            Instr();
+            EmitInstruction();
 
             if (compiler_exception_occurred) {
                 BlockEpilog();
@@ -278,21 +283,25 @@ u32 RunRecompiler(u32 cpu_cycles)
             // If the previously executed block ended with a branch instruction, meaning that the branch delay
             // slot did not fit, execute only the first instruction in this block, before jumping.
             // The jump can be cancelled if the first instruction is also a branch.
-            if (!compiler_last_instr_was_branch) {
+            if (!branch_hit) {
                 UpdateBranchStateJit();
             }
 
             while (!branched && !compiler_exception_occurred && (jit_pc & 255)) {
-                branched = branch_hit; // If the branch delay slot instruction fits within the block boundary,
-                                       // include it before stopping
-                Instr();
+                branched |= branch_hit; // If the branch delay slot instruction fits within the block boundary,
+                                        // include it before stopping
+                EmitInstruction();
             }
 
-            if (branch_hit && !compiler_last_instr_was_branch) {
-                UpdateBranchStateJit();
+            if (compiler_exception_occurred) {
+                BlockEpilog();
+            } else {
+                if (!branch_hit && block_has_branch_instr) {
+                    UpdateBranchStateJit();
+                }
+                BlockEpilogWithPcFlush(0);
             }
 
-            BlockEpilogWithPcFlush(0);
             FinalizeAndExecuteBlock(block);
         }
     }

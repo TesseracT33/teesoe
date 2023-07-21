@@ -71,7 +71,7 @@ template<bool cond, bool likely> void Cop1Branch(s16 imm)
     c.mov(rax, jit_pc + 4 + (imm << 2));
     TakeBranchJit(rax);
     c.bind(l_end);
-    branch_hit = compiler_last_instr_was_branch = true;
+    branch_hit = true;
 }
 
 Gpq GetGpr(u32 idx)
@@ -88,7 +88,7 @@ void OnCop1Unusable()
 {
     reg_alloc.ReserveArgs(1);
     c.mov(host_gpr_arg[0].r32(), 1);
-    BlockEpilogWithJmpAndPcFlush(CoprocessorUnusableException);
+    BlockEpilogWithPcFlushAndJmp(CoprocessorUnusableException);
     branched = true;
 }
 
@@ -97,7 +97,7 @@ void OnInvalidFormat()
     if (!CheckCop1Usable()) return;
     c.bts(GlobalVarPtr(fcr31), FCR31BitIndex::CauseUnimplemented);
     block_cycles++;
-    BlockEpilogWithJmpAndPcFlush(FloatingPointException);
+    BlockEpilogWithPcFlushAndJmp(FloatingPointException);
     branched = true;
 }
 
@@ -134,6 +134,7 @@ inline void ctc1(u32 fs, u32 rt)
 {
     if (!cop0.status.cu1) return OnCop1Unusable();
     if (fs != 31) return;
+    Label l_no_exception = c.newLabel();
     Gpd ht = GetGpr(rt).r32();
     c.mov(eax, ht);
     c.and_(eax, fcr31_write_mask);
@@ -145,6 +146,10 @@ inline void ctc1(u32 fs, u32 rt)
     c.mov(host_gpr_arg[0].r32(), GlobalArrPtrWithRegOffset(guest_to_host_rounding_mode, rax, 4));
     reg_alloc.Call(fesetround);
     reg_alloc.Call(TestExceptions<false>);
+    c.cmp(GlobalVarPtr(exception_occurred), 0);
+    c.je(l_no_exception);
+    BlockEpilog();
+    c.bind(l_no_exception);
 }
 
 inline void dcfc1()
@@ -152,7 +157,7 @@ inline void dcfc1()
     if (!CheckCop1Usable()) return;
     c.bts(GlobalVarPtr(fcr31), FCR31BitIndex::CauseUnimplemented);
     block_cycles++;
-    BlockEpilogWithJmpAndPcFlush(FloatingPointException);
+    BlockEpilogWithPcFlushAndJmp(FloatingPointException);
     branched = true;
 }
 
@@ -381,7 +386,7 @@ template<Fmt fmt> inline void mov(u32 fs, u32 fd)
         } else {
             reg_alloc.ReserveArgs(1);
             c.mov(host_gpr_arg[0], 1);
-            BlockEpilogWithJmpAndPcFlush(CoprocessorUnusableException);
+            BlockEpilogWithPcFlushAndJmp(CoprocessorUnusableException);
             branched = true;
         }
     } else {

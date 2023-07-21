@@ -15,7 +15,7 @@ namespace n64::vr4300 {
 
 void BlockEpilog();
 void BlockEpilogWithJmp(void* func);
-void BlockEpilogWithJmpAndPcFlush(void* func, int pc_offset = 0);
+void BlockEpilogWithPcFlushAndJmp(void* func, int pc_offset = 0);
 void BlockEpilogWithPcFlush(int pc_offset = 0);
 void BlockProlog();
 void BlockRecordCycles();
@@ -31,7 +31,6 @@ u32 RunRecompiler(u32 cpu_cycles);
 void TearDownRecompiler();
 
 inline bool compiler_exception_occurred;
-inline bool compiler_last_instr_was_branch;
 
 inline constexpr std::array reg_alloc_volatile_gprs = [] {
     using namespace asmjit::x86;

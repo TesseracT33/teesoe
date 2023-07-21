@@ -16,7 +16,7 @@ inline void OnCop0Unusable()
 {
     reg_alloc.ReserveArgs(1);
     c.xor_(host_gpr_arg[0].r32(), host_gpr_arg[0].r32());
-    BlockEpilogWithJmpAndPcFlush(CoprocessorUnusableException);
+    BlockEpilogWithPcFlushAndJmp(CoprocessorUnusableException);
     branched = true;
 }
 
@@ -148,7 +148,7 @@ template<size_t size> inline void WriteCop0(Gpq src, u32 idx)
     } break;
     case Cop0Reg::status:
         WriteMasked(cop0.status, 0xFF57'FFFF);
-        BlockEpilogWithJmpAndPcFlush(OnWriteToStatus, 4);
+        BlockEpilogWithPcFlushAndJmp(OnWriteToStatus, 4);
         branched = true;
         break;
     case Cop0Reg::cause: {
@@ -247,7 +247,7 @@ inline void eret()
         c.mov(GlobalVarPtr(branch_state), std::to_underlying(mips::BranchState::NoBranch));
 
         c.bind(l3);
-        reg_alloc.BlockEpilogWithJmp(SetVaddrToPaddrFuncs);
+        BlockEpilogWithJmp(SetVaddrToPaddrFuncs);
         branched = true;
     } else {
         OnCop0Unusable();

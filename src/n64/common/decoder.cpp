@@ -350,9 +350,9 @@ template<Cpu cpu, CpuImpl cpu_impl, bool make_string> void cop3(u32 instr)
                 c.jc(l0);
                 reg_alloc.Free(host_gpr_arg[0]);
                 c.mov(host_gpr_arg[0].r32(), 3);
-                BlockEpilogWithJmp(CoprocessorUnusableException);
+                BlockEpilogWithPcFlushAndJmp(CoprocessorUnusableException);
                 c.bind(l0);
-                BlockEpilogWithJmp(ReservedInstructionException);
+                BlockEpilogWithPcFlushAndJmp(ReservedInstructionException);
                 compiler_exception_occurred = true;
             }
         } else { // MFC3
@@ -496,7 +496,7 @@ template<Cpu cpu, CpuImpl cpu_impl, bool make_string> void reserved_instruction(
         if constexpr (cpu_impl == CpuImpl::Interpreter) {
             ReservedInstructionException();
         } else {
-            reg_alloc.BlockEpilogWithJmp(ReservedInstructionException);
+            BlockEpilogWithPcFlushAndJmp(ReservedInstructionException);
             compiler_exception_occurred = true;
         }
     } else {
