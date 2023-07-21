@@ -167,8 +167,12 @@ void ExecuteBlock(Block* block)
 void FinalizeAndExecuteBlock(Block*& block)
 {
     c.endFunc();
-    c.finalize();
-    asmjit::Error err = jit_runtime.add(&block->func, &code_holder);
+    asmjit::Error err = c.finalize();
+    if (err) {
+        message::error(
+          std::format("Failed to finalize code block; returned {}", asmjit::DebugUtils::errorAsString(err)));
+    }
+    err = jit_runtime.add(&block->func, &code_holder);
     if (err) {
         message::error(std::format("Failed to add code to asmjit runtime! Returned error code {}.", err));
     }

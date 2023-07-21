@@ -27,20 +27,20 @@ struct Recompiler : public mips::RecompilerX64<s32, u32, RegisterAllocator> {
         c.jnc(l_end);
         reg_alloc.Free(host_gpr_arg[0]);
         c.mov(host_gpr_arg[0].r32(), std::to_underlying(mi::InterruptType::SP));
-        reg_alloc.Call(mi::RaiseInterrupt); // todo: do jmp with block epilogue
+        BlockEpilogWithPcFlushAndJmp(mi::RaiseInterrupt);
         c.bind(l_end);
         branched = true;
     }
 
     void j(u32 instr) const
     {
-        take_branch(instr << 2 & 0xFFF);
+        TakeBranchJit(instr << 2 & 0xFFF);
         branch_hit = true;
     }
 
     void jal(u32 instr) const
     {
-        take_branch(instr << 2 & 0xFFF);
+        TakeBranchJit(instr << 2 & 0xFFF);
         LinkJit(31);
         branch_hit = true;
     }

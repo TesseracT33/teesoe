@@ -26,7 +26,9 @@ struct Pool {
     std::array<Block*, 64> blocks;
 };
 
+static void BlockEpilogWithJmp(void* func);
 static void BlockRecordCycles();
+static void EmitInstruction();
 static void ExecuteBlock(Block* block);
 static void FinalizeAndExecuteBlock(Block*& block);
 static std::pair<Block*, bool> GetBlock(u32 pc);
@@ -36,10 +38,10 @@ constexpr size_t num_pools = 16; // imem size (0x1000) / bytes per pool (0x100)
 
 static BumpAllocator allocator;
 static asmjit::CodeHolder code_holder;
-static asmjit::Label epilog_label;
 static asmjit::FileLogger jit_logger(stdout);
 static asmjit::JitRuntime jit_runtime;
 static std::vector<Pool*> pools;
+static bool block_has_branch_instr;
 
 static AsmjitCompiler& c = compiler;
 
@@ -48,6 +50,18 @@ void BlockEpilog()
     BlockRecordCycles();
     reg_alloc.BlockEpilog();
     c.ret();
+}
+
+void BlockEpilogWithJmp(void* func)
+{
+    BlockRecordCycles();
+    reg_alloc.BlockEpilogWithJmp(func);
+}
+
+void BlockEpilogWithPcFlushAndJmp(void* func, int pc_offset)
+{
+    c.mov(GlobalVarPtr(pc), jit_pc + pc_offset);
+    BlockEpilogWithJmp(func);
 }
 
 void BlockEpilogWithPcFlush(int pc_offset)
@@ -86,7 +100,6 @@ void BlockProlog()
     if constexpr (log_rsp_jit_blocks) {
         jit_logger.log("======== RSP BLOCK BEGIN ========\n");
     }
-    // epilog_label = c.newLabel();
     reg_alloc.BlockProlog();
 }
 
@@ -97,6 +110,19 @@ void BlockRecordCycles()
         c.inc(GlobalVarPtr(cycle_counter));
     } else {
         c.add(GlobalVarPtr(cycle_counter), block_cycles);
+    }
+}
+
+void EmitInstruction()
+{
+    block_cycles++;
+    branch_hit = false;
+    u32 instr = FetchInstruction(jit_pc);
+    decoder::exec_rsp<CpuImpl::Recompiler>(instr);
+    jit_pc = (jit_pc + 4) & 0xFFC;
+    block_has_branch_instr |= branch_hit;
+    if constexpr (log_rsp_jit_register_status) {
+        jit_logger.log(reg_alloc.GetStatusString().c_str());
     }
 }
 
@@ -193,22 +219,13 @@ u32 RunRecompiler(u32 rsp_cycles)
             if (compiled) {
                 ExecuteBlock(block);
             } else {
-                branch_hit = branched = false;
+                branched = block_has_branch_instr = false;
                 block_cycles = 0;
                 jit_pc = pc;
 
                 BlockProlog();
 
-                auto Instr = [] {
-                    block_cycles++;
-                    u32 instr = FetchInstruction(jit_pc);
-                    decoder::exec_rsp<CpuImpl::Recompiler>(instr);
-                    jit_pc = (jit_pc + 4) & 0xFFC;
-                    if constexpr (log_rsp_jit_register_status) {
-                        jit_logger.log(reg_alloc.GetStatusString().c_str());
-                    }
-                };
-                Instr();
+                EmitInstruction();
 
                 // If the previously executed block ended with a branch instruction, meaning that the branch delay
                 // slot did not fit, execute only the first instruction in this block, before jumping.
@@ -218,25 +235,21 @@ u32 RunRecompiler(u32 rsp_cycles)
                 }
 
                 while (!branched && (jit_pc & 255)) {
-                    branched = branch_hit; // If the branch delay slot instruction fits within the block boundary,
-                                           // include it before stopping
-                    Instr();
+                    branched |= branch_hit; // If the branch delay slot instruction fits within the block boundary,
+                                            // include it before stopping
+                    EmitInstruction();
                 }
 
-                // If the block ends with a branch delay slot instruction, need to signal that we should evaluate
-                // jumping immeditely after the execution of this block. Only branches/jumps can set branch_hit. Thus,
-                // break will set the below to false.
-                if (branch_hit && !compiler_last_instr_was_branch) {
+                if (!branch_hit && block_has_branch_instr) {
                     UpdateBranchStateJit();
                 }
-
+                BlockEpilogWithPcFlush(0);
                 FinalizeAndExecuteBlock(block);
             }
         }
         if (sp.status.halted) {
             if (jump_is_pending) { // note for future refactors: this makes rsp::op_break::BREAKWithinDelay pass
-                pc = jump_addr;
-                jump_is_pending = in_branch_delay_slot = false;
+                PerformBranch();
             }
         } else if (sp.status.sstep) {
             OnSingleStep();
@@ -256,7 +269,7 @@ void UpdateBranchStateJit()
     Label l_nobranch = c.newLabel();
     c.cmp(GlobalVarPtr(jump_is_pending), 0);
     c.je(l_nobranch);
-    BlockEpilog();
+    BlockEpilogWithJmp(PerformBranch);
     c.bind(l_nobranch);
 }
 
