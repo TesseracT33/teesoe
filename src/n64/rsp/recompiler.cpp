@@ -10,6 +10,8 @@
 #include "register_allocator.hpp"
 #include "rsp.hpp"
 
+#include <algorithm>
+
 using namespace asmjit;
 using namespace asmjit::x86;
 
@@ -32,9 +34,11 @@ static void EmitInstruction();
 static void ExecuteBlock(Block* block);
 static void FinalizeAndExecuteBlock(Block*& block);
 static std::pair<Block*, bool> GetBlock(u32 pc);
+static void ResetPool(Pool*& pool);
 static void UpdateBranchStateJit();
 
-constexpr size_t num_pools = 16; // imem size (0x1000) / bytes per pool (0x100)
+constexpr u32 pool_size = 0x100;
+constexpr size_t num_pools = 0x1000 / pool_size;
 
 static BumpAllocator allocator;
 static asmjit::CodeHolder code_holder;
@@ -149,9 +153,8 @@ void FinalizeAndExecuteBlock(Block*& block)
 
 std::pair<Block*, bool> GetBlock(u32 pc)
 {
-    static_assert(std::has_single_bit(num_pools));
 acquire:
-    Pool*& pool = pools[pc >> 8 & (num_pools - 1)]; // each pool 6 bits, each instruction 2 bits
+    Pool*& pool = pools[pc >> 8]; // each pool 6 bits, each instruction 2 bits
     if (!pool) {
         pool = reinterpret_cast<Pool*>(allocator.acquire(sizeof(Pool)));
     }
@@ -168,7 +171,7 @@ acquire:
 
 Status InitRecompiler()
 {
-    allocator.allocate(32_MiB);
+    allocator.allocate(16_MiB);
     pools.resize(num_pools, nullptr);
     return status_ok();
 }
@@ -176,17 +179,9 @@ Status InitRecompiler()
 void Invalidate(u32 addr)
 {
     if (cpu_impl == CpuImpl::Recompiler) {
-        assert(addr <= 0x1000);
+        assert(addr < 0x1000);
         Pool*& pool = pools[addr >> 8]; // each pool 6 bits, each instruction 2 bits
-        if (pool) {
-            for (Block*& block : pool->blocks) {
-                if (block) {
-                    jit_runtime.release(block->func);
-                    block = nullptr;
-                }
-            }
-            pool = nullptr;
-        }
+        ResetPool(pool);
     }
 }
 
@@ -195,15 +190,29 @@ void InvalidateRange(u32 addr_lo, u32 addr_hi)
     if (cpu_impl == CpuImpl::Recompiler) {
         ASSUME(addr_lo <= addr_hi);
         assert(addr_hi <= 0x1000);
+        addr_lo = std::min(addr_lo, 0xFFF_u32);
+        addr_hi = std::min(addr_hi, 0xFFF_u32);
         addr_lo >>= 8;
         addr_hi >>= 8;
-        std::fill(pools.begin() + addr_lo, pools.begin() + addr_hi, nullptr);
+        std::for_each(pools.begin() + addr_lo, pools.begin() + addr_hi + 1, [](Pool*& pool) { ResetPool(pool); });
     }
 }
 
 void LinkJit(u32 reg)
 {
     compiler.mov(reg_alloc.GetHostGprMarkDirty(reg), (jit_pc + 8) & 0xFFF);
+}
+
+void ResetPool(Pool*& pool)
+{
+    if (!pool) return;
+    for (Block*& block : pool->blocks) {
+        if (block) {
+            jit_runtime.release(block->func);
+            block = nullptr;
+        }
+    }
+    pool = nullptr;
 }
 
 u32 RunRecompiler(u32 rsp_cycles)

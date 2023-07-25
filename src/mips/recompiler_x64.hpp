@@ -173,7 +173,7 @@ struct RecompilerX64 : public Recompiler<GprInt, PcInt, RegisterAllocator> {
         if (!rd) return;
         Gpq hd = GetDirtyGpr(rd), ht = GetGpr(rt);
         if (rt != rd) c.mov(hd, ht);
-        c.shl(hd, sa);
+        if (sa) c.shl(hd, sa);
     }
 
     void dsll32(u32 rt, u32 rd, u32 sa) const
@@ -199,7 +199,7 @@ struct RecompilerX64 : public Recompiler<GprInt, PcInt, RegisterAllocator> {
         if (!rd) return;
         Gpq hd = GetDirtyGpr(rd), ht = GetGpr(rt);
         if (rt != rd) c.mov(hd, ht);
-        c.sar(hd, sa);
+        if (sa) c.sar(hd, sa);
     }
 
     void dsra32(u32 rt, u32 rd, u32 sa) const
@@ -225,7 +225,7 @@ struct RecompilerX64 : public Recompiler<GprInt, PcInt, RegisterAllocator> {
         if (!rd) return;
         Gpq hd = GetDirtyGpr(rd), ht = GetGpr(rt);
         if (rt != rd) c.mov(hd, ht);
-        c.shr(hd, sa);
+        if (sa) c.shr(hd, sa);
     }
 
     void dsrl32(u32 rt, u32 rd, u32 sa) const
@@ -371,7 +371,7 @@ struct RecompilerX64 : public Recompiler<GprInt, PcInt, RegisterAllocator> {
         if (!rt) return;
         Gp ht = GetDirtyGpr(rt), hs = GetGpr(rs);
         if (rs != rt) c.mov(ht, hs);
-        c.or_(ht, imm);
+        if (imm) c.or_(ht, imm);
     }
 
     void sll(u32 rt, u32 rd, u32 sa) const
@@ -379,7 +379,7 @@ struct RecompilerX64 : public Recompiler<GprInt, PcInt, RegisterAllocator> {
         if (!rd) return;
         Gpd hd = GetDirtyGpr32(rd), ht = GetGpr32(rt);
         if (rt != rd) c.mov(hd, ht);
-        c.shl(hd, sa);
+        if (sa) c.shl(hd, sa);
         if constexpr (mips64) c.movsxd(hd.r64(), hd);
     }
 
@@ -397,7 +397,7 @@ struct RecompilerX64 : public Recompiler<GprInt, PcInt, RegisterAllocator> {
         Gp hd = GetDirtyGpr(rd), hs = GetGpr(rs), ht = GetGpr(rt);
         c.cmp(hs, ht);
         c.setl(hd.r8());
-        c.and_(hd, 1);
+        c.and_(hd.r32(), 1);
     }
 
     void slti(u32 rs, u32 rt, s16 imm) const
@@ -406,7 +406,7 @@ struct RecompilerX64 : public Recompiler<GprInt, PcInt, RegisterAllocator> {
         Gp ht = GetDirtyGpr(rt), hs = GetGpr(rs);
         c.cmp(hs, imm);
         c.setl(ht.r8());
-        c.and_(ht, 1);
+        c.and_(ht.r32(), 1);
     }
 
     void sltiu(u32 rs, u32 rt, s16 imm) const
@@ -415,7 +415,7 @@ struct RecompilerX64 : public Recompiler<GprInt, PcInt, RegisterAllocator> {
         Gp ht = GetDirtyGpr(rt), hs = GetGpr(rs);
         c.cmp(hs, imm);
         c.setb(ht.r8());
-        c.and_(ht, 1);
+        c.and_(ht.r32(), 1);
     }
 
     void sltu(u32 rs, u32 rt, u32 rd) const
@@ -424,7 +424,7 @@ struct RecompilerX64 : public Recompiler<GprInt, PcInt, RegisterAllocator> {
         Gp hd = GetDirtyGpr(rd), hs = GetGpr(rs), ht = GetGpr(rt);
         c.cmp(hs, ht);
         c.setb(hd.r8());
-        c.and_(hd, 1);
+        c.and_(hd.r32(), 1);
     }
 
     void sra(u32 rt, u32 rd, u32 sa) const
@@ -432,7 +432,7 @@ struct RecompilerX64 : public Recompiler<GprInt, PcInt, RegisterAllocator> {
         if (!rd) return;
         Gp hd = GetDirtyGpr(rd), ht = GetGpr(rt);
         if (rt != rd) c.mov(hd, ht);
-        c.sar(hd, sa);
+        if (sa) c.sar(hd, sa);
         if constexpr (mips64) c.movsxd(hd.r64(), hd);
     }
 
@@ -455,7 +455,7 @@ struct RecompilerX64 : public Recompiler<GprInt, PcInt, RegisterAllocator> {
         if (!rd) return;
         Gpd hd = GetDirtyGpr32(rd), ht = GetGpr32(rt);
         if (rt != rd) c.mov(hd, ht);
-        c.shr(hd, sa);
+        if (sa) c.shr(hd, sa);
         if constexpr (mips64) c.movsxd(hd.r64(), hd);
     }
 
@@ -491,11 +491,12 @@ struct RecompilerX64 : public Recompiler<GprInt, PcInt, RegisterAllocator> {
         } else if (rt == rd) {
             c.neg(hd);
             c.add(hd, hs);
+            if constexpr (mips64) c.movsxd(hd.r64(), hd);
         } else {
             if (rs != rd) c.mov(hd, hs);
             c.sub(hd, ht);
+            if constexpr (mips64) c.movsxd(hd.r64(), hd);
         }
-        if constexpr (mips64) c.movsxd(hd.r64(), hd);
     }
 
     void teq(u32 rs, u32 rt) const { trap<Cond::Eq>(rs, rt); }
@@ -544,15 +545,23 @@ struct RecompilerX64 : public Recompiler<GprInt, PcInt, RegisterAllocator> {
         if (!rt) return;
         Gp ht = GetDirtyGpr(rt), hs = GetGpr(rs);
         if (rs != rt) c.mov(ht, hs);
-        c.xor_(ht, imm);
+        if (imm) c.xor_(ht, imm);
     }
 
 protected:
     template<Cond cc> void branch(u32 rs, u32 rt, s16 imm) const
     {
         Label l_nobranch = c.newLabel();
-        Gp hs = GetGpr(rs), ht = GetGpr(rt);
-        c.cmp(hs, ht);
+        if (!rs) {
+            Gp ht = GetGpr(rt);
+            c.test(ht, ht);
+        } else if (!rt) {
+            Gp hs = GetGpr(rs);
+            c.test(hs, hs);
+        } else {
+            Gp hs = GetGpr(rs), ht = GetGpr(rt);
+            c.cmp(hs, ht);
+        }
         if constexpr (cc == Cond::Eq) c.jne(l_nobranch);
         if constexpr (cc == Cond::Ne) c.je(l_nobranch);
         take_branch(jit_pc + 4 + (imm << 2));

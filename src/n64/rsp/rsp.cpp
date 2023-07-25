@@ -115,7 +115,7 @@ template<DmaType dma_type> void InitDma()
     scheduler::AddEvent(scheduler::EventType::SpDmaFinish, cpu_cycles_until_finish, OnDmaFinish);
 
     auto dram_start = sp.dma_ramaddr;
-    auto sp_start = sp.dma_spaddr;
+    auto sp_start = sp.dma_spaddr & 0x1FFF;
     bool sp_full_cycle{};
 
     auto AlignAddresses = [&] {
@@ -173,10 +173,12 @@ template<DmaType dma_type> void InitDma()
         if (rsp::cpu_impl == CpuImpl::Recompiler && (sp.dma_spaddr & 0x1000)) {
             if (sp_full_cycle) {
                 rsp::InvalidateRange(0, 0x1000);
-            } else if (sp_start < sp.dma_spaddr) {
+            } else if (sp_start < (sp.dma_spaddr & 0x1FFF)) {
                 rsp::InvalidateRange(sp_start - 0x1000, sp.dma_spaddr - 0x1000);
             } else {
-                rsp::InvalidateRange(0, sp.dma_spaddr - 0x1000);
+                if (sp.dma_spaddr != 0x1000) {
+                    rsp::InvalidateRange(0, sp.dma_spaddr - 0x1000);
+                }
                 rsp::InvalidateRange(sp_start - 0x1000, 0x1000);
             }
         }
@@ -242,7 +244,7 @@ void PerformBranch()
     pc = jump_addr;
     jump_is_pending = in_branch_delay_slot = false;
     if constexpr (log_rsp_branches) {
-        log(std::format("RSP branch to 0x{:08X}; RA = 0x{:08X}; SP = 0x{:08X}", u32(pc), u32(gpr[31]), u32(gpr[29])));
+        log(std::format("RSP branch to 0x{:03X}; RA = 0x{:08X}; SP = 0x{:08X}", u32(pc), u32(gpr[31]), u32(gpr[29])));
     }
 }
 
@@ -415,11 +417,11 @@ template<size_t access_size> void WriteMemoryCpu(u32 addr, s64 data)
 void WriteReg(u32 addr, u32 data)
 {
     if (addr == sp_pc_addr) {
-        pc = data & 0xFFC;
-        jump_is_pending = in_branch_delay_slot = false;
         if constexpr (log_io_rsp) {
             log(std::format("RSP IO: SP_PC <= ${:08X}", data));
         }
+        jump_addr = data & 0xFFC;
+        PerformBranch();
     } else {
         static_assert(sizeof(sp) >> 2 == 8);
         u32 offset = addr >> 2 & 7;

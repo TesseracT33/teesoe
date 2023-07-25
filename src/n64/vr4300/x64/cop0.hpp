@@ -12,9 +12,11 @@ using namespace asmjit::x86;
 
 inline AsmjitCompiler& c = compiler;
 
+u32 ReadRandomJit();
+
 inline void OnCop0Unusable()
 {
-    reg_alloc.ReserveArgs(1);
+    reg_alloc.FlushAll();
     c.xor_(host_gpr_arg[0].r32(), host_gpr_arg[0].r32());
     BlockEpilogWithPcFlushAndJmp(CoprocessorUnusableException);
     branched = true;
@@ -34,7 +36,14 @@ template<size_t size> inline void ReadCop0(Gpq dst, u32 idx)
 
     switch (idx & 31) {
     case Cop0Reg::index: Read(cop0.index); break;
-    case Cop0Reg::random: c.xor_(dst.r32(), dst.r32()); break; // TODO
+    case Cop0Reg::random:
+        reg_alloc.Call(ReadRandomJit);
+        if constexpr (size == 4) {
+            c.movsxd(dst, eax);
+        } else {
+            c.mov(dst.r32(), eax);
+        }
+        break;
     case Cop0Reg::entry_lo_0: Read(cop0.entry_lo[0]); break;
     case Cop0Reg::entry_lo_1: Read(cop0.entry_lo[1]); break;
     case Cop0Reg::context: Read(cop0.context); break;
@@ -86,6 +95,11 @@ template<size_t size> inline void ReadCop0(Gpq dst, u32 idx)
     }
 }
 
+inline u32 ReadRandomJit()
+{
+    return random_generator.Generate();
+}
+
 template<size_t size> inline void WriteCop0(Gpq src, u32 idx)
 {
     auto Write = [src](auto& cop0_reg) {
@@ -107,15 +121,17 @@ template<size_t size> inline void WriteCop0(Gpq src, u32 idx)
             c.and_(GlobalVarPtr(cop0_reg), ~mask);
             c.or_(GlobalVarPtr(cop0_reg), eax);
         } else {
-            reg_alloc.Free(rcx);
+            Gpq t = reg_alloc.GetTemporary().r64();
             size == 8 ? c.mov(rax, src) : c.movsxd(rax, src.r32());
-            c.mov(rcx, mask);
-            c.and_(rax, rcx);
-            c.not_(rcx);
-            c.and_(GlobalVarPtr(cop0_reg), rcx);
+            c.mov(t, mask);
+            c.and_(rax, t);
+            c.not_(t);
+            c.and_(GlobalVarPtr(cop0_reg), t);
             c.or_(GlobalVarPtr(cop0_reg), rax);
         }
     };
+
+    c.mov(GlobalVarPtr(last_cop0_write), src.r32());
 
     switch (idx & 31) {
     case Cop0Reg::index: WriteMasked(cop0.index, 0x8000'003F); break;
@@ -130,14 +146,14 @@ template<size_t size> inline void WriteCop0(Gpq src, u32 idx)
         break;
     case Cop0Reg::bad_v_addr: break;
     case Cop0Reg::count:
-        c.lea(rax, ptr(src.r32(), src.r32()));
+        c.lea(rax, ptr(src, src));
         c.mov(GlobalVarPtr(cop0.count), rax);
         reg_alloc.Call(OnWriteToCount);
         break;
     case Cop0Reg::entry_hi: WriteMasked(cop0.entry_hi, 0xC000'00FF'FFFF'E0FF); break;
     case Cop0Reg::compare: {
         Label l_noexception = c.newLabel();
-        c.lea(rax, ptr(src.r32(), src.r32()));
+        c.lea(rax, ptr(src, src));
         c.mov(GlobalVarPtr(cop0.compare), rax);
         FlushPc();
         reg_alloc.Call(OnWriteToCompare);
@@ -171,8 +187,6 @@ template<size_t size> inline void WriteCop0(Gpq src, u32 idx)
     case Cop0Reg::tag_lo: WriteMasked(cop0.tag_lo, 0x0FFF'FFC0); break;
     case Cop0Reg::error_epc: Write(cop0.error_epc); break;
     }
-
-    c.mov(GlobalVarPtr(last_cop0_write), src.r32());
 }
 
 inline void cache(u32 rs, u32 rt, s16 imm)
@@ -193,8 +207,15 @@ inline void cache(u32 rs, u32 rt, s16 imm)
 
 inline void dmfc0(u32 rt, u32 rd)
 {
-    // TODO: ReservedInstructionException if not in kernel mode and 32-bit addressing mode
     if (can_exec_cop0_instrs) {
+        Label l_noexception = c.newLabel();
+        c.cmp(GlobalVarPtr(operating_mode), mips::OperatingMode::Kernel);
+        c.je(l_noexception);
+        c.cmp(GlobalVarPtr(addressing_mode), AddressingMode::_64bit);
+        c.je(l_noexception);
+        BlockEpilogWithPcFlushAndJmp(ReservedInstructionException);
+
+        c.bind(l_noexception);
         if (!rt) return;
         Gpq ht = reg_alloc.GetHostGprMarkDirty(rt);
         ReadCop0<8>(ht, rd);
@@ -205,8 +226,15 @@ inline void dmfc0(u32 rt, u32 rd)
 
 inline void dmtc0(u32 rt, u32 rd)
 {
-    // TODO: ReservedInstructionException if not in kernel mode and 32-bit addressing mode
     if (can_exec_cop0_instrs) {
+        Label l_noexception = c.newLabel();
+        c.cmp(GlobalVarPtr(operating_mode), mips::OperatingMode::Kernel);
+        c.je(l_noexception);
+        c.cmp(GlobalVarPtr(addressing_mode), AddressingMode::_64bit);
+        c.je(l_noexception);
+        BlockEpilogWithPcFlushAndJmp(ReservedInstructionException);
+
+        c.bind(l_noexception);
         Gpq ht = reg_alloc.GetHostGpr(rt);
         WriteCop0<8>(ht, rd);
     } else {

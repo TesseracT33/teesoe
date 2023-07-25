@@ -28,6 +28,12 @@ namespace n64::vr4300 {
 
 using mips::BranchState;
 
+constexpr u32 pool_size = 0x100;
+constexpr u32 instructions_per_pool = pool_size / 4;
+constexpr u32 num_pools = 0x80'0000;
+constexpr u32 pool_max_addr_excl = (num_pools * pool_size);
+static_assert(std::has_single_bit(pool_max_addr_excl));
+
 struct Block {
     void (*func)();
     void operator()() const { func(); }
@@ -38,16 +44,14 @@ struct Block {
 using BlockPack = std::array<Block*, 16>;
 
 struct Pool {
-    std::array<BlockPack*, 64> blocks;
+    std::array<BlockPack*, instructions_per_pool> blocks;
 };
 
-static void BlockEpilogWithPcFlush(int pc_offset);
 static void EmitInstruction();
 static void ExecuteBlock(Block* block);
 static std::pair<Block*, bool> GetBlock(u32 pc);
+static void ResetPool(Pool*& pool);
 static void UpdateBranchStateJit();
-
-constexpr size_t num_pools = 0x80'0000;
 
 static BumpAllocator allocator;
 static asmjit::CodeHolder code_holder;
@@ -223,19 +227,9 @@ Status InitRecompiler()
 void Invalidate(u32 addr)
 {
     if (cpu_impl == CpuImpl::Recompiler) {
-        Pool*& pool = pools[addr >> 8]; // each pool 6 bits, each instruction 2 bits
-        if (!pool) return;
-        for (BlockPack*& block_pack : pool->blocks) {
-            if (!block_pack) continue;
-            for (Block*& block : *block_pack) {
-                if (block) {
-                    jit_runtime.release(block->func);
-                    block = nullptr;
-                }
-            }
-            block_pack = nullptr;
-        }
-        pool = nullptr;
+        assert(addr < pool_max_addr_excl);
+        Pool*& pool = pools[addr >> 8 & (num_pools - 1)]; // each pool 6 bits, each instruction 2 bits
+        ResetPool(pool);
     }
 }
 
@@ -243,9 +237,12 @@ void InvalidateRange(u32 addr_lo, u32 addr_hi)
 {
     if (cpu_impl == CpuImpl::Recompiler) {
         ASSUME(addr_lo <= addr_hi);
-        addr_lo = addr_lo >> 8 & (num_pools - 1);
-        addr_hi = addr_hi >> 8 & (num_pools - 1);
-        std::fill(pools.begin() + addr_lo, pools.begin() + addr_hi, nullptr);
+        assert(addr_hi <= pool_max_addr_excl);
+        addr_lo = std::min(addr_lo, pool_max_addr_excl - 1);
+        addr_hi = std::min(addr_hi, pool_max_addr_excl - 1);
+        addr_lo >>= 8;
+        addr_hi >>= 8;
+        std::for_each(pools.begin() + addr_lo, pools.begin() + addr_hi + 1, [](Pool*& pool) { ResetPool(pool); });
     }
 }
 
@@ -259,6 +256,22 @@ void OnBranchNotTakenJit()
     c.mov(GlobalVarPtr(in_branch_delay_slot_taken), 0);
     c.mov(GlobalVarPtr(in_branch_delay_slot_not_taken), 1);
     c.mov(GlobalVarPtr(branch_state), std::to_underlying(BranchState::NoBranch));
+}
+
+void ResetPool(Pool*& pool)
+{
+    if (!pool) return;
+    for (BlockPack*& block_pack : pool->blocks) {
+        if (!block_pack) continue;
+        for (Block*& block : *block_pack) {
+            if (block) {
+                jit_runtime.release(block->func);
+                block = nullptr;
+            }
+        }
+        block_pack = nullptr;
+    }
+    pool = nullptr;
 }
 
 u32 RunRecompiler(u32 cpu_cycles)

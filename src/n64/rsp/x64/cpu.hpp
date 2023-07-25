@@ -21,11 +21,11 @@ struct Recompiler : public mips::RecompilerX64<s32, u32, RegisterAllocator> {
 
     void break_() const
     {
+        reg_alloc.FlushAll();
         Label l_end = c.newLabel();
         c.or_(GlobalVarPtr(sp.status), 3); // set halted, broke
         c.bt(GlobalVarPtr(sp.status), 6); // test intbreak
         c.jnc(l_end);
-        reg_alloc.Free(host_gpr_arg[0]);
         c.mov(host_gpr_arg[0].r32(), std::to_underlying(mi::InterruptType::SP));
         BlockEpilogWithPcFlushAndJmp(mi::RaiseInterrupt);
         c.bind(l_end);
@@ -48,96 +48,128 @@ struct Recompiler : public mips::RecompilerX64<s32, u32, RegisterAllocator> {
     void lb(u32 rs, u32 rt, s16 imm) const
     {
         if (!rt) return;
-        Gpd ht = GetDirtyGpr(rt), hs = GetGpr(rs);
-        c.lea(eax, ptr(hs, imm)); // addr
-        c.and_(eax, 0xFFF);
-        c.movsx(ht, GlobalArrPtrWithRegOffset(dmem, rax, 1));
+        Gpd ht = GetDirtyGpr(rt);
+        if (rs) {
+            Gpd hs = GetGpr(rs);
+            c.lea(eax, ptr(hs, imm)); // addr
+            c.and_(eax, 0xFFF);
+            c.movsx(ht, GlobalArrPtrWithRegOffset(dmem, rax, 1));
+        } else {
+            c.movsx(ht, GlobalArrPtrWithImmOffset(dmem, imm & 0xFFF, 1));
+        }
     }
 
     void lbu(u32 rs, u32 rt, s16 imm) const
     {
         if (!rt) return;
-        Gpd ht = GetDirtyGpr(rt), hs = GetGpr(rs);
-        c.lea(eax, ptr(hs, imm)); // addr
-        c.and_(eax, 0xFFF);
-        c.movzx(ht, GlobalArrPtrWithRegOffset(dmem, rax, 1));
+        Gpd ht = GetDirtyGpr(rt);
+        if (rs) {
+            Gpd hs = GetGpr(rs);
+            c.lea(eax, ptr(hs, imm)); // addr
+            c.and_(eax, 0xFFF);
+            c.movzx(ht, GlobalArrPtrWithRegOffset(dmem, rax, 1));
+        } else {
+            c.movzx(ht, GlobalArrPtrWithImmOffset(dmem, imm & 0xFFF, 1));
+        }
     }
 
     void lh(u32 rs, u32 rt, s16 imm) const
     {
         if (!rt) return;
-        Gpd ht = GetDirtyGpr(rt), hs = GetGpr(rs);
-        c.mov(rcx, dmem);
-        c.lea(eax, ptr(hs, imm)); // addr
-        c.and_(eax, 0xFFF);
-        c.mov(dh, byte_ptr(rcx, rax));
-        c.inc(eax);
-        c.and_(eax, 0xFFF);
-        c.mov(dl, byte_ptr(rcx, rax));
-        c.movsx(ht, dx);
+        Gpd ht = GetDirtyGpr(rt);
+        imm &= 0xFFF;
+        if (rs || imm == 0xFFF) {
+            Gpd hs = GetGpr(rs);
+            c.mov(rcx, dmem);
+            c.lea(eax, ptr(hs, imm)); // addr
+            c.and_(eax, 0xFFF);
+            c.mov(dh, byte_ptr(rcx, rax));
+            c.inc(eax);
+            c.and_(eax, 0xFFF);
+            c.mov(dl, byte_ptr(rcx, rax));
+            c.movsx(ht, dx);
+        } else {
+            c.movbe(ax, GlobalArrPtrWithImmOffset(dmem, imm, 2));
+            c.movsx(ht, ax);
+        }
     }
 
     void lhu(u32 rs, u32 rt, s16 imm) const
     {
         if (!rt) return;
-        Gpd ht = GetDirtyGpr(rt), hs = GetGpr(rs);
-        c.mov(rcx, dmem);
-        c.lea(eax, ptr(hs, imm)); // addr
-        c.and_(eax, 0xFFF);
-        c.mov(dh, byte_ptr(rcx, rax));
-        c.inc(eax);
-        c.and_(eax, 0xFFF);
-        c.mov(dl, byte_ptr(rcx, rax));
-        c.movzx(ht, dx);
+        Gpd ht = GetDirtyGpr(rt);
+        imm &= 0xFFF;
+        if (rs || imm == 0xFFF) {
+            Gpd hs = GetGpr(rs);
+            c.mov(rcx, dmem);
+            c.lea(eax, ptr(hs, imm)); // addr
+            c.and_(eax, 0xFFF);
+            c.mov(dh, byte_ptr(rcx, rax));
+            c.inc(eax);
+            c.and_(eax, 0xFFF);
+            c.mov(dl, byte_ptr(rcx, rax));
+            c.movzx(ht, dx);
+        } else {
+            c.movbe(ax, GlobalArrPtrWithImmOffset(dmem, imm, 2));
+            c.movzx(ht, ax);
+        }
     }
 
     void lw(u32 rs, u32 rt, s16 imm) const
     {
         if (!rt) return;
-        Gpd ht = GetDirtyGpr(rt), hs = GetGpr(rs);
-        Label l_no_ov = c.newLabel(), l_end = c.newLabel();
-        c.mov(rcx, dmem);
-        c.lea(eax, ptr(hs, imm)); // addr
-        c.and_(eax, 0xFFF);
-        c.cmp(eax, 0xFFC);
-        c.jbe(l_no_ov);
+        Gpd ht = GetDirtyGpr(rt);
+        imm &= 0xFFF;
+        if (rs || imm > 0xFFC) {
+            Gpd hs = GetGpr(rs);
+            Label l_no_ov = c.newLabel(), l_end = c.newLabel();
+            c.mov(rcx, dmem);
+            c.lea(eax, ptr(hs, imm)); // addr
+            c.and_(eax, 0xFFF);
+            c.cmp(eax, 0xFFC);
+            c.jbe(l_no_ov);
 
-        c.mov(dh, byte_ptr(rcx, rax));
-        c.inc(eax);
-        c.and_(eax, 0xFFF);
-        c.mov(dl, byte_ptr(rcx, rax));
-        c.shl(edx, 16);
-        c.inc(eax);
-        c.and_(eax, 0xFFF);
-        c.mov(dh, byte_ptr(rcx, rax));
-        c.inc(eax);
-        c.and_(eax, 0xFFF);
-        c.mov(dl, byte_ptr(rcx, rax));
-        c.mov(ht, edx);
-        c.jmp(l_end);
+            c.mov(dh, byte_ptr(rcx, rax));
+            c.inc(eax);
+            c.and_(eax, 0xFFF);
+            c.mov(dl, byte_ptr(rcx, rax));
+            c.shl(edx, 16);
+            c.inc(eax);
+            c.and_(eax, 0xFFF);
+            c.mov(dh, byte_ptr(rcx, rax));
+            c.inc(eax);
+            c.and_(eax, 0xFFF);
+            c.mov(dl, byte_ptr(rcx, rax));
+            c.mov(ht, edx);
+            c.jmp(l_end);
 
-        c.bind(l_no_ov);
-        c.movbe(ht, dword_ptr(rcx, rax));
+            c.bind(l_no_ov);
+            c.movbe(ht, dword_ptr(rcx, rax));
 
-        c.bind(l_end);
+            c.bind(l_end);
+        } else {
+            c.movbe(ht, GlobalArrPtrWithImmOffset(dmem, imm, 4));
+        }
     }
 
     void lwu(u32 rs, u32 rt, s16 imm) const { lw(rs, rt, imm); }
 
     void mfc0(u32 rt, u32 rd) const
     {
-        reg_alloc.Free(host_gpr_arg[0]);
+        reg_alloc.ReserveArgs(1);
         c.mov(host_gpr_arg[0].r32(), (rd & 7) << 2);
         reg_alloc.Call(rd & 8 ? rdp::ReadReg : rsp::ReadReg);
+        reg_alloc.FreeArgs(1);
         if (rt) c.mov(GetDirtyGpr(rt), eax);
     }
 
     void mtc0(u32 rt, u32 rd) const
     { // TODO: possible to start DMA to IMEM and cause invalidation of the currently executed block
-        reg_alloc.Free<2>({ host_gpr_arg[0], host_gpr_arg[1] });
+        reg_alloc.ReserveArgs(2);
         c.mov(host_gpr_arg[0].r32(), (rd & 7) << 2);
         c.mov(host_gpr_arg[1].r32(), GetGpr(rt));
         reg_alloc.Call(rd & 8 ? rdp::WriteReg : rsp::WriteReg);
+        reg_alloc.FreeArgs(2);
         if ((rd & 7) == 4) { // SP_STATUS
             Label l_no_halt = c.newLabel(), l_no_sstep = c.newLabel();
             c.bt(GlobalVarPtr(sp.status), 0); // halted
@@ -155,56 +187,73 @@ struct Recompiler : public mips::RecompilerX64<s32, u32, RegisterAllocator> {
 
     void sb(u32 rs, u32 rt, s16 imm) const
     {
-        Gpd hs = GetGpr(rs), ht = GetGpr(rt);
-        c.lea(eax, ptr(hs, imm)); // addr
-        c.and_(eax, 0xFFF);
-        c.mov(GlobalArrPtrWithRegOffset(dmem, rax, 1), ht.r8());
+        Gpd ht = GetGpr(rt);
+        if (rs) {
+            Gpd hs = GetGpr(rs);
+            c.lea(eax, ptr(hs, imm)); // addr
+            c.and_(eax, 0xFFF);
+            c.mov(GlobalArrPtrWithRegOffset(dmem, rax, 1), ht.r8());
+        } else {
+            c.mov(GlobalArrPtrWithImmOffset(dmem, imm & 0xFFF, 1), ht.r8());
+        }
     }
 
     void sh(u32 rs, u32 rt, s16 imm) const
     {
-        Gpd hs = GetGpr(rs), ht = GetGpr(rt);
-        c.mov(rcx, dmem);
-        c.lea(eax, ptr(hs, imm)); // addr
-        c.and_(eax, 0xFFF);
-        c.mov(edx, ht);
-        c.mov(byte_ptr(rcx, rax), dh);
-        c.inc(eax);
-        c.and_(eax, 0xFFF);
-        c.mov(byte_ptr(rcx, rax), dl);
+        Gpd ht = GetGpr(rt);
+        imm &= 0xFFF;
+        if (rs || imm == 0xFFF) {
+            Gpd hs = GetGpr(rs);
+            c.mov(rcx, dmem);
+            c.lea(eax, ptr(hs, imm)); // addr
+            c.and_(eax, 0xFFF);
+            c.mov(edx, ht);
+            c.mov(byte_ptr(rcx, rax), dh);
+            c.inc(eax);
+            c.and_(eax, 0xFFF);
+            c.mov(byte_ptr(rcx, rax), dl);
+        } else {
+            c.movbe(GlobalArrPtrWithImmOffset(dmem, imm, 2), ht.r16());
+        }
     }
 
     void sub(u32 rs, u32 rt, u32 rd) const { subu(rs, rt, rd); }
 
     void sw(u32 rs, u32 rt, s16 imm) const
     {
-        Gpd hs = GetGpr(rs), ht = GetGpr(rt);
-        Label l_no_ov = c.newLabel(), l_end = c.newLabel();
-        c.mov(rcx, dmem);
-        c.lea(eax, ptr(hs, imm)); // addr
-        c.and_(eax, 0xFFF);
-        c.cmp(eax, 0xFFC);
-        c.jbe(l_no_ov);
+        Gpd ht = GetGpr(rt);
+        imm &= 0xFFF;
+        if (rs || imm > 0xFFC) {
+            Gpd hs = GetGpr(rs);
+            Label l_no_ov = c.newLabel(), l_end = c.newLabel();
+            c.mov(rcx, dmem);
+            c.lea(eax, ptr(hs, imm)); // addr
+            c.and_(eax, 0xFFF);
+            c.cmp(eax, 0xFFC);
+            c.jbe(l_no_ov);
 
-        c.mov(edx, ht);
-        c.bswap(edx);
-        c.mov(byte_ptr(rcx, rax), dl);
-        c.inc(eax);
-        c.and_(eax, 0xFFF);
-        c.mov(byte_ptr(rcx, rax), dh);
-        c.shr(edx, 16);
-        c.inc(eax);
-        c.and_(eax, 0xFFF);
-        c.mov(byte_ptr(rcx, rax), dl);
-        c.inc(eax);
-        c.and_(eax, 0xFFF);
-        c.mov(byte_ptr(rcx, rax), dh);
-        c.jmp(l_end);
+            c.mov(edx, ht);
+            c.bswap(edx);
+            c.mov(byte_ptr(rcx, rax), dl);
+            c.inc(eax);
+            c.and_(eax, 0xFFF);
+            c.mov(byte_ptr(rcx, rax), dh);
+            c.shr(edx, 16);
+            c.inc(eax);
+            c.and_(eax, 0xFFF);
+            c.mov(byte_ptr(rcx, rax), dl);
+            c.inc(eax);
+            c.and_(eax, 0xFFF);
+            c.mov(byte_ptr(rcx, rax), dh);
+            c.jmp(l_end);
 
-        c.bind(l_no_ov);
-        c.movbe(dword_ptr(rcx, rax), ht);
+            c.bind(l_no_ov);
+            c.movbe(dword_ptr(rcx, rax), ht);
 
-        c.bind(l_end);
+            c.bind(l_end);
+        } else {
+            c.movbe(GlobalArrPtrWithImmOffset(dmem, imm, 4), ht);
+        }
     }
 
 } inline constexpr cpu_recompiler{

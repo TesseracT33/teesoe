@@ -346,9 +346,9 @@ template<Cpu cpu, CpuImpl cpu_impl, bool make_string> void cop3(u32 instr)
             } else {
                 auto& c = compiler;
                 asmjit::Label l0 = c.newLabel();
+                reg_alloc.ReserveArgs(1);
                 c.bt(GlobalVarPtr(vr4300::cop0.status), 31); // cu3
                 c.jc(l0);
-                reg_alloc.Free(host_gpr_arg[0]);
                 c.mov(host_gpr_arg[0].r32(), 3);
                 BlockEpilogWithPcFlushAndJmp(CoprocessorUnusableException);
                 c.bind(l0);
@@ -565,6 +565,8 @@ template<Cpu cpu, CpuImpl cpu_impl, bool make_string> void special(u32 instr)
 
 u32 vt_e_bug(u32 vt_e, u32 vd_e)
 {
+    (void)vt_e;
+    (void)vd_e;
     // if (vt_e & 7) {
     //     bool vt_e_bit_3 = vt_e & 8;
     //     vt_e &= 7;

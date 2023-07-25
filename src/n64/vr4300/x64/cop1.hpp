@@ -20,10 +20,11 @@ void CallCop1InterpreterImpl(auto impl, u32 fs, u32 fd)
 {
     Label l_noexception = c.newLabel();
     FlushPc();
-    reg_alloc.FreeArgs(2);
+    reg_alloc.ReserveArgs(2);
     fs ? c.mov(host_gpr_arg[0].r32(), fs) : c.xor_(host_gpr_arg[0].r32(), host_gpr_arg[0].r32());
     fd ? c.mov(host_gpr_arg[1].r32(), fd) : c.xor_(host_gpr_arg[1].r32(), host_gpr_arg[1].r32());
     reg_alloc.Call(impl);
+    reg_alloc.FreeArgs(2);
     c.cmp(GlobalVarPtr(exception_occurred), 0);
     c.je(l_noexception);
     BlockEpilog();
@@ -34,11 +35,12 @@ void CallCop1InterpreterImpl(auto impl, u32 fs, u32 ft, u32 fd)
 {
     Label l_noexception = c.newLabel();
     FlushPc();
-    reg_alloc.FreeArgs(3);
+    reg_alloc.ReserveArgs(3);
     fs ? c.mov(host_gpr_arg[0].r32(), fs) : c.xor_(host_gpr_arg[0].r32(), host_gpr_arg[0].r32());
     ft ? c.mov(host_gpr_arg[1].r32(), ft) : c.xor_(host_gpr_arg[1].r32(), host_gpr_arg[1].r32());
     fd ? c.mov(host_gpr_arg[2].r32(), fd) : c.xor_(host_gpr_arg[2].r32(), host_gpr_arg[2].r32());
     reg_alloc.Call(impl);
+    reg_alloc.FreeArgs(3);
     c.cmp(GlobalVarPtr(exception_occurred), 0);
     c.je(l_noexception);
     BlockEpilog();
@@ -52,6 +54,7 @@ bool CheckCop1Usable()
         reg_alloc.ReserveArgs(1);
         c.mov(host_gpr_arg[0].r32(), FE_ALL_EXCEPT);
         reg_alloc.Call(feclearexcept); // TODO: can we get rid of this?
+        reg_alloc.FreeArgs(1);
         return true;
     } else {
         OnCop1Unusable();
@@ -68,8 +71,7 @@ template<bool cond, bool likely> void Cop1Branch(s16 imm)
     likely ? DiscardBranchJit() : OnBranchNotTakenJit();
     c.jmp(l_end);
     c.bind(l_branch);
-    c.mov(rax, jit_pc + 4 + (imm << 2));
-    TakeBranchJit(rax);
+    TakeBranchJit(jit_pc + 4 + (imm << 2));
     c.bind(l_end);
     branch_hit = true;
 }
@@ -86,7 +88,7 @@ Gpq GetDirtyGpr(u32 idx)
 
 void OnCop1Unusable()
 {
-    reg_alloc.ReserveArgs(1);
+    reg_alloc.FlushAll();
     c.mov(host_gpr_arg[0].r32(), 1);
     BlockEpilogWithPcFlushAndJmp(CoprocessorUnusableException);
     branched = true;
@@ -134,6 +136,7 @@ inline void ctc1(u32 fs, u32 rt)
 {
     if (!cop0.status.cu1) return OnCop1Unusable();
     if (fs != 31) return;
+    reg_alloc.ReserveArgs(1);
     Label l_no_exception = c.newLabel();
     Gpd ht = GetGpr(rt).r32();
     c.mov(eax, ht);
@@ -142,7 +145,6 @@ inline void ctc1(u32 fs, u32 rt)
     c.or_(GlobalVarPtr(fcr31), eax);
     c.and_(eax, 3);
     c.shl(eax, 2);
-    reg_alloc.FreeArgs(1);
     c.mov(host_gpr_arg[0].r32(), GlobalArrPtrWithRegOffset(guest_to_host_rounding_mode, rax, 4));
     reg_alloc.Call(fesetround);
     reg_alloc.Call(TestExceptions<false>);
@@ -150,6 +152,7 @@ inline void ctc1(u32 fs, u32 rt)
     c.je(l_no_exception);
     BlockEpilog();
     c.bind(l_no_exception);
+    reg_alloc.FreeArgs(1);
 }
 
 inline void dcfc1()
@@ -203,6 +206,7 @@ inline void ldc1(u32 base, u32 ft, s16 imm)
     c.mov(GlobalArrPtrWithImmOffset(fpr, ft * 8, 8), rax);
 
     block_cycles++;
+    reg_alloc.FreeArgs(1);
 }
 
 inline void lwc1(u32 base, u32 ft, s16 imm)
@@ -227,6 +231,7 @@ inline void lwc1(u32 base, u32 ft, s16 imm)
     }
 
     block_cycles++;
+    reg_alloc.FreeArgs(1);
 }
 
 inline void mfc1(u32 fs, u32 rt)
@@ -271,6 +276,7 @@ inline void sdc1(u32 base, u32 ft, s16 imm)
 
     c.bind(l_end);
     block_cycles++;
+    reg_alloc.FreeArgs(2);
 }
 
 inline void swc1(u32 base, u32 ft, s16 imm)
@@ -294,11 +300,12 @@ inline void swc1(u32 base, u32 ft, s16 imm)
 
     c.bind(l_end);
     block_cycles++;
+    reg_alloc.FreeArgs(2);
 }
 
 template<Fmt fmt> inline void compare(u32 fs, u32 ft, u8 cond)
 {
-    CallCop1InterpreterImpl(vr4300::compare<fmt>, fs, cond);
+    CallCop1InterpreterImpl(vr4300::compare<fmt>, fs, ft, cond);
 }
 
 template<Fmt fmt> inline void ceil_l(u32 fs, u32 fd)
@@ -384,8 +391,8 @@ template<Fmt fmt> inline void mov(u32 fs, u32 fd)
             c.mov(rax, GlobalArrPtrWithImmOffset(fpr, 8 * fs, 8));
             c.mov(GlobalArrPtrWithImmOffset(fpr, 8 * fd, 8), rax);
         } else {
-            reg_alloc.ReserveArgs(1);
-            c.mov(host_gpr_arg[0], 1);
+            reg_alloc.FlushAll();
+            c.mov(host_gpr_arg[0].r32(), 1);
             BlockEpilogWithPcFlushAndJmp(CoprocessorUnusableException);
             branched = true;
         }

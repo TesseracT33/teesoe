@@ -616,11 +616,11 @@ template<bool vmacf> void vmacfu(u32 vs, u32 vt, u32 vd, u32 e)
     m128i high = _mm_mulhi_epi16(vpr[vs], vt_op);
     /* multiply by two to get a 33-bit product. Sign-extend to 48 bits, and add to the accumulator. */
     m128i low_carry = _mm_srli_epi16(low, 15);
-    m128i high_carry = _mm_srai_epi16(high, 15);
-    low = _mm_add_epi16(low, low);
-    high = _mm_add_epi16(high, high);
+    m128i high_sext = _mm_srai_epi16(high, 15);
+    low = _mm_slli_epi16(low, 1);
+    high = _mm_slli_epi16(high, 1);
     high = _mm_add_epi16(high, low_carry);
-    AddToAcc(low, high, high_carry);
+    AddToAcc(low, high, high_sext);
     if constexpr (vmacf) {
         vpr[vd] = ClampSigned(acc.mid, acc.high);
     } else { // vmacu

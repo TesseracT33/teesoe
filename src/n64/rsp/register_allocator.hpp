@@ -47,12 +47,13 @@ inline constexpr std::array reg_alloc_volatile_vprs = [] {
             if constexpr (avx512) {
                 // clang-format off
             return std::array{
-                xmm16, xmm17, xmm18, xmm19, xmm20, xmm21, xmm22, xmm23, xmm24, xmm25, 
-                xmm26, xmm27, xmm28, xmm29, xmm30, xmm31, xmm7, xmm6, xmm5, xmm4, xmm3
+                xmm16, xmm17, xmm18, xmm19, xmm20, xmm21, xmm22, xmm23, xmm24, 
+                xmm25, xmm26, xmm27, xmm28, xmm29, xmm30, xmm31, xmm14, xmm13, 
+                xmm12, xmm11, xmm10, xmm9, xmm8, xmm7, xmm6, xmm5, xmm4, xmm3
             };
                 // clang-format on
             } else {
-                return std::array{ xmm7, xmm6, xmm5, xmm4, xmm3 };
+                return std::array{ xmm14, xmm13, xmm12, xmm11, xmm10, xmm9, xmm8, xmm7, xmm6, xmm5, xmm4, xmm3 };
             }
         } else {
             if constexpr (avx512) {
@@ -76,9 +77,9 @@ inline constexpr std::array reg_alloc_nonvolatile_vprs = [] {
     } else {
         using namespace x86;
         if constexpr (os.linux) {
-            return std::array{ xmm8, xmm9, xmm10, xmm11, xmm12, xmm13, xmm14 };
+            return std::array<Xmm, 0>();
         } else {
-            return std::array{ xmm6, xmm7, xmm8, xmm9, xmm10, xmm11, xmm12, xmm13, xmm14 };
+            return std::array{ xmm14, xmm13, xmm12, xmm11, xmm10, xmm9, xmm8, xmm7, xmm6 };
         }
     }
 }();
@@ -127,8 +128,10 @@ public:
         if (is_nonvolatile(guest_vprs_pointer_reg)) {
             RestoreHost(guest_vprs_pointer_reg);
         }
-        if (vte_reg_saved && is_nonvolatile(reg_alloc_vte_reg)) {
-            RestoreHost(reg_alloc_vte_reg);
+        if constexpr (is_nonvolatile(reg_alloc_vte_reg)) {
+            if (vte_reg_saved) {
+                RestoreHost(reg_alloc_vte_reg);
+            }
         }
         if constexpr (arch.a64) {
         } else {
@@ -146,8 +149,10 @@ public:
         if (is_nonvolatile(guest_vprs_pointer_reg)) {
             RestoreHost(guest_vprs_pointer_reg);
         }
-        if (vte_reg_saved && is_nonvolatile(reg_alloc_vte_reg)) {
-            RestoreHost(reg_alloc_vte_reg);
+        if constexpr (is_nonvolatile(reg_alloc_vte_reg)) {
+            if (vte_reg_saved) {
+                RestoreHost(reg_alloc_vte_reg);
+            }
         }
         if constexpr (arch.a64) {
         } else {
@@ -210,62 +215,30 @@ public:
 
     void FlushAll()
     {
-        for (auto& binding : gpr_state.bindings) {
-            Flush(binding, false);
-        }
-        for (auto& binding : vpr_state.bindings) {
-            Flush(binding, false);
-        }
-    }
-
-    void FlushAllVolatile()
-    {
         for (auto& b : gpr_state.bindings) {
-            if (b.is_volatile) {
-                Flush(b, false);
-            }
+            Flush(b, false);
         }
         for (auto& b : vpr_state.bindings) {
-            if (b.is_volatile) {
-                Flush(b, false);
-            }
+            Flush(b, false);
         }
     }
 
-    void FlushAndDestroyAllVolatile()
+    void Free(auto host) { Free<1>({ host }); }
+
+    template<size_t N> void Free(std::array<HostGpr, N> const& hosts) { gpr_state.Free(hosts); }
+
+    template<size_t N> void Free(std::array<HostVpr128, N> const& hosts) { vpr_state.Free(hosts); }
+
+    void FreeArgs(int args)
     {
-        for (auto& b : gpr_state.bindings) {
-            if (b.is_volatile) {
-                FlushAndDestroyBinding(b, false);
-            }
+        assert(args > 0);
+        switch (args) { // the prettiest code you've seen
+        case 1: Free<1>({ host_gpr_arg[0] }); break;
+        case 2: Free<2>({ host_gpr_arg[0], host_gpr_arg[1] }); break;
+        case 3: Free<3>({ host_gpr_arg[0], host_gpr_arg[1], host_gpr_arg[2] }); break;
+        case 4: Free<4>({ host_gpr_arg[0], host_gpr_arg[1], host_gpr_arg[2], host_gpr_arg[3] }); break;
+        default: assert(false);
         }
-        for (auto& b : vpr_state.bindings) {
-            if (b.is_volatile) {
-                FlushAndDestroyBinding(b, false);
-            }
-        }
-    }
-
-    void Free(HostGpr host) { Free<1>({ host }); }
-
-    void Free(HostVpr128 host) { Free<1>({ host }); }
-
-    template<size_t N> void Free(std::array<HostGpr, N> const& hosts)
-    {
-        gpr_state.Free(
-          hosts,
-          [this](GprBinding& freed, bool restore) { FlushAndDestroyBinding(freed, restore); },
-          [this](HostGpr gpr) { RestoreHost(gpr); },
-          [this](HostGpr gpr) { SaveHost(gpr); });
-    }
-
-    template<size_t N> void Free(std::array<HostVpr128, N> const& hosts)
-    {
-        vpr_state.Free(
-          hosts,
-          [this](VprBinding& freed, bool restore) { FlushAndDestroyBinding(freed, restore); },
-          [this](HostVpr128 vpr) { RestoreHost(vpr); },
-          [this](HostVpr128 vpr) { SaveHost(vpr); });
     }
 
     HostVpr128 GetAccHigh() { return GetHostVpr(acc_high_idx, false); }
@@ -301,9 +274,11 @@ public:
 
     HostVpr128 GetVte()
     {
-        if (!vte_reg_saved) {
-            vte_reg_saved = true;
-            SaveHost(reg_alloc_vte_reg);
+        if constexpr (is_nonvolatile(reg_alloc_vte_reg)) {
+            if (!vte_reg_saved) {
+                vte_reg_saved = true;
+                SaveHost(reg_alloc_vte_reg);
+            }
         }
         return reg_alloc_vte_reg;
     }
@@ -314,6 +289,44 @@ public:
             return gpr_state.IsBound(reg);
         } else {
             return vpr_state.IsBound(reg);
+        }
+    }
+
+    void Reserve(HostGpr host) { Reserve<1>({ host }); }
+
+    void Reserve(HostVpr128 host) { Reserve<1>({ host }); }
+
+    template<size_t N> void Reserve(std::array<HostGpr, N> const& hosts)
+    {
+        gpr_state.Reserve(
+          hosts,
+          [this](GprBinding& freed, bool restore, bool keep_reserved) {
+              FlushAndDestroyBinding(freed, restore, keep_reserved);
+          },
+          [this](HostGpr gpr) { RestoreHost(gpr); },
+          [this](HostGpr gpr) { SaveHost(gpr); });
+    }
+
+    template<size_t N> void Reserve(std::array<HostVpr128, N> const& hosts)
+    {
+        vpr_state.Reserve(
+          hosts,
+          [this](VprBinding& freed, bool restore, bool keep_reserved) {
+              FlushAndDestroyBinding(freed, restore, keep_reserved);
+          },
+          [this](HostVpr128 vpr) { RestoreHost(vpr); },
+          [this](HostVpr128 vpr) { SaveHost(vpr); });
+    }
+
+    void ReserveArgs(int args)
+    {
+        assert(args > 0);
+        switch (args) { // the prettiest code you've seen
+        case 1: Reserve<1>({ host_gpr_arg[0] }); break;
+        case 2: Reserve<2>({ host_gpr_arg[0], host_gpr_arg[1] }); break;
+        case 3: Reserve<3>({ host_gpr_arg[0], host_gpr_arg[1], host_gpr_arg[2] }); break;
+        case 4: Reserve<4>({ host_gpr_arg[0], host_gpr_arg[1], host_gpr_arg[2], host_gpr_arg[3] }); break;
+        default: assert(false);
         }
     }
 
@@ -393,18 +406,31 @@ private:
                     }
                 }
             }
-            // binding.dirty = false; // TODO: uncommenting this breaks this things, why?
         }
         if (!binding.is_volatile && restore) {
             RestoreHost(binding.host);
         }
     }
 
-    void FlushAndDestroyBinding(auto& binding, bool restore)
+    void FlushAndDestroyAllVolatile()
+    {
+        for (auto& b : gpr_state.bindings) {
+            if (b.is_volatile) {
+                FlushAndDestroyBinding(b, false, true);
+            }
+        }
+        for (auto& b : vpr_state.bindings) {
+            if (b.is_volatile) {
+                FlushAndDestroyBinding(b, false, true);
+            }
+        }
+    }
+
+    void FlushAndDestroyBinding(auto& binding, bool restore, bool keep_reserved)
     {
         Flush(binding, restore);
-        if constexpr (std::same_as<decltype(binding.host), HostGpr>) gpr_state.ResetBinding(binding);
-        else vpr_state.ResetBinding(binding);
+        if constexpr (std::same_as<decltype(binding.host), HostGpr>) gpr_state.ResetBinding(binding, keep_reserved);
+        else vpr_state.ResetBinding(binding, keep_reserved);
     }
 
     // This should only be used as part of an instruction epilogue. Thus, there is no need
@@ -443,6 +469,9 @@ private:
 
         auto FindReg = [&](auto start_it, auto end_it) {
             for (auto b = start_it; b != end_it; ++b) {
+                if (b->reserved) {
+                    continue;
+                }
                 if (!b->Occupied()) {
                     found_free = true;
                     binding = &*b;
@@ -460,7 +489,7 @@ private:
         }
 
         if (!found_free) {
-            FlushAndDestroyBinding(*binding, false);
+            FlushAndDestroyBinding(*binding, false, true);
         }
         binding->guest = guest;
         binding->access_index = state->host_access_index++;
@@ -477,7 +506,7 @@ private:
         }
         if constexpr (arch.a64) {
         } else {
-            auto guest = binding.guest.value();
+            u32 guest = binding.guest.value();
             if constexpr (std::same_as<decltype(binding.host), HostGpr>) {
                 if (guest == 0) {
                     c.xor_(binding.host.r32(), binding.host.r32());

@@ -22,8 +22,8 @@ struct Recompiler : public mips::RecompilerX64<s64, u64, RegAllocator> {
     void bgezal(u32 rs, s16 imm) const
     {
         Label l_branch = c.newLabel(), l_link = c.newLabel(), l_no_delay_slot = c.newLabel(), l_end = c.newLabel();
+        reg_alloc.Reserve(rcx);
         Gpq hs = GetGpr(rs), h31 = GetDirtyGpr(31);
-        reg_alloc.Free(rcx);
         c.mov(cl, GlobalVarPtr(in_branch_delay_slot_taken));
         c.or_(cl, GlobalVarPtr(in_branch_delay_slot_not_taken));
         c.test(hs, hs);
@@ -48,6 +48,7 @@ struct Recompiler : public mips::RecompilerX64<s64, u64, RegAllocator> {
         c.bind(l_end);
 
         branch_hit = true;
+        reg_alloc.Free(rcx);
     }
 
     void bgezall(u32 rs, s16 imm) const { branch_and_link<mips::Cond::Ge, true>(rs, imm); }
@@ -85,8 +86,8 @@ struct Recompiler : public mips::RecompilerX64<s64, u64, RegAllocator> {
         if (!CheckDwordOpCondJit()) return;
 
         Label l_div = c.newLabel(), l_divzero = c.newLabel(), l_end = c.newLabel();
+        reg_alloc.Reserve(rdx);
         Gpq hs = GetGpr(rs), ht = GetGpr(rt);
-        reg_alloc.Free(rdx);
         c.test(ht, ht);
         c.je(l_divzero);
         c.mov(rax, hs);
@@ -110,13 +111,14 @@ struct Recompiler : public mips::RecompilerX64<s64, u64, RegAllocator> {
 
         c.bind(l_div);
         c.mov(rax, hs);
-        c.xor_(edx, edx);
+        c.cqo(rdx, rax);
         c.idiv(rdx, rax, ht);
         c.mov(GlobalVarPtr(lo), rax);
         c.mov(GlobalVarPtr(hi), rdx);
 
         c.bind(l_end);
         block_cycles += 68;
+        reg_alloc.Free(rdx);
     }
 
     void ddivu(u32 rs, u32 rt) const
@@ -124,8 +126,8 @@ struct Recompiler : public mips::RecompilerX64<s64, u64, RegAllocator> {
         if (!CheckDwordOpCondJit()) return;
 
         Label l_div = c.newLabel(), l_end = c.newLabel();
+        reg_alloc.Reserve(rdx);
         Gpq hs = GetGpr(rs), ht = GetGpr(rt);
-        reg_alloc.Free(rdx);
         c.test(ht, ht);
         c.jne(l_div);
         c.mov(GlobalVarPtr(lo), -1);
@@ -141,13 +143,14 @@ struct Recompiler : public mips::RecompilerX64<s64, u64, RegAllocator> {
 
         c.bind(l_end);
         block_cycles += 68;
+        reg_alloc.Free(rdx);
     }
 
     void div(u32 rs, u32 rt) const
     {
         Label l_div = c.newLabel(), l_divzero = c.newLabel(), l_end = c.newLabel();
+        reg_alloc.Reserve(rdx);
         Gpd hs = GetGpr32(rs), ht = GetGpr32(rt);
-        reg_alloc.Free(rdx);
         c.test(ht, ht);
         c.je(l_divzero);
         c.mov(eax, hs);
@@ -172,7 +175,7 @@ struct Recompiler : public mips::RecompilerX64<s64, u64, RegAllocator> {
 
         c.bind(l_div);
         c.mov(eax, hs);
-        c.xor_(edx, edx);
+        c.cdq(edx, eax);
         c.idiv(edx, eax, ht);
         c.cdqe(rax);
         c.mov(GlobalVarPtr(lo), rax);
@@ -181,13 +184,14 @@ struct Recompiler : public mips::RecompilerX64<s64, u64, RegAllocator> {
 
         c.bind(l_end);
         block_cycles += 36;
+        reg_alloc.Free(rdx);
     }
 
     void divu(u32 rs, u32 rt) const
     {
         Label l_div = c.newLabel(), l_end = c.newLabel();
+        reg_alloc.Reserve(rdx);
         Gpd hs = GetGpr32(rs), ht = GetGpr32(rt);
-        reg_alloc.Free(rdx);
         c.test(ht, ht);
         c.jne(l_div);
         c.mov(GlobalVarPtr(lo), -1);
@@ -206,6 +210,7 @@ struct Recompiler : public mips::RecompilerX64<s64, u64, RegAllocator> {
 
         c.bind(l_end);
         block_cycles += 36;
+        reg_alloc.Free(rdx);
     }
 
     void dmult(u32 rs, u32 rt) const
@@ -218,7 +223,7 @@ struct Recompiler : public mips::RecompilerX64<s64, u64, RegAllocator> {
     void dmultu(u32 rs, u32 rt) const
     {
         if (CheckDwordOpCondJit()) {
-            multiply64<true>(rt, rt);
+            multiply64<true>(rs, rt);
         }
     }
 
@@ -309,6 +314,7 @@ struct Recompiler : public mips::RecompilerX64<s64, u64, RegAllocator> {
         c.lea(host_gpr_arg[0], ptr(hs, imm));
         c.push(host_gpr_arg[0]);
         reg_alloc.CallWithStackAlignment(ReadVirtual<s64, Alignment::UnalignedLeft>);
+        reg_alloc.FreeArgs(1);
         c.pop(rcx);
         c.cmp(GlobalVarPtr(exception_occurred), 0);
         c.je(l_noexception);
@@ -339,6 +345,7 @@ struct Recompiler : public mips::RecompilerX64<s64, u64, RegAllocator> {
         c.lea(host_gpr_arg[0], ptr(hs, imm));
         c.push(host_gpr_arg[0]);
         reg_alloc.CallWithStackAlignment(ReadVirtual<s64, Alignment::UnalignedRight>);
+        reg_alloc.FreeArgs(1);
         c.pop(rcx);
         c.cmp(GlobalVarPtr(exception_occurred), 0);
         c.je(l_noexception);
@@ -383,6 +390,7 @@ struct Recompiler : public mips::RecompilerX64<s64, u64, RegAllocator> {
         c.lea(host_gpr_arg[0], ptr(hs, imm));
         c.push(host_gpr_arg[0]);
         reg_alloc.CallWithStackAlignment(ReadVirtual<s32, Alignment::UnalignedLeft>);
+        reg_alloc.FreeArgs(1);
         c.pop(rcx);
         c.cmp(GlobalVarPtr(exception_occurred), 0);
         c.je(l_noexception);
@@ -413,6 +421,7 @@ struct Recompiler : public mips::RecompilerX64<s64, u64, RegAllocator> {
         c.lea(host_gpr_arg[0], ptr(hs, imm));
         c.push(host_gpr_arg[0]);
         reg_alloc.CallWithStackAlignment(ReadVirtual<s32, Alignment::UnalignedRight>);
+        reg_alloc.FreeArgs(1);
         c.pop(rcx);
         c.cmp(GlobalVarPtr(exception_occurred), 0);
         c.je(l_noexception);
@@ -479,6 +488,7 @@ struct Recompiler : public mips::RecompilerX64<s64, u64, RegAllocator> {
         c.lea(eax, ptr(0, host_gpr_arg[0], 3u));
         c.sarx(host_gpr_arg[1], ht, rax);
         reg_alloc.Call(WriteVirtual<8, Alignment::UnalignedLeft>);
+        reg_alloc.FreeArgs(2);
         c.cmp(GlobalVarPtr(exception_occurred), 0);
         c.je(l_end);
 
@@ -499,6 +509,7 @@ struct Recompiler : public mips::RecompilerX64<s64, u64, RegAllocator> {
         c.xor_(al, 56);
         c.shlx(host_gpr_arg[1], ht, rax);
         reg_alloc.Call(WriteVirtual<8, Alignment::UnalignedRight>);
+        reg_alloc.FreeArgs(2);
         c.cmp(GlobalVarPtr(exception_occurred), 0);
         c.je(l_end);
 
@@ -534,6 +545,7 @@ struct Recompiler : public mips::RecompilerX64<s64, u64, RegAllocator> {
         c.and_(al, 24);
         c.shrx(host_gpr_arg[1], ht, rax);
         reg_alloc.Call(WriteVirtual<4, Alignment::UnalignedLeft>);
+        reg_alloc.FreeArgs(2);
         c.cmp(GlobalVarPtr(exception_occurred), 0);
         c.je(l_end);
 
@@ -553,6 +565,7 @@ struct Recompiler : public mips::RecompilerX64<s64, u64, RegAllocator> {
         c.xor_(al, 24);
         c.shlx(host_gpr_arg[1], ht, rax);
         reg_alloc.Call(WriteVirtual<4, Alignment::UnalignedRight>);
+        reg_alloc.FreeArgs(2);
         c.cmp(GlobalVarPtr(exception_occurred), 0);
         c.je(l_end);
 
@@ -565,8 +578,16 @@ private:
     template<mips::Cond cc, bool likely> void branch(u32 rs, u32 rt, s16 imm) const
     {
         Label l_branch = c.newLabel(), l_end = c.newLabel();
-        Gpq hs = GetGpr(rs), ht = GetGpr(rt);
-        c.cmp(hs, ht);
+        if (!rs) {
+            Gp ht = GetGpr(rt);
+            c.test(ht, ht);
+        } else if (!rt) {
+            Gp hs = GetGpr(rs);
+            c.test(hs, hs);
+        } else {
+            Gp hs = GetGpr(rs), ht = GetGpr(rt);
+            c.cmp(hs, ht);
+        }
         if constexpr (cc == mips::Cond::Eq) c.je(l_branch);
         if constexpr (cc == mips::Cond::Ne) c.jne(l_branch);
         likely ? DiscardBranchJit() : OnBranchNotTakenJit();
@@ -609,6 +630,7 @@ private:
         Gpq hs = GetGpr(rs);
         c.lea(host_gpr_arg[0], ptr(hs, imm));
         reg_alloc.Call(ReadVirtual<std::make_signed_t<Int>>);
+        reg_alloc.FreeArgs(2);
 
         if constexpr (linked) {
             c.mov(ecx, GlobalVarPtr(last_paddr_on_load));
@@ -635,53 +657,12 @@ private:
         }
     }
 
-    template<std::integral Int> void load_right(u32 rs, u32 rt, s16 imm) const
-    {
-        Label l_noexception = c.newLabel();
-
-        FlushPc();
-        reg_alloc.ReserveArgs(1);
-        Gpq hs = GetGpr(rs);
-        reg_alloc.Free(rbx);
-        c.lea(host_gpr_arg[0], ptr(hs, imm));
-        c.mov(rbx, host_gpr_arg[0]);
-        reg_alloc.Call(ReadVirtual<std::make_signed_t<Int>, Alignment::UnalignedRight>);
-        c.cmp(GlobalVarPtr(exception_occurred), 0);
-        c.je(l_noexception);
-
-        BlockEpilog();
-
-        c.bind(l_noexception);
-        if (rt) {
-            Gpq ht = GetDirtyGpr(rt);
-            if constexpr (sizeof(Int) == 4) {
-                c.lea(ecx, ptr(0, ebx, 3u)); // [8 * ebx]
-                c.and_(ecx, 24);
-                c.mov(ebx, 0xFFFF'FF00);
-                c.shl(ebx, cl);
-                c.xor_(ecx, 24);
-                c.shr(eax, cl);
-                c.and_(ht.r32(), ebx);
-                c.or_(ht.r32(), eax);
-                c.movsxd(ht.r64(), ht.r32());
-            } else {
-                c.lea(ecx, ptr(0, ebx, 3u)); // [8 * ebx]
-                c.mov(rbx, 0xFFFF'FF00);
-                c.shl(rbx, cl);
-                c.xor_(ecx, 56);
-                c.shr(rax, cl);
-                c.and_(ht, rbx);
-                c.or_(ht, rax);
-            }
-        }
-    }
-
     template<bool unsig> void multiply64(u32 rs, u32 rt) const
     {
         Gpq hs = GetGpr(rs), ht = GetGpr(rt);
-        reg_alloc.Free(rdx);
+        reg_alloc.Reserve(rdx);
         c.mov(rax, hs);
-        c.xor_(rdx, rdx);
+        c.xor_(edx, edx);
         if constexpr (unsig) {
             c.mul(rdx, rax, ht);
         } else {
@@ -690,6 +671,7 @@ private:
         c.mov(GlobalVarPtr(lo), rax);
         c.mov(GlobalVarPtr(hi), rdx);
         block_cycles += 7;
+        reg_alloc.Free(rdx);
     }
 
     template<std::integral Int> void store(u32 rs, u32 rt, s16 imm) const
@@ -701,6 +683,7 @@ private:
         c.lea(host_gpr_arg[0], ptr(hs, imm));
         c.mov(host_gpr_arg[1], ht);
         reg_alloc.Call(WriteVirtual<sizeof(Int)>);
+        reg_alloc.FreeArgs(2);
         c.cmp(GlobalVarPtr(exception_occurred), 0);
         c.je(l_end);
 
@@ -728,6 +711,7 @@ private:
         c.lea(host_gpr_arg[0], ptr(hs, imm));
         c.mov(host_gpr_arg[1], ht);
         reg_alloc.Call(WriteVirtual<sizeof(Int)>);
+        reg_alloc.FreeArgs(2);
         if (rt) c.mov(GetDirtyGpr32(rt), 1);
         c.cmp(GlobalVarPtr(exception_occurred), 0);
         c.je(l_end);
