@@ -817,7 +817,7 @@ void vand(u32 vs, u32 vt, u32 vd, u32 e)
 
 void vch(u32 vs, u32 vt, u32 vd, u32 e)
 {
-    reg_alloc.Reserve<5>({ xmm3, xmm4, xmm5, xmm6, xmm7 });
+    reg_alloc.Reserve<3>({ xmm3, xmm4, xmm5 });
     Xmm hd = GetDirtyVpr(vd), hs = GetVpr(vs), ht = GetVte(vt, e), haccl = GetDirtyAccLow();
     c.vpxor(xmm0, xmm0, xmm0);
     c.vpxor(xmm1, hs, ht); // vco.lo
@@ -827,33 +827,29 @@ void vch(u32 vs, u32 vt, u32 vd, u32 e)
     c.vpsubw(xmm3, hs, xmm2); // diff
     c.vpcmpeqw(xmm4, xmm3, xmm0); // diff0
     c.vpcmpgtw(xmm5, xmm3, xmm0); // dlez
-    c.vpor(xmm6, xmm5, xmm4); // dgez
-    c.vpcmpeqw(xmm5, xmm5, xmm0);
-    c.vpcmpgtw(xmm7, xmm0, ht); // vtn
-    c.vpblendvb(xmm6, xmm6, xmm7, xmm1); // vcc.hi
-    c.vpblendvb(xmm5, xmm7, xmm5, xmm1); // vcc.lo
     c.vpcmpeqw(xmm3, xmm3, xmm1); // vce
     c.vpand(xmm3, xmm3, xmm1);
-    c.vpor(xmm4, xmm4, xmm3); // vco.hi
+    c.vmovaps(GlobalVarPtr(vce), xmm3);
+    c.vpor(xmm3, xmm5, xmm4); // dgez
+    c.vpor(xmm4, xmm4, GlobalVarPtr(vce)); // vco.hi
     c.vpcmpeqw(xmm4, xmm4, xmm0);
-    c.vpblendvb(xmm0, xmm6, xmm5, xmm1); // mask
+    c.vmovaps(GlobalVarPtr(vco.hi), xmm4);
+    c.vpcmpeqw(xmm5, xmm5, xmm0);
+    c.vpcmpgtw(xmm4, xmm0, ht); // vtn
+    c.vpblendvb(xmm3, xmm3, xmm4, xmm1); // vcc.hi
+    c.vpblendvb(xmm4, xmm4, xmm5, xmm1); // vcc.lo
+    c.vmovaps(GlobalVarPtr(vcc.hi), xmm3);
+    c.vmovaps(GlobalVarPtr(vcc.lo), xmm4);
+    c.vpblendvb(xmm0, xmm3, xmm4, xmm1); // mask
     c.vpblendvb(hd, hs, xmm2, xmm0);
     c.vmovaps(haccl, hd);
     c.vmovaps(GlobalVarPtr(vco.lo), xmm1);
-    c.vmovaps(GlobalVarPtr(vco.hi), xmm4);
-    c.vmovaps(GlobalVarPtr(vcc.lo), xmm5);
-    c.vmovaps(GlobalVarPtr(vcc.hi), xmm6);
-    c.vmovaps(GlobalVarPtr(vce), xmm3);
-    reg_alloc.Free<5>({ xmm3, xmm4, xmm5, xmm6, xmm7 });
-    if constexpr (os.windows) {
-        reg_alloc.RestoreHost(xmm6);
-        reg_alloc.RestoreHost(xmm7);
-    }
+    reg_alloc.Free<3>({ xmm3, xmm4, xmm5 });
 }
 
 void vcl(u32 vs, u32 vt, u32 vd, u32 e)
 {
-    reg_alloc.Reserve<5>({ xmm3, xmm4, xmm5, xmm6, xmm7 });
+    reg_alloc.Reserve<3>({ xmm3, xmm4, xmm5 });
     Xmm hd = GetDirtyVpr(vd), hs = GetVpr(vs), ht = GetVte(vt, e), haccl = GetDirtyAccLow();
     c.vpxor(xmm0, xmm0, xmm0);
     c.vmovaps(xmm1, GlobalVarPtr(vco.lo)); // vco.lo
@@ -862,35 +858,31 @@ void vcl(u32 vs, u32 vt, u32 vd, u32 e)
     c.vpsubw(xmm3, hs, xmm2); // diff
     c.vpaddusw(xmm4, hs, ht); // ncarry
     c.vpcmpeqw(xmm4, xmm4, xmm3);
-    c.vmovaps(xmm5, GlobalVarPtr(vce)); // vce
-    c.vpcmpeqw(xmm6, xmm5, xmm0); // nvce
-    c.vpcmpeqw(xmm7, xmm3, xmm0); // diff0
-    c.vpand(xmm0, xmm7, xmm4); // lec1
-    c.vpand(xmm0, xmm0, xmm6); // drop xmm6
-    c.vpor(xmm4, xmm4, xmm7); // lec2; drop xmm7
-    c.vpand(xmm4, xmm4, xmm5); // drop xmm5
-    c.vpor(xmm0, xmm0, xmm4); // leeq; drop xmm4
-    c.vpsubusw(xmm4, ht, hs); // geeq
-    c.vpxor(xmm5, xmm5, xmm5);
-    c.vpcmpeqw(xmm4, xmm4, xmm5);
-    c.vmovaps(xmm6, GlobalVarPtr(vco.hi)); // vco.hi
-    c.vpandn(xmm7, xmm6, xmm1); // le
-    c.vmovaps(xmm3, GlobalVarPtr(vcc.lo));
-    c.vpblendvb(xmm7, xmm3, xmm0, xmm7);
-    c.vpor(xmm3, xmm1, xmm6); // ge
-    c.vpblendvb(xmm3, xmm4, GlobalVarPtr(vcc.hi), xmm3);
-    c.vpblendvb(xmm4, xmm3, xmm7, xmm1); // mask
-    c.vpblendvb(hd, hs, xmm2, xmm4);
+    c.vpcmpeqw(xmm5, xmm0, GlobalVarPtr(vce)); // nvce
+    c.vpcmpeqw(xmm3, xmm3, xmm0); // diff0
+    c.vpand(xmm0, xmm3, xmm4); // lec1
+    c.vpand(xmm0, xmm0, xmm5);
+    c.vpor(xmm3, xmm3, xmm4); // lec2
+    c.vpand(xmm3, xmm3, GlobalVarPtr(vce));
+    c.vpor(xmm0, xmm0, xmm3); // leeq
+    c.vpsubusw(xmm3, ht, hs); // geeq
+    c.vpxor(xmm4, xmm4, xmm4);
+    c.vpcmpeqw(xmm3, xmm3, xmm4);
+    c.vmovaps(xmm4, GlobalVarPtr(vco.hi)); // vco.hi
+    c.vpor(xmm5, xmm1, xmm4); // ge
+    c.vpblendvb(xmm5, xmm3, GlobalVarPtr(vcc.hi), xmm5);
+    c.vpandn(xmm3, xmm4, xmm1); // le
+    c.vmovaps(xmm4, GlobalVarPtr(vcc.lo)); // vcc.lo
+    c.vpblendvb(xmm3, xmm4, xmm0, xmm3);
+    c.vpblendvb(xmm0, xmm5, xmm3, xmm1); // mask
+    c.vpblendvb(hd, hs, xmm2, xmm0);
     c.vmovaps(haccl, hd);
-    c.vmovaps(GlobalVarPtr(vcc.lo), xmm6);
-    c.vmovaps(GlobalVarPtr(vcc.hi), xmm3);
-    c.vmovaps(GlobalVarPtr(vce), xmm5);
-    c.vmovaps(GlobalVarPtr(vco), ymm5);
-    reg_alloc.Free<5>({ xmm3, xmm4, xmm5, xmm6, xmm7 });
-    if constexpr (os.windows) {
-        reg_alloc.RestoreHost(xmm6);
-        reg_alloc.RestoreHost(xmm7);
-    }
+    c.vmovaps(GlobalVarPtr(vcc.lo), xmm3);
+    c.vmovaps(GlobalVarPtr(vcc.hi), xmm5);
+    c.vpxor(xmm0, xmm0, xmm0);
+    c.vmovaps(GlobalVarPtr(vce), xmm0);
+    c.vmovaps(GlobalVarPtr(vco), ymm0);
+    reg_alloc.Free<3>({ xmm3, xmm4, xmm5 });
 }
 
 void vcr(u32 vs, u32 vt, u32 vd, u32 e)
