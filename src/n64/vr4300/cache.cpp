@@ -47,10 +47,8 @@ void cache(u32 rs, u32 rt, s16 imm)
        generate a virtual address. The virtual address is converted into a physical
        address by using the TLB, and a cache operation indicated by a 5-bit sub op
        code is executed to that address. */
-    uint cycles = 1;
     if (!can_exec_cop0_instrs) {
-        CoprocessorUnusableException(0);
-        return AdvancePipeline(cycles);
+        return CoprocessorUnusableException(0);
     }
     auto cache = rt & 3;
     auto op = rt >> 2;
@@ -58,17 +56,14 @@ void cache(u32 rs, u32 rt, s16 imm)
     bool cacheable_area;
     auto paddr = vaddr_to_paddr_read_func(virt_addr, cacheable_area);
     if (exception_occurred) {
-        return AdvancePipeline(cycles);
+        return;
     }
 
     auto HandleOp = [&](auto& cache_line) {
         static_assert(sizeof(DCacheLine) != sizeof(ICacheLine));
         static constexpr bool is_d_cache = sizeof(cache_line) == sizeof(DCacheLine);
 
-        auto WriteBack = [&] {
-            WritebackCacheLine(cache_line, paddr);
-            cycles = 40;
-        };
+        auto WriteBack = [&] { WritebackCacheLine(cache_line, paddr); };
         /* TODO: in which situations do we abort if the cache line is tagged as invalid? */
         switch (op) { /* illegal 'op' and 'cache' combinations give UB */
         case 0: /* Index_Invalidate */
@@ -125,7 +120,6 @@ void cache(u32 rs, u32 rt, s16 imm)
                 }
             } else {
                 FillCacheLine(cache_line, paddr);
-                cycles = 40;
             }
             break;
 
@@ -153,8 +147,6 @@ void cache(u32 rs, u32 rt, s16 imm)
         DCacheLine& cache_line = d_cache[virt_addr >> 4 & 0x1FF];
         HandleOp(cache_line);
     }
-
-    AdvancePipeline(cycles);
 }
 
 void FillCacheLine(auto& cache_line, u32 paddr)
@@ -171,6 +163,7 @@ void FillCacheLine(auto& cache_line, u32 paddr)
     if constexpr (sizeof(cache_line) == sizeof(DCacheLine)) {
         cache_line.dirty = false;
     }
+    AdvancePipeline(40);
 }
 
 void InitCache()
@@ -201,22 +194,20 @@ template<std::signed_integral Int, MemOp mem_op> Int ReadCacheableArea(u32 paddr
     if constexpr (mem_op == MemOp::InstrFetch) {
         ICacheLine& cache_line = i_cache[paddr >> 5 & 0x1FF];
         if (cache_line.valid && (paddr & ~0xFFF) == cache_line.ptag) { /* cache hit */
-            cycle_counter += cache_hit_read_cycle_delay;
+            AdvancePipeline(1);
         } else { /* cache miss */
             FillCacheLine(cache_line, paddr);
-            cycle_counter += cache_miss_cycle_delay;
         }
         return ReadFromCacheLine(cache_line);
     } else { /* MemOp::Read */
         DCacheLine& cache_line = d_cache[paddr >> 4 & 0x1FF];
         if (cache_line.valid && (paddr & ~0xFFF) == cache_line.ptag) { /* cache hit */
-            cycle_counter += cache_hit_read_cycle_delay;
+            AdvancePipeline(1);
         } else { /* cache miss */
             if (cache_line.valid && cache_line.dirty) {
                 WritebackCacheLine(cache_line, paddr);
             }
             FillCacheLine(cache_line, paddr);
-            cycle_counter += cache_miss_cycle_delay;
         }
         return ReadFromCacheLine(cache_line);
     }
@@ -229,13 +220,12 @@ template<size_t access_size, typename... MaskT> void WriteCacheableArea(u32 padd
     DCacheLine& cache_line = d_cache[paddr >> 4 & 0x1FF];
     if (cache_line.valid && (paddr & ~0xFFF) == cache_line.ptag) { /* cache hit */
         cache_line.dirty = true;
-        cycle_counter += cache_hit_write_cycle_delay;
+        AdvancePipeline(1);
     } else { /* cache miss */
         if (cache_line.valid && cache_line.dirty) {
             WritebackCacheLine(cache_line, paddr);
         }
         FillCacheLine(cache_line, paddr);
-        cycle_counter += cache_miss_cycle_delay;
     }
     static constexpr bool apply_mask = sizeof...(mask) == 1;
     if constexpr (apply_mask) {
@@ -281,6 +271,7 @@ void WritebackCacheLine(auto& cache_line, u32 new_paddr)
     if constexpr (sizeof(cache_line) == sizeof(DCacheLine)) {
         cache_line.dirty = false;
     }
+    AdvancePipeline(40);
 }
 
 template s32 ReadCacheableArea<s32, MemOp::InstrFetch>(u32);

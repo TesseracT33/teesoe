@@ -62,13 +62,16 @@
         LOG_RSP(instr, __VA_ARGS__);        \
     }
 
-#define COP1_FMT_IMPL(instr, fmt, ...)                \
-    if constexpr (cpu_impl == CpuImpl::Interpreter) { \
-        vr4300::instr<fmt>(__VA_ARGS__);              \
-    } else if constexpr (arch.a64) {                  \
-        /* vr4300::a64::instr<fmt>(__VA_ARGS__);*/    \
-    } else {                                          \
-        vr4300::x64::instr<fmt>(__VA_ARGS__);         \
+#define COP1_FMT_IMPL(instr, fmt, ...)                    \
+    {                                                     \
+        LOG_VR4300(instr<fmt>, __VA_ARGS__);              \
+        if constexpr (cpu_impl == CpuImpl::Interpreter) { \
+            vr4300::instr<fmt>(__VA_ARGS__);              \
+        } else if constexpr (arch.a64) {                  \
+            /* vr4300::a64::instr<fmt>(__VA_ARGS__);*/    \
+        } else {                                          \
+            vr4300::x64::instr<fmt>(__VA_ARGS__);         \
+        }                                                 \
     }
 
 #define COP1_FMT(instr_name, ...)                                                                                   \

@@ -87,10 +87,8 @@ template<DmaType dma_type> void InitDma()
         skip = sp.dma_wrlen >> 20 & 0xFFF;
     }
 
-    s32 bytes_to_copy = rows * bytes_per_row;
-
-    /* The speed of transfer is about 3.7 bytes per VR4300 (PClock) cycle (plus some small fixed overhead). */
-    uint cpu_cycles_until_finish = bytes_to_copy / 4 + 1;
+    auto bytes_to_copy = rows * bytes_per_row;
+    auto cpu_cycles_until_finish = (bytes_to_copy + 8) / 8 * 3; // credit: Ares
 
     if constexpr (log_dma) {
         std::string_view rsp_mem_bank = sp.dma_spaddr & 0x1000 ? "IMEM" : "DMEM";

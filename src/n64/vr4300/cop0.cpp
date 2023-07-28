@@ -224,10 +224,8 @@ void OnWriteToWired()
 
 template<bool initial_add> void ReloadCountCompareEvent()
 {
-    u64 cycles_until_count_compare_match = (cop0.compare - cop0.count) & 0x1'FFFF'FFFF;
-    if ((cop0.count & 0x1'FFFF'FFFF) >= (cop0.compare & 0x1'FFFF'FFFF)) {
-        cycles_until_count_compare_match += 0x2'0000'0000;
-    }
+    u64 cycles_until_count_compare_match =
+      cop0.compare == cop0.count ? 0x2'0000'0000 : (cop0.compare - cop0.count) & 0x1'FFFF'FFFF;
     if constexpr (initial_add) {
         scheduler::AddEvent(scheduler::EventType::CountCompareMatch,
           cycles_until_count_compare_match,

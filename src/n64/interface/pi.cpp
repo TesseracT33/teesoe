@@ -108,7 +108,7 @@ template<DmaType type> void InitDma()
         return;
     }
 
-    static constexpr auto cycles_per_byte_dma = 18;
+    static constexpr auto cycles_per_byte_dma = 9;
     auto cycles_until_finish = dma_len * cycles_per_byte_dma;
     scheduler::AddEvent(scheduler::EventType::PiDmaFinish, cycles_until_finish, OnDmaFinish);
 }

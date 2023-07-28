@@ -35,7 +35,7 @@ public:
 
     template<Fmt fmt> auto compare(u32 fs, u32 ft, u8 cond)
     {
-        return std::format("c.{}. f{}, f{}", compare_cond_to_str[cond], FmtToStr(fmt), fs, ft);
+        return std::format("c.{}.{} f{}, f{}", compare_cond_to_str[cond], FmtToStr(fmt), fs, ft);
     }
 
     template<Fmt fmt> auto ceil_l(u32 fs, u32 fd) { return FmtInstr("ceil", Fmt::Int64, fmt, fs, fd); }

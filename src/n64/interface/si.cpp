@@ -71,9 +71,7 @@ template<DmaType type> void InitDma()
             si.pif_addr_wr64b += 4;
         }
     }
-    static constexpr auto cycles_per_byte_dma = 18;
-    auto cycles_until_finish = 64 * cycles_per_byte_dma;
-    scheduler::AddEvent(scheduler::EventType::SiDmaFinish, cycles_until_finish, OnDmaFinish);
+    scheduler::AddEvent(scheduler::EventType::SiDmaFinish, 131070, OnDmaFinish);
 }
 
 void Initialize()

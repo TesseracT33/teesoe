@@ -125,8 +125,7 @@ template<std::signed_integral Int, Alignment alignment, MemOp mem_op> Int ReadVi
             /* cycle counter incremented in the function, depending on if cache hit/miss */
             return ReadCacheableArea<Int, mem_op>(paddr);
         } else {
-            cycle_counter += cache_miss_cycle_delay; /* using the same number here */
-            return memory::Read<Int>(paddr);
+            return memory::Read<Int>(paddr); // TODO: proper timings
         }
     }();
     if constexpr (log_cpu_reads && mem_op == MemOp::Read) {
@@ -393,7 +392,7 @@ template<size_t access_size, Alignment alignment> void WriteVirtual(u64 vaddr, s
         if constexpr (use_mask) WriteCacheableArea<access_size>(physical_address, data, Mask());
         else WriteCacheableArea<access_size>(physical_address, data);
     } else {
-        cycle_counter += cache_miss_cycle_delay;
+        // TODO: proper timings
         if constexpr (use_mask) memory::Write<access_size>(physical_address, data, Mask());
         else memory::Write<access_size>(physical_address, data);
     }
