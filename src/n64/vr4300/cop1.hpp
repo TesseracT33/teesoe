@@ -128,6 +128,8 @@ struct FCR31BitIndex {
         CauseDivZero,
         CauseInvalid,
         CauseUnimplemented,
+
+        Condition = 23,
     };
 };
 
@@ -177,7 +179,12 @@ template<Fmt> void neg(u32 fs, u32 fd);
 template<Fmt> void sqrt(u32 fs, u32 fd);
 template<Fmt> void sub(u32 fs, u32 ft, u32 fd);
 
+bool GetAndTestExceptions();
+bool GetAndTestExceptionsConvFloatToWord();
 void InitCop1();
+bool IsValidInput(std::floating_point auto f);
+template<std::signed_integral Int> bool IsValidInputCvtRound(std::floating_point auto f);
+bool IsValidOutput(std::floating_point auto& f);
 template<bool update_flags = true> bool TestExceptions();
 
 } // namespace n64::vr4300

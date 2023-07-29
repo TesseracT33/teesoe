@@ -27,13 +27,8 @@ template<ComputeInstr2Op, std::floating_point> static void Compute(u32 fs, u32 f
 template<FpuNum, FpuNum> static void Convert(u32 fs, u32 fd);
 template<std::floating_point Float> static Float Flush(Float f);
 bool FpuUsable();
-static bool GetAndTestExceptions();
-static bool GetAndTestExceptionsConvFloatToWord();
 static bool IsQuietNan(f32 f);
 static bool IsQuietNan(f64 f);
-static bool IsValidInput(std::floating_point auto f);
-template<std::signed_integral Int> static bool IsValidInputCvtRound(std::floating_point auto f);
-static bool IsValidOutput(std::floating_point auto& f);
 static void OnInvalidFormat();
 template<RoundInstr, FpuNum, FpuNum> static void Round(u32 fs, u32 fd);
 template<std::signed_integral Int> Int Round(f32 f);
@@ -398,7 +393,7 @@ void bc1f(s16 imm)
 {
     if (!FpuUsable()) return;
     if (!fcr31.c) {
-        TakeBranch(pc + (imm << 2));
+        TakeBranch(pc + 4 + (imm << 2));
     } else {
         OnBranchNotTaken();
     }
@@ -408,7 +403,7 @@ void bc1fl(s16 imm)
 {
     if (!FpuUsable()) return;
     if (!fcr31.c) {
-        TakeBranch(pc + (imm << 2));
+        TakeBranch(pc + 4 + (imm << 2));
     } else {
         DiscardBranch();
     }
@@ -418,7 +413,7 @@ void bc1t(s16 imm)
 {
     if (!FpuUsable()) return;
     if (fcr31.c) {
-        TakeBranch(pc + (imm << 2));
+        TakeBranch(pc + 4 + (imm << 2));
     } else {
         OnBranchNotTaken();
     }
@@ -428,7 +423,7 @@ void bc1tl(s16 imm)
 {
     if (!FpuUsable()) return;
     if (fcr31.c) {
-        TakeBranch(pc + (imm << 2));
+        TakeBranch(pc + 4 + (imm << 2));
     } else {
         DiscardBranch();
     }
@@ -453,14 +448,12 @@ template<Fmt fmt> void compare(u32 fs, u32 ft, u8 cond)
         };
         Float op1 = fpr.GetFs<Float>(fs);
         Float op2 = fpr.GetFt<Float>(ft);
-        if (std::isnan(op1) || std::isnan(op2)) {
+        if (std::isunordered(op1, op2)) {
             if (!IsValidInput(op1)) {
-                AdvancePipeline(1);
-                return;
+                return AdvancePipeline(1);
             }
             if (!IsValidInput(op2)) {
-                AdvancePipeline(1);
-                return;
+                return AdvancePipeline(1);
             }
             fcr31.c = cond & 1;
         } else {
@@ -799,13 +792,11 @@ template<ComputeInstr2Op instr, std::floating_point Float> void Compute(u32 fs, 
     if (!FpuUsable()) return;
     Float op1 = fpr.GetFs<Float>(fs);
     if (!IsValidInput(op1)) {
-        AdvancePipeline(1);
-        return;
+        return AdvancePipeline(1);
     }
     Float op2 = fpr.GetFt<Float>(ft);
     if (!IsValidInput(op2)) {
-        AdvancePipeline(1);
-        return;
+        return AdvancePipeline(1);
     }
     Float result = [op1, op2] {
         if constexpr (instr == ADD) {
@@ -834,7 +825,7 @@ template<FpuNum From, FpuNum To> static void Convert(u32 fs, u32 fd)
 {
     if (!FpuUsable()) return;
 
-    static constexpr int cycles = [&] {
+    static constexpr int cycles = [] {
         if constexpr (std::same_as<From, To>) return 0;
         else if constexpr (std::same_as<From, f32> && std::same_as<To, f64>) return 0;
         else if constexpr (std::same_as<From, f64> && std::same_as<To, f32>) return 1;
@@ -935,6 +926,14 @@ INST_FMT_SPEC(neg, u32, u32);
 INST_FMT_SPEC(sqrt, u32, u32);
 INST_FMT_SPEC(sub, u32, u32, u32);
 
+template bool IsValidInput<f32>(f32);
+template bool IsValidInput<f64>(f64);
+template bool IsValidInputCvtRound<s32>(f32);
+template bool IsValidInputCvtRound<s32>(f64);
+template bool IsValidInputCvtRound<s64>(f32);
+template bool IsValidInputCvtRound<s64>(f64);
+template bool IsValidOutput<f32>(f32);
+template bool IsValidOutput<f64>(f64);
 template bool TestExceptions<false>();
 template bool TestExceptions<true>();
 
