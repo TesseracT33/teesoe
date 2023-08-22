@@ -4,9 +4,9 @@ project(teesoe LANGUAGES C CXX)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-add_executable(teesoe)
+add_executable(${CMAKE_PROJECT_NAME})
 
-set_property(TARGET teesoe PROPERTY CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON)
+set_property(TARGET ${CMAKE_PROJECT_NAME} PROPERTY CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON)
 
 if (CMAKE_SYSTEM_PROCESSOR MATCHES "AMD64" OR CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64")
 	set(X64 1)
@@ -25,8 +25,12 @@ if (CMAKE_BUILD_TYPE MATCHES "Debug")
 	set(DEBUG 1)
 endif()
 
-if (CMAKE_BUILD_TYPE MATCHES "Release" OR CMAKE_BUILD_TYPE MATCHES "RelWithDebInfo")
+if (CMAKE_BUILD_TYPE MATCHES "Release")
 	set(RELEASE 1)
+endif()
+
+if (CMAKE_BUILD_TYPE MATCHES "RelWithDebInfo")
+	set(RELEASE_WITH_DEBUG_INFO 1)
 endif()
 
 if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
@@ -37,17 +41,31 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "GNU")
 	set(GCC 1)
 endif()
 
-list(APPEND clang_flags
+list(APPEND CLANG_FLAGS
 	-std=c++2b
+	-Weverything
+)
+
+list(APPEND GCC_FLAGS
+	-std=c++23
+	-Wduplicated-cond
+	-Wduplicated-branches
+	-Wuseless-cast
+)
+
+list(APPEND GNU_FLAGS
 	-Wall
 	-Wcast-align
 	-Wconversion
 	-Wdouble-promotion
-	-Weverything
 	-Wextra
 	-Wimplicit-fallthrough
 	-Wmissing-include-dirs
 	-Wno-bitwise-op-parentheses
+	-Wno-c++11-compat
+	-Wno-c++14-compat
+	-Wno-c++17-compat
+	-Wno-c++20-compat
 	-Wno-c++98-compat
 	-Wno-c++98-compat-pedantic
 	-Wno-exit-time-destructors
@@ -66,68 +84,7 @@ list(APPEND clang_flags
 	-Wunused
 )
 
-if (DEBUG)
-	list(APPEND clang_flags
-		-Og
-	)
-else()
-	list(APPEND clang_flags
-		-flto
-		-O3
-	)
-endif()
-
-if (X64)
-	list(APPEND clang_flags
-		-mavx2
-	)
-endif()
-
-list(APPEND gcc_flags
-	-std=c++23
-	-Wall
-	-Wcast-align
-	-Wconversion
-	-Wdouble-promotion
-	-Wduplicated-cond
-	-Wduplicated-branches
-	-Wextra
-	-Wimplicit-fallthrough
-	-Wmissing-include-dirs
-	-Wno-c++11-compat
-	-Wno-c++14-compat
-	-Wno-c++17-compat
-	-Wno-c++20-compat
-	-Wno-exit-time-destructors
-	-Wno-global-constructors
-	-Wno-gnu-anonymous-struct
-	-Wno-sign-conversion
-	-Wnon-virtual-dtor
-	-Wnull-dereference
-	-Wpedantic
-	-Wunreachable-code
-	-Wunused
-	-Wuseless-cast
-)
-
-if (DEBUG)
-	list(APPEND gcc_flags
-		-Og
-	)
-else()
-	list(APPEND gcc_flags
-		-flto
-		-O3
-	)
-endif()
-
-if (X64)
-	list(APPEND gcc_flags
-		-mavx2
-	)
-endif()
-
-list(APPEND msvc_flags
+list(APPEND MSVC_FLAGS
 	/EHsc          # Standard stack unwinding
 	/fp:precise    # Precise floating-point model
 	/GR            # Enable run-time type information
@@ -144,15 +101,22 @@ list(APPEND msvc_flags
 )
 
 if (DEBUG)
-	list(APPEND msvc_flags
+	list(APPEND GNU_FLAGS
+		-Og
+	)
+	list(APPEND MSVC_FLAGS
 		/GS  # Buffer security check
 		/JMC # Just My Code debugging
 		/MDd # Use run-time library MSVCRTD.lib
-		/Od  # Disable (Debug)
+		/Od  # Disable optimizations (Debug)
 		/Zi  # Debug information format; supporting the 'Edit and Continue' feature of VS
 	)
 else()
-	list(APPEND msvc_flags
+	list(APPEND GNU_FLAGS
+		-flto
+		-O3
+	)
+	list(APPEND MSVC_FLAGS
 		/GL # Whole program optimization
 		/MD # Use run-time library MSVCRT.lib
 		/O2 # Maximize speed
@@ -160,19 +124,26 @@ else()
 	)
 endif()
 
-if (X64)
-	list(APPEND msvc_flags
-		/arch:AVX2
-	)
+if (RELEASE_WITH_DEBUG_INFO)
+	list(APPEND GNU_FLAGS -g)
+	list(APPEND MSVC_FLAGS /DEBUG:FULL)
 endif()
 
+if (X64)
+	list(APPEND GNU_FLAGS -mavx2)
+	list(APPEND MSVC_FLAGS /arch:AVX2)
+endif()
+
+list(APPEND CLANG_FLAGS ${GNU_FLAGS})
+list(APPEND GCC_FLAGS ${GNU_FLAGS})
+
 if (CLANG)
-	target_compile_options(teesoe PUBLIC ${clang_flags})
+	target_compile_options(${CMAKE_PROJECT_NAME} PUBLIC ${CLANG_FLAGS})
 elseif (GCC)
-	target_compile_options(teesoe PUBLIC ${gcc_flags})
+	target_compile_options(${CMAKE_PROJECT_NAME} PUBLIC ${GCC_FLAGS})
 elseif (MSVC)
 	string(REGEX REPLACE "/W3" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")	
-	target_compile_options(teesoe PUBLIC ${msvc_flags})
+	target_compile_options(${CMAKE_PROJECT_NAME} PUBLIC ${MSVC_FLAGS})
 endif()
 
 add_subdirectory(ext)

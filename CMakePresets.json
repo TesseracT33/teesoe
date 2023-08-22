@@ -36,6 +36,14 @@
       }
     },
     {
+      "name": "x64-release-with-deb-info-msvc",
+      "displayName": "x64 RelWithDebInfo MSVC",
+      "inherits": "x64-debug-msvc",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+      }
+    },
+    {
       "name": "x64-debug-clang",
       "displayName": "x64 Debug clang-cl",
       "inherits": "windows-base",

@@ -1,6 +1,6 @@
 cmake_minimum_required (VERSION 3.25)
 
-target_sources(teesoe PRIVATE
+target_sources(${CMAKE_PROJECT_NAME} PRIVATE
 	main.cpp
 
 	common/log.cpp
@@ -22,7 +22,7 @@ target_sources(teesoe PRIVATE
 	mips/types.hpp
 )
 
-target_include_directories(teesoe PRIVATE
+target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
 	.
 	common
 )

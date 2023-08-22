@@ -1,6 +1,6 @@
 cmake_minimum_required (VERSION 3.25)
 
-target_sources(teesoe PRIVATE
+target_sources(${CMAKE_PROJECT_NAME} PRIVATE
 	arm7tdmi/arm.cpp
 	arm7tdmi/arm7tdmi.cpp
 	arm7tdmi/exceptions.cpp

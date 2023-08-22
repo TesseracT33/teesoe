@@ -1,6 +1,6 @@
 cmake_minimum_required (VERSION 3.25)
 
-target_sources(teesoe PRIVATE
+target_sources(${CMAKE_PROJECT_NAME} PRIVATE
 	common/decoder.cpp
 	common/n64.cpp
 	common/scheduler.cpp
@@ -38,7 +38,7 @@ target_sources(teesoe PRIVATE
 	vr4300/vr4300.cpp
 )
 
-target_include_directories(teesoe PRIVATE
+target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
 	.
 	common
 )
