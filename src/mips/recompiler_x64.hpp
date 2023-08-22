@@ -446,7 +446,7 @@ struct RecompilerX64 : public Recompiler<GprInt, PcInt, RegisterAllocator> {
             c.mov(eax, hs.r32());
             c.and_(al, 31);
             c.sarx(hd, ht, rax);
-            c.movsxd(hd.r64(), hd);
+            c.movsxd(hd, hd.r32());
         }
     }
 
@@ -551,21 +551,25 @@ struct RecompilerX64 : public Recompiler<GprInt, PcInt, RegisterAllocator> {
 protected:
     template<Cond cc> void branch(u32 rs, u32 rt, s16 imm) const
     {
-        Label l_nobranch = c.newLabel();
-        if (!rs) {
-            Gp ht = GetGpr(rt);
-            c.test(ht, ht);
-        } else if (!rt) {
-            Gp hs = GetGpr(rs);
-            c.test(hs, hs);
+        if (!rs && !rt) {
+            if constexpr (cc == mips::Cond::Eq) take_branch(jit_pc + 4 + (imm << 2));
         } else {
-            Gp hs = GetGpr(rs), ht = GetGpr(rt);
-            c.cmp(hs, ht);
+            Label l_nobranch = c.newLabel();
+            if (!rs) {
+                Gp ht = GetGpr(rt);
+                c.test(ht, ht);
+            } else if (!rt) {
+                Gp hs = GetGpr(rs);
+                c.test(hs, hs);
+            } else {
+                Gp hs = GetGpr(rs), ht = GetGpr(rt);
+                c.cmp(hs, ht);
+            }
+            if constexpr (cc == Cond::Eq) c.jne(l_nobranch);
+            if constexpr (cc == Cond::Ne) c.je(l_nobranch);
+            take_branch(jit_pc + 4 + (imm << 2));
+            c.bind(l_nobranch);
         }
-        if constexpr (cc == Cond::Eq) c.jne(l_nobranch);
-        if constexpr (cc == Cond::Ne) c.je(l_nobranch);
-        take_branch(jit_pc + 4 + (imm << 2));
-        c.bind(l_nobranch);
         branch_hit = true;
     }
 

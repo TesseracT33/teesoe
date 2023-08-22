@@ -60,7 +60,7 @@ inline asmjit::x86::Mem
 {
     std::ptrdiff_t diff = reinterpret_cast<u8 const*>(obj_ptr) - reinterpret_cast<u8 const*>(base_ptr);
     assert(diff >= std::numeric_limits<s32>::min() && diff <= std::numeric_limits<s32>::max());
-    return asmjit::x86::ptr(base_ptr_reg, diff, ptr_size);
+    return asmjit::x86::ptr(base_ptr_reg, s32(diff), ptr_size);
 }
 
 inline asmjit::x86::Mem jit_mem_global_arr_with_imm_index(asmjit::x86::Gpq base_ptr_reg,
@@ -71,7 +71,7 @@ inline asmjit::x86::Mem jit_mem_global_arr_with_imm_index(asmjit::x86::Gpq base_
 {
     std::ptrdiff_t diff = reinterpret_cast<u8 const*>(arr_ptr) + index - reinterpret_cast<u8 const*>(base_ptr);
     assert(diff >= std::numeric_limits<s32>::min() && diff <= std::numeric_limits<s32>::max());
-    return asmjit::x86::ptr(base_ptr_reg, diff, ptr_size);
+    return asmjit::x86::ptr(base_ptr_reg, s32(diff), ptr_size);
 }
 
 inline asmjit::x86::Mem jit_mem_global_arr_with_reg_index(asmjit::x86::Gpq base_ptr_reg,
@@ -82,7 +82,7 @@ inline asmjit::x86::Mem jit_mem_global_arr_with_reg_index(asmjit::x86::Gpq base_
 {
     std::ptrdiff_t diff = reinterpret_cast<u8 const*>(arr_ptr) - reinterpret_cast<u8 const*>(base_ptr);
     assert(diff >= std::numeric_limits<s32>::min() && diff <= std::numeric_limits<s32>::max());
-    return asmjit::x86::ptr(base_ptr_reg, index, 0u, diff, ptr_size);
+    return asmjit::x86::ptr(base_ptr_reg, index, 0u, s32(diff), ptr_size);
 }
 
 inline void jit_x64_call_with_stack_alignment(asmjit::x86::Compiler& c, auto func)
@@ -178,7 +178,7 @@ constexpr bool is_volatile(HostVpr128 vpr)
         if constexpr (os.windows) {
             return id < 6 || id > 15;
         } else {
-            return id < 8 || id > 15;
+            return true;
         }
     }
 }

@@ -577,24 +577,29 @@ struct Recompiler : public mips::RecompilerX64<s64, u64, RegAllocator> {
 private:
     template<mips::Cond cc, bool likely> void branch(u32 rs, u32 rt, s16 imm) const
     {
-        Label l_branch = c.newLabel(), l_end = c.newLabel();
-        if (!rs) {
-            Gp ht = GetGpr(rt);
-            c.test(ht, ht);
-        } else if (!rt) {
-            Gp hs = GetGpr(rs);
-            c.test(hs, hs);
+        if (!rs && !rt) {
+            if constexpr (cc == mips::Cond::Eq) TakeBranchJit(jit_pc + 4 + (imm << 2));
+            if constexpr (cc == mips::Cond::Ne) likely ? DiscardBranchJit() : OnBranchNotTakenJit();
         } else {
-            Gp hs = GetGpr(rs), ht = GetGpr(rt);
-            c.cmp(hs, ht);
+            Label l_branch = c.newLabel(), l_end = c.newLabel();
+            if (!rs) {
+                Gp ht = GetGpr(rt);
+                c.test(ht, ht);
+            } else if (!rt) {
+                Gp hs = GetGpr(rs);
+                c.test(hs, hs);
+            } else {
+                Gp hs = GetGpr(rs), ht = GetGpr(rt);
+                c.cmp(hs, ht);
+            }
+            if constexpr (cc == mips::Cond::Eq) c.je(l_branch);
+            if constexpr (cc == mips::Cond::Ne) c.jne(l_branch);
+            likely ? DiscardBranchJit() : OnBranchNotTakenJit();
+            c.jmp(l_end);
+            c.bind(l_branch);
+            TakeBranchJit(jit_pc + 4 + (imm << 2));
+            c.bind(l_end);
         }
-        if constexpr (cc == mips::Cond::Eq) c.je(l_branch);
-        if constexpr (cc == mips::Cond::Ne) c.jne(l_branch);
-        likely ? DiscardBranchJit() : OnBranchNotTakenJit();
-        c.jmp(l_end);
-        c.bind(l_branch);
-        TakeBranchJit(jit_pc + 4 + (imm << 2));
-        c.bind(l_end);
         branch_hit = true;
     }
 

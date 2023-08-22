@@ -932,8 +932,8 @@ template bool IsValidInputCvtRound<s32>(f32);
 template bool IsValidInputCvtRound<s32>(f64);
 template bool IsValidInputCvtRound<s64>(f32);
 template bool IsValidInputCvtRound<s64>(f64);
-template bool IsValidOutput<f32>(f32);
-template bool IsValidOutput<f64>(f64);
+template bool IsValidOutput<f32>(f32&);
+template bool IsValidOutput<f64>(f64&);
 template bool TestExceptions<false>();
 template bool TestExceptions<true>();
 

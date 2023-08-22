@@ -379,7 +379,7 @@ public:
         }
     }
 
-    void RestoreHost(HostGpr gpr)
+    void RestoreHost(HostGpr gpr) const
     {
         if constexpr (arch.a64) {
         } else {
@@ -387,7 +387,7 @@ public:
         }
     }
 
-    void SaveHost(HostGpr gpr)
+    void SaveHost(HostGpr gpr) const
     {
         if constexpr (arch.a64) {
         } else {
@@ -406,7 +406,7 @@ protected:
     HostGpr guest_gprs_pointer_reg;
     RegisterAllocatorState state;
 
-    void Flush(Binding& b, bool restore)
+    void Flush(Binding const& b, bool restore) const
     {
         if (!b.Occupied()) return;
         if (b.dirty) {
@@ -442,9 +442,9 @@ protected:
     // This should only be used as part of an instruction epilogue. Thus, there is no need
     // to destroy bindings. In fact, this would be undesirable, since this function could not
     // be called in an epilog emitted mid-block, as part of a code path dependent on a run-time branch.
-    void FlushAndRestoreAll()
+    void FlushAndRestoreAll() const
     {
-        for (Binding& binding : state.bindings) {
+        for (Binding const& binding : state.bindings) {
             Flush(binding, true);
         }
     }

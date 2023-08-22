@@ -81,11 +81,11 @@ public:
     auto ddiv(u32 rs, u32 rt) { return RsRt("ddiv", rs, rt); }
     auto ddivu(u32 rs, u32 rt) { return RsRt("ddivu", rs, rt); }
     auto div(u32 rs, u32 rt) { return RsRt("div", rs, rt); }
-    auto divu(u32 rs, u32 rt) { return RsRt("ddivu", rs, rt); }
+    auto divu(u32 rs, u32 rt) { return RsRt("divu", rs, rt); }
     auto dmult(u32 rs, u32 rt) { return RsRt("dmult", rs, rt); }
     auto dmultu(u32 rs, u32 rt) { return RsRt("dmultu", rs, rt); }
     auto dsll(u32 rt, u32 rd, u32 sa) { return RdRtSa("dsll", rd, rt, sa); }
-    auto dsll32(u32 rt, u32 rd, u32 sa) { return RdRtSa("dsll", rd, rt, sa); }
+    auto dsll32(u32 rt, u32 rd, u32 sa) { return RdRtSa("dsll32", rd, rt, sa); }
     auto dsllv(u32 rs, u32 rt, u32 rd) { return RdRtRs("dsllv", rd, rt, rs); }
     auto dsra(u32 rt, u32 rd, u32 sa) { return RdRtSa("dsra", rd, rt, sa); }
     auto dsra32(u32 rt, u32 rd, u32 sa) { return RdRtSa("dsra32", rd, rt, sa); }
@@ -102,7 +102,7 @@ public:
     auto lb(u32 rs, u32 rt, s16 imm) { return RtRsImm("lb", rt, rs, imm); }
     auto lbu(u32 rs, u32 rt, s16 imm) { return RtRsImm("lbu", rt, rs, imm); }
     auto ld(u32 rs, u32 rt, s16 imm) { return RtRsImm("ld", rt, rs, imm); }
-    auto ldl(u32 rs, u32 rt, s16 imm) { return RtRsImm("ld", rt, rs, imm); }
+    auto ldl(u32 rs, u32 rt, s16 imm) { return RtRsImm("ldl", rt, rs, imm); }
     auto ldr(u32 rs, u32 rt, s16 imm) { return RtRsImm("ldr", rt, rs, imm); }
     auto lh(u32 rs, u32 rt, s16 imm) { return RtRsImm("lh", rt, rs, imm); }
     auto lhu(u32 rs, u32 rt, s16 imm) { return RtRsImm("lhu", rt, rs, imm); }

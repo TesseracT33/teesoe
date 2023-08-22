@@ -8,10 +8,10 @@ namespace n64::vr4300::x64 {
 using namespace asmjit;
 using namespace asmjit::x86;
 
-inline constexpr std::array abs_f32_mask{ 0x7FFF'FFFF, 0x7FFF'FFFF, 0x7FFF'FFFF, 0x7FFF'FFFF };
-inline constexpr std::array abs_f64_mask{ 0x7FFF'FFFF'FFFF'FFFF, 0x7FFF'FFFF'FFFF'FFFF };
-inline constexpr std::array neg_f32_mask{ 0x8000'0000, 0x8000'0000, 0x8000'0000, 0x8000'0000 };
-inline constexpr std::array neg_f64_mask{ 0x8000'0000'0000'0000, 0x8000'0000'0000'0000 };
+alignas(16) inline constexpr std::array abs_f32_mask{ 0x7FFF'FFFF, 0x7FFF'FFFF, 0x7FFF'FFFF, 0x7FFF'FFFF };
+alignas(16) inline constexpr std::array abs_f64_mask{ 0x7FFF'FFFF'FFFF'FFFF, 0x7FFF'FFFF'FFFF'FFFF };
+alignas(16) inline constexpr std::array neg_f32_mask{ 0x8000'0000, 0x8000'0000, 0x8000'0000, 0x8000'0000 };
+alignas(16) inline constexpr std::array neg_f64_mask{ 0x8000'0000'0000'0000, 0x8000'0000'0000'0000 };
 
 bool CheckCop1Usable();
 void OnCop1Unusable();
@@ -51,10 +51,9 @@ bool CheckCop1Usable()
 {
     if (cop0.status.cu1) {
         c.and_(GlobalVarPtr(fcr31), 0xFFFC'0FFF); // clear all exceptions
-        reg_alloc.ReserveArgs(1);
-        c.mov(host_gpr_arg[0].r32(), FE_ALL_EXCEPT);
-        reg_alloc.Call(feclearexcept); // TODO: can we get rid of this?
-        reg_alloc.FreeArgs(1);
+        c.vstmxcsr(dword_ptr(x86::rsp, -8));
+        c.and_(dword_ptr(x86::rsp, -8), ~0x3D);
+        c.vldmxcsr(dword_ptr(x86::rsp, -8));
         return true;
     } else {
         OnCop1Unusable();
@@ -66,7 +65,7 @@ template<bool cond, bool likely> void Cop1Branch(s16 imm)
 {
     if (!CheckCop1Usable()) return;
     Label l_branch = c.newLabel(), l_end = c.newLabel();
-    c.bt(GlobalVarPtr(fcr31), 23); // fcr31.c
+    c.bt(GlobalVarPtr(fcr31), FCR31BitIndex::Condition);
     cond ? c.jc(l_branch) : c.jnc(l_branch);
     likely ? DiscardBranchJit() : OnBranchNotTakenJit();
     c.jmp(l_end);
@@ -305,17 +304,89 @@ inline void swc1(u32 base, u32 ft, s16 imm)
 
 template<Fmt fmt> inline void compare(u32 fs, u32 ft, u8 cond)
 {
-    CallCop1InterpreterImpl(vr4300::compare<fmt>, fs, ft, cond);
+    if constexpr (!one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+        return OnInvalidFormat();
+    }
+    if (!CheckCop1Usable()) return;
+    if (!cop0.status.fr) fs &= ~1;
+    reg_alloc.Reserve<2>({ rcx, rdx });
+    Label l_no_nans = c.newLabel(), l_exception = c.newLabel(), l_end = c.newLabel();
+
+    c.movq(xmm0, GlobalArrPtrWithImmOffset(fpr, 8 * fs, 8));
+    if (cond & 8) {
+        fmt == Fmt::Float32 ? c.vcomiss(xmm0, GlobalArrPtrWithImmOffset(fpr, 8 * ft, 4))
+                            : c.vcomisd(xmm0, GlobalArrPtrWithImmOffset(fpr, 8 * ft, 8));
+    } else {
+        fmt == Fmt::Float32 ? c.vucomiss(xmm0, GlobalArrPtrWithImmOffset(fpr, 8 * ft, 4))
+                            : c.vucomisd(xmm0, GlobalArrPtrWithImmOffset(fpr, 8 * ft, 8));
+    }
+    c.setp(al);
+
+    c.jnp(l_no_nans);
+    c.vstmxcsr(dword_ptr(x86::rsp, -8));
+    c.mov(eax, dword_ptr(x86::rsp, -8));
+    c.and_(eax, 1); // invalid exception
+    c.mov(ecx, eax);
+    c.shl(ecx, FCR31BitIndex::CauseInvalid);
+    c.or_(GlobalVarPtr(fcr31), ecx);
+    c.bt(GlobalVarPtr(fcr31), FCR31BitIndex::EnableInvalid);
+    c.setc(cl);
+    c.mov(edx, ecx);
+    c.not_(edx);
+    c.and_(edx, 1);
+    c.shl(edx, FCR31BitIndex::FlagInvalid);
+    c.or_(GlobalVarPtr(fcr31), edx);
+    c.and_(eax, ecx);
+    c.and_(eax, 1);
+    c.jnz(l_exception);
+    cond & 1 ? c.bts(GlobalVarPtr(fcr31), FCR31BitIndex::Condition)
+             : c.btr(GlobalVarPtr(fcr31), FCR31BitIndex::Condition);
+    c.jmp(l_end);
+
+    c.bind(l_exception);
+    BlockEpilogWithPcFlushAndJmp(FloatingPointException);
+
+    c.bind(l_no_nans);
+    u8 cond12 = cond >> 1 & 3;
+    if (cond12) {
+        switch (cond12) {
+        case 1: c.setz(al); break;
+        case 2: c.setc(al); break;
+        case 3:
+            c.setz(al);
+            c.setc(cl);
+            c.or_(eax, ecx);
+            break;
+        default: std::unreachable();
+        }
+        c.and_(eax, 1);
+        c.shl(eax, FCR31BitIndex::Condition);
+        c.btr(GlobalVarPtr(fcr31), FCR31BitIndex::Condition);
+        c.or_(GlobalVarPtr(fcr31), eax);
+    } else {
+        c.btr(GlobalVarPtr(fcr31), FCR31BitIndex::Condition);
+    }
+
+    c.bind(l_end);
+    reg_alloc.Free<2>({ rcx, rdx });
 }
 
-template<Fmt fmt> inline void ceil_l(u32 fs, u32 fd)
+template<Fmt fmt> void ceil_l(u32 fs, u32 fd)
 {
-    CallCop1InterpreterImpl(vr4300::ceil_l<fmt>, fs, fd);
+    if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+        Round<RoundInstr::CEIL, typename FmtToType<fmt>::type, s64>(fs, fd);
+    } else {
+        OnInvalidFormat();
+    }
 }
 
-template<Fmt fmt> inline void ceil_w(u32 fs, u32 fd)
+template<Fmt fmt> void ceil_w(u32 fs, u32 fd)
 {
-    CallCop1InterpreterImpl(vr4300::ceil_w<fmt>, fs, fd);
+    if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+        Round<RoundInstr::CEIL, typename FmtToType<fmt>::type, s32>(fs, fd);
+    } else {
+        OnInvalidFormat();
+    }
 }
 
 template<Fmt fmt> inline void cvt_d(u32 fs, u32 fd)
@@ -338,49 +409,85 @@ template<Fmt fmt> inline void cvt_w(u32 fs, u32 fd)
     CallCop1InterpreterImpl(vr4300::cvt_w<fmt>, fs, fd);
 }
 
-template<Fmt fmt> inline void floor_l(u32 fs, u32 fd)
+template<Fmt fmt> void floor_l(u32 fs, u32 fd)
 {
-    CallCop1InterpreterImpl(vr4300::floor_l<fmt>, fs, fd);
+    if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+        Round<RoundInstr::FLOOR, typename FmtToType<fmt>::type, s64>(fs, fd);
+    } else {
+        OnInvalidFormat();
+    }
 }
 
-template<Fmt fmt> inline void floor_w(u32 fs, u32 fd)
+template<Fmt fmt> void floor_w(u32 fs, u32 fd)
 {
-    CallCop1InterpreterImpl(vr4300::floor_w<fmt>, fs, fd);
+    if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+        Round<RoundInstr::FLOOR, typename FmtToType<fmt>::type, s32>(fs, fd);
+    } else {
+        OnInvalidFormat();
+    }
 }
 
-template<Fmt fmt> inline void round_l(u32 fs, u32 fd)
+template<Fmt fmt> void round_l(u32 fs, u32 fd)
 {
-    CallCop1InterpreterImpl(vr4300::round_l<fmt>, fs, fd);
+    if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+        Round<RoundInstr::ROUND, typename FmtToType<fmt>::type, s64>(fs, fd);
+    } else {
+        OnInvalidFormat();
+    }
 }
 
-template<Fmt fmt> inline void round_w(u32 fs, u32 fd)
+template<Fmt fmt> void round_w(u32 fs, u32 fd)
 {
-    CallCop1InterpreterImpl(vr4300::round_w<fmt>, fs, fd);
+    if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+        Round<RoundInstr::ROUND, typename FmtToType<fmt>::type, s32>(fs, fd);
+    } else {
+        OnInvalidFormat();
+    }
 }
 
-template<Fmt fmt> inline void trunc_l(u32 fs, u32 fd)
+template<Fmt fmt> void trunc_l(u32 fs, u32 fd)
 {
-    CallCop1InterpreterImpl(vr4300::trunc_l<fmt>, fs, fd);
+    if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+        Round<RoundInstr::TRUNC, typename FmtToType<fmt>::type, s64>(fs, fd);
+    } else {
+        OnInvalidFormat();
+    }
 }
 
-template<Fmt fmt> inline void trunc_w(u32 fs, u32 fd)
+template<Fmt fmt> void trunc_w(u32 fs, u32 fd)
 {
-    CallCop1InterpreterImpl(vr4300::trunc_w<fmt>, fs, fd);
+    if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+        Round<RoundInstr::TRUNC, typename FmtToType<fmt>::type, s32>(fs, fd);
+    } else {
+        OnInvalidFormat();
+    }
 }
 
 template<Fmt fmt> inline void abs(u32 fs, u32 fd)
 {
-    CallCop1InterpreterImpl(vr4300::abs<fmt>, fs, fd);
+    if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+        Compute<ComputeInstr1Op::ABS, typename FmtToType<fmt>::type>(fs, fd);
+    } else {
+        OnInvalidFormat();
+    }
 }
 
 template<Fmt fmt> inline void add(u32 fs, u32 ft, u32 fd)
 {
-    CallCop1InterpreterImpl(vr4300::add<fmt>, fs, ft, fd);
+    if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+        Compute<ComputeInstr2Op::ADD, typename FmtToType<fmt>::type>(fs, ft, fd);
+    } else {
+        OnInvalidFormat();
+    }
 }
 
 template<Fmt fmt> inline void div(u32 fs, u32 ft, u32 fd)
 {
-    CallCop1InterpreterImpl(vr4300::div<fmt>, fs, ft, fd);
+    if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+        Compute<ComputeInstr2Op::DIV, typename FmtToType<fmt>::type>(fs, ft, fd);
+    } else {
+        OnInvalidFormat();
+    }
 }
 
 template<Fmt fmt> inline void mov(u32 fs, u32 fd)
@@ -401,24 +508,319 @@ template<Fmt fmt> inline void mov(u32 fs, u32 fd)
     }
 }
 
-template<Fmt fmt> inline void mul(u32 fs, u32 ft, u32 fd)
+template<Fmt fmt> void mul(u32 fs, u32 ft, u32 fd)
 {
-    CallCop1InterpreterImpl(vr4300::mul<fmt>, fs, ft, fd);
+    if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+        Compute<ComputeInstr2Op::MUL, typename FmtToType<fmt>::type>(fs, ft, fd);
+    } else {
+        OnInvalidFormat();
+    }
 }
 
-template<Fmt fmt> inline void neg(u32 fs, u32 fd)
+template<Fmt fmt> void neg(u32 fs, u32 fd)
 {
-    CallCop1InterpreterImpl(vr4300::neg<fmt>, fs, fd);
+    if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+        Compute<ComputeInstr1Op::NEG, typename FmtToType<fmt>::type>(fs, fd);
+    } else {
+        OnInvalidFormat();
+    }
 }
 
-template<Fmt fmt> inline void sqrt(u32 fs, u32 fd)
+template<Fmt fmt> void sqrt(u32 fs, u32 fd)
 {
-    CallCop1InterpreterImpl(vr4300::sqrt<fmt>, fs, fd);
+    if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+        Compute<ComputeInstr1Op::SQRT, typename FmtToType<fmt>::type>(fs, fd);
+    } else {
+        OnInvalidFormat();
+    }
 }
 
-template<Fmt fmt> inline void sub(u32 fs, u32 ft, u32 fd)
+template<Fmt fmt> void sub(u32 fs, u32 ft, u32 fd)
 {
-    CallCop1InterpreterImpl(vr4300::sub<fmt>, fs, ft, fd);
+    if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+        Compute<ComputeInstr2Op::SUB, typename FmtToType<fmt>::type>(fs, ft, fd);
+    } else {
+        OnInvalidFormat();
+    }
+}
+
+template<ComputeInstr1Op instr, std::floating_point Float> void Compute(u32 fs, u32 fd)
+{
+    using enum ComputeInstr1Op;
+    if (!CheckCop1Usable()) return;
+    if (!cop0.status.fr) fs &= ~1;
+    Label l_epilog = c.newLabel(), l_end = c.newLabel();
+
+    FlushPc();
+    c.sub(x86::rsp, 16);
+    c.vmovq(xmm0, GlobalArrPtrWithImmOffset(fpr, 8 * fs, 8));
+    c.vmovq(qword_ptr(x86::rsp), xmm0);
+    reg_alloc.Call(IsValidInput<Float>);
+    c.test(al, al);
+    c.jz(l_epilog);
+    if constexpr (sizeof(Float) == 4) {
+        c.vmovd(xmm0, dword_ptr(x86::rsp));
+    } else {
+        c.vmovq(xmm0, qword_ptr(x86::rsp));
+    }
+    if constexpr (instr == ABS) {
+        if constexpr (sizeof(Float) == 4) {
+            c.vandps(xmm0, xmm0, GlobalVarPtr(abs_f32_mask));
+        } else {
+            c.vandpd(xmm0, xmm0, GlobalVarPtr(abs_f64_mask));
+        }
+    }
+    if constexpr (instr == NEG) {
+        if constexpr (sizeof(Float) == 4) {
+            c.vxorps(xmm0, xmm0, GlobalVarPtr(neg_f32_mask));
+        } else {
+            c.vxorpd(xmm0, xmm0, GlobalVarPtr(neg_f64_mask));
+        }
+    }
+    if constexpr (instr == SQRT) {
+        if constexpr (sizeof(Float) == 4) {
+            c.vsqrtps(xmm0, xmm0);
+            block_cycles += 28;
+        } else {
+            c.vsqrtpd(xmm0, xmm0);
+            block_cycles += 57;
+        }
+    }
+    c.vmovq(qword_ptr(x86::rsp), xmm0);
+    reg_alloc.Call(GetAndTestExceptions);
+    c.test(al, al);
+    c.jnz(l_epilog);
+    c.mov(host_gpr_arg[0], x86::rsp);
+    reg_alloc.Call(IsValidOutput<Float>);
+    c.test(al, al);
+    c.jz(l_epilog);
+    if constexpr (sizeof(Float) == 4) {
+        c.mov(eax, dword_ptr(x86::rsp));
+    } else {
+        c.mov(rax, qword_ptr(x86::rsp));
+    }
+    c.mov(GlobalArrPtrWithImmOffset(fpr, 8 * fd, 8), rax);
+    c.add(x86::rsp, 16);
+    c.jmp(l_end);
+
+    c.bind(l_epilog);
+    c.add(x86::rsp, 16);
+    BlockEpilog();
+
+    c.bind(l_end);
+}
+
+template<ComputeInstr2Op instr, std::floating_point Float> void Compute(u32 fs, u32 ft, u32 fd)
+{
+    using enum ComputeInstr2Op;
+    if (!CheckCop1Usable()) return;
+    if (!cop0.status.fr) fs &= ~1;
+    Label l_epilog = c.newLabel(), l_end = c.newLabel();
+
+    FlushPc();
+    c.sub(x86::rsp, 16);
+    c.vmovq(xmm0, GlobalArrPtrWithImmOffset(fpr, 8 * fs, 8));
+    c.vmovq(qword_ptr(x86::rsp), xmm0);
+    reg_alloc.Call(IsValidInput<Float>);
+    c.test(al, al);
+    c.jz(l_epilog);
+    c.vmovq(xmm0, GlobalArrPtrWithImmOffset(fpr, 8 * ft, 8));
+    c.vmovq(qword_ptr(x86::rsp, 8), xmm0);
+    reg_alloc.Call(IsValidInput<Float>);
+    c.test(al, al);
+    c.jz(l_epilog);
+    c.vmovq(xmm0, qword_ptr(x86::rsp));
+    if constexpr (instr == ADD) {
+        if constexpr (sizeof(Float) == 4) {
+            c.vaddps(xmm0, xmm0, xmmword_ptr(x86::rsp, 8));
+        } else {
+            c.vaddpd(xmm0, xmm0, xmmword_ptr(x86::rsp, 8));
+        }
+        block_cycles += 2;
+    }
+    if constexpr (instr == SUB) {
+        if constexpr (sizeof(Float) == 4) {
+            c.vsubps(xmm0, xmm0, xmmword_ptr(x86::rsp, 8));
+        } else {
+            c.vsubpd(xmm0, xmm0, xmmword_ptr(x86::rsp, 8));
+        }
+        block_cycles += 2;
+    }
+    if constexpr (instr == MUL) {
+        if constexpr (sizeof(Float) == 4) {
+            c.vmulps(xmm0, xmm0, xmmword_ptr(x86::rsp, 8));
+            block_cycles += 4;
+        } else {
+            c.vmulpd(xmm0, xmm0, xmmword_ptr(x86::rsp, 8));
+            block_cycles += 7;
+        }
+    }
+    if constexpr (instr == DIV) {
+        c.vmovq(xmm1, qword_ptr(x86::rsp, 8));
+        if constexpr (sizeof(Float) == 4) {
+            static constexpr std::array div_or_vec = { 0, 1, 1, 1 };
+            c.vpor(xmm1, xmm1, GlobalVarPtr(div_or_vec)); // avoid div by zero for "unused" lanes
+            c.vdivps(xmm0, xmm0, xmm1);
+            block_cycles += 28;
+        } else {
+            static constexpr std::array div_or_vec = { 0_u64, 1_u64 };
+            c.vpor(xmm1, xmm1, GlobalVarPtr(div_or_vec));
+            c.vdivpd(xmm0, xmm0, xmm1);
+            block_cycles += 57;
+        }
+    }
+    c.vmovq(qword_ptr(x86::rsp), xmm0);
+    reg_alloc.Call(GetAndTestExceptions);
+    c.test(al, al);
+    c.jnz(l_epilog);
+    c.mov(host_gpr_arg[0], x86::rsp);
+    reg_alloc.Call(IsValidOutput<Float>);
+    c.test(al, al);
+    c.jz(l_epilog);
+    if constexpr (sizeof(Float) == 4) {
+        c.mov(eax, dword_ptr(x86::rsp));
+    } else {
+        c.mov(rax, qword_ptr(x86::rsp));
+    }
+    c.mov(GlobalArrPtrWithImmOffset(fpr, 8 * fd, 8), rax);
+    c.add(x86::rsp, 16);
+    c.jmp(l_end);
+
+    c.bind(l_epilog);
+    c.add(x86::rsp, 16);
+    BlockEpilog();
+
+    c.bind(l_end);
+}
+/*
+ template<FpuNum From, FpuNum To> static void Convert(u32 fs, u32 fd)
+{
+    if (!CheckCop1Usable()) return;
+    if (!cop0.status.fr) fs &= ~1;
+    Label l_epilog = c.newLabel(), l_end = c.newLabel();
+
+ FlushPc();
+    c.sub(x86::rsp, 16);
+    c.vmovq(xmm0, GlobalArrPtrWithImmOffset(fpr, 8 * fs, 8));
+    c.vmovq(qword_ptr(x86::rsp), xmm0);
+    reg_alloc.Call(IsValidInputCvtRound<To>);
+    c.test(al, al);
+    c.jz(l_epilog);
+    c.vmovq(xmm0, qword_ptr(x86::rsp));
+    static constexpr int rounding_mode = [] {
+        if constexpr (instr == ROUND) return 0;
+        if constexpr (instr == FLOOR) return 9;
+        if constexpr (instr == CEIL) return 10;
+        if constexpr (instr == TRUNC) return 11;
+    }();
+    if constexpr (sizeof(From) == 4) {
+        c.vroundss(xmm0, xmm0, xmm0, rounding_mode);
+    } else {
+        c.vroundsd(xmm0, xmm0, xmm0, rounding_mode);
+    }
+    if constexpr (sizeof(To) == 4) {
+        c.vcvttss2si(eax, xmm0);
+        c.mov(dword_ptr(x86::rsp, 8), eax);
+        reg_alloc.Call(GetAndTestExceptionsConvFloatToWord);
+    } else {
+        c.vcvttsd2si(rax, xmm0);
+        c.mov(qword_ptr(x86::rsp, 8), rax);
+        reg_alloc.Call(GetAndTestExceptions);
+    }
+    c.test(al, al);
+    c.jnz(l_epilog);
+        c.mov(host_gpr_arg[0], x86::rsp);
+    reg_alloc.Call(IsValidOutput<Float>);
+    c.test(al, al);
+    c.jz(l_epilog);
+    if constexpr (sizeof(From) == 4) {
+        c.vcvtsi2ss(xmm0, xmm0, dword_ptr(x86::rsp, 8));
+        c.vucomiss(xmm0, dword_ptr(x86::rsp));
+    } else {
+        c.vcvtsi2ss(xmm0, xmm0, qword_ptr(x86::rsp, 8));
+        c.vucomisd(xmm0, qword_ptr(x86::rsp));
+    }
+    if constexpr (sizeof(Float) == 4) {
+        c.mov(eax, dword_ptr(x86::rsp));
+    } else {
+        c.mov(rax, qword_ptr(x86::rsp));
+    }
+    c.mov(GlobalArrPtrWithImmOffset(fpr, 8 * fd, 8), rax);
+    c.add(x86::rsp, 16);
+    c.jmp(l_end);
+
+    c.bind(l_epilog);
+    c.add(x86::rsp, 16);
+    BlockEpilog();
+
+    c.bind(l_end);
+    block_cycles += 4;
+}
+*/
+template<RoundInstr instr, FpuNum From, FpuNum To> void Round(u32 fs, u32 fd)
+{
+    using enum RoundInstr;
+    if (!CheckCop1Usable()) return;
+    if (!cop0.status.fr) fs &= ~1;
+    Label l_epilog = c.newLabel(), l_end = c.newLabel();
+
+    FlushPc();
+    c.sub(x86::rsp, 16);
+    c.vmovq(xmm0, GlobalArrPtrWithImmOffset(fpr, 8 * fs, 8));
+    c.vmovq(qword_ptr(x86::rsp), xmm0);
+    reg_alloc.Call(IsValidInputCvtRound<To, From>);
+    c.test(al, al);
+    c.jz(l_epilog);
+    c.vmovq(xmm0, qword_ptr(x86::rsp));
+    static constexpr int rounding_mode = [] {
+        if constexpr (instr == ROUND) return 0;
+        if constexpr (instr == FLOOR) return 9;
+        if constexpr (instr == CEIL) return 10;
+        if constexpr (instr == TRUNC) return 11;
+    }();
+    if constexpr (sizeof(From) == 4) {
+        c.vroundss(xmm0, xmm0, xmm0, rounding_mode);
+    } else {
+        c.vroundsd(xmm0, xmm0, xmm0, rounding_mode);
+    }
+    if constexpr (sizeof(To) == 4) {
+        c.vcvttss2si(eax, xmm0);
+        c.mov(dword_ptr(x86::rsp, 8), eax);
+        reg_alloc.Call(GetAndTestExceptionsConvFloatToWord);
+    } else {
+        c.vcvttsd2si(rax, xmm0);
+        c.mov(qword_ptr(x86::rsp, 8), rax);
+        reg_alloc.Call(GetAndTestExceptions);
+    }
+    c.test(al, al);
+    c.jnz(l_epilog);
+    c.mov(host_gpr_arg[0], x86::rsp);
+    // TODO: this doesn't compile, and I have no fucking idea why
+    // reg_alloc.Call(IsValidOutput<To>);
+    c.test(al, al);
+    c.jz(l_epilog);
+    if constexpr (sizeof(From) == 4) {
+        c.vcvtsi2ss(xmm0, xmm0, dword_ptr(x86::rsp, 8));
+        c.vucomiss(xmm0, dword_ptr(x86::rsp));
+    } else {
+        c.vcvtsi2ss(xmm0, xmm0, qword_ptr(x86::rsp, 8));
+        c.vucomisd(xmm0, qword_ptr(x86::rsp));
+    }
+    if constexpr (sizeof(To) == 4) {
+        c.mov(eax, dword_ptr(x86::rsp));
+    } else {
+        c.mov(rax, qword_ptr(x86::rsp));
+    }
+    c.mov(GlobalArrPtrWithImmOffset(fpr, 8 * fd, 8), rax);
+    c.add(x86::rsp, 16);
+    c.jmp(l_end);
+
+    c.bind(l_epilog);
+    c.add(x86::rsp, 16);
+    BlockEpilog();
+
+    c.bind(l_end);
+    block_cycles += 4;
 }
 
 } // namespace n64::vr4300::x64
