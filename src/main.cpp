@@ -14,12 +14,12 @@ int main(int argc, char* argv[])
 {
     fs::path work_path = fs::current_path();
 
-    if (Status status = init_file_log(); !status.ok()) {
-        log_warn(status.message());
+    if (Status status = init_file_log(); !status.Ok()) {
+        log_warn(status.Message());
     }
 
-    if (Status status = frontend::gui::Init(work_path); !status.ok()) {
-        log_fatal(status.message());
+    if (Status status = frontend::gui::Init(work_path); !status.Ok()) {
+        log_fatal(status.Message());
         return EXIT_FAILURE;
     }
 
@@ -29,17 +29,17 @@ int main(int argc, char* argv[])
 
     bool start_game_immediately{};
     if (argc > 1) {
-        Status status = frontend::load_core_and_game(argv[1]);
-        if (status.ok()) {
+        Status status = frontend::LoadCoreAndGame(argv[1]);
+        if (status.Ok()) {
             start_game_immediately = true;
         } else {
-            message::error(status.message());
+            message::Error(status.Message());
         }
     }
     if (argc > 2 && start_game_immediately) {
-        Status status = frontend::get_core()->load_bios(argv[2]);
-        if (!status.ok()) {
-            message::error(status.message());
+        Status status = frontend::GetCore()->LoadBios(argv[2]);
+        if (!status.Ok()) {
+            message::Error(status.Message());
         }
     }
 

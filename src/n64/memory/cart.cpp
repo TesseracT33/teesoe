@@ -51,14 +51,14 @@ Status LoadRom(std::filesystem::path const& rom_path)
 {
     std::expected<std::vector<u8>, std::string> expected_rom = read_file(rom_path);
     if (!expected_rom) {
-        return status_failure(expected_rom.error());
+        return FailureStatus(expected_rom.error());
     }
     rom = expected_rom.value();
     if (rom.empty()) {
-        return status_failure("Rom file has size 0.");
+        return FailureStatus("Rom file has size 0.");
     }
     if (rom.size() > rom_region_size) {
-        message::warn(std::format("Rom file has size larger than the maximum allowed ({} bytes). "
+        message::Warn(std::format("Rom file has size larger than the maximum allowed ({} bytes). "
                                   "Truncating to the maximum allowed.",
           rom_region_size));
         rom.resize(rom_region_size);
@@ -67,24 +67,24 @@ Status LoadRom(std::filesystem::path const& rom_path)
     ResizeRomToPowerOfTwo();
     rom_access_mask = u32(rom.size() - 1);
     AllocateSram();
-    return status_ok();
+    return OkStatus();
 }
 
 Status LoadSram(std::filesystem::path const& sram_path)
 {
     std::expected<std::vector<u8>, std::string> expected_sram = read_file(sram_path);
     if (!expected_sram) {
-        return status_failure(expected_sram.error());
+        return FailureStatus(expected_sram.error());
     }
     sram = expected_sram.value();
     if (sram.empty()) {
-        return status_failure("Error: sram file has size 0.");
+        return FailureStatus("Error: sram file has size 0.");
     }
     if (sram.size() != sram_size) {
-        message::warn(std::format("Sram file has size different than the allowed ({} bytes). ", sram_size));
+        message::Warn(std::format("Sram file has size different than the allowed ({} bytes). ", sram_size));
         sram.resize(sram_size);
     }
-    return status_ok();
+    return OkStatus();
 }
 
 u8 ReadDma(u32 addr)

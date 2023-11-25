@@ -192,7 +192,7 @@ Status Init()
 { // TODO: put this in ParallelRDPWrapper class instead
     if (!n64::rdp::implementation) {
         Status status = n64::rdp::MakeParallelRdp();
-        if (!status.ok()) {
+        if (!status.Ok()) {
             return status;
         }
     }
@@ -273,7 +273,7 @@ Status Init()
         vk_result = vkCreateRenderPass(vk_device, &info, vk_allocator, &vk_render_pass);
         CheckVkResult(vk_result);
     }
-    return status_ok();
+    return OkStatus();
 }
 
 // Currently unused. To be used in the future if I ever write my own RDP implementation using vulkan

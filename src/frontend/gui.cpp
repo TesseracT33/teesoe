@@ -163,8 +163,8 @@ void DrawCoreSettingsWindow()
         }
 
         if (ImGui::Button("Apply and save")) {
-            if (game_is_running && get_system() == System::N64) {
-                get_core()->apply_configuration(n64_configuration);
+            if (game_is_running && GetSystem() == System::N64) {
+                GetCore()->ApplyConfig(n64_configuration);
                 // TODO: save to file
                 n64_configuration = {};
             }
@@ -267,14 +267,14 @@ void DrawInputBindingsWindow()
     };
 
     if (ImGui::Begin("Input configuration", &show_input_bindings_window)) {
-        if (!core_loaded()) {
+        if (!CoreIsLoaded()) {
             ImGui::Text("Load a core before configuring inputs.");
             return;
         }
 
         // TODO: buffer this somewhere so it doesn't have to be computed on every draw
-        std::unique_ptr<Core> const& core = get_core();
-        std::span<const std::string_view> control_button_labels = core->get_input_names();
+        std::unique_ptr<Core> const& core = GetCore();
+        std::span<std::string_view const> control_button_labels = core->GetInputNames();
 
         static std::vector<Button> control_buttons;
         control_buttons.reserve(control_button_labels.size());
@@ -398,9 +398,9 @@ void DrawMenu()
 Status EnableFullscreen(bool enable)
 {
     if (SDL_SetWindowFullscreen(sdl_window, static_cast<SDL_bool>(enable))) {
-        return status_failure(std::format("Failed to toggle fullscreen: {}", SDL_GetError()));
+        return FailureStatus(std::format("Failed to toggle fullscreen: {}", SDL_GetError()));
     } else {
-        return status_ok();
+        return OkStatus();
     }
 }
 
@@ -413,7 +413,7 @@ std::optional<fs::path> FileDialog()
         NFD_FreePathN(path);
         return fs_path;
     } else if (result == NFD_ERROR) {
-        message::error("nativefiledialog returned NFD_ERROR for NFD_OpenDialogN");
+        message::Error("nativefiledialog returned NFD_ERROR for NFD_OpenDialogN");
     }
     return {};
 }
@@ -427,7 +427,7 @@ std::optional<fs::path> FolderDialog()
         NFD_FreePathN(path);
         return fs_path;
     } else if (result == NFD_ERROR) {
-        message::error("nativefiledialog returned NFD_ERROR for NFD_PickFolderN");
+        message::Error("nativefiledialog returned NFD_ERROR for NFD_PickFolderN");
     }
     return {};
 }
@@ -458,8 +458,8 @@ SDL_Window* GetSdlWindow()
 {
     if (!sdl_window) {
         Status status = InitSdl();
-        if (!status.ok()) {
-            log_fatal(std::format("Failed to init SDL; {}", status.message()));
+        if (!status.Ok()) {
+            log_fatal(std::format("Failed to init SDL; {}", status.Message()));
             exit(1);
         }
     }
@@ -490,47 +490,47 @@ Status Init(fs::path work_path)
 
     Status status{ Status::Code::Ok };
     config::Open(work_path);
-    if (status = ReadConfig(); !status.ok()) {
-        log_error(status.message());
+    if (status = ReadConfig(); !status.Ok()) {
+        log_error(status.Message());
         log_info("Using default configuration.");
         UseDefaultConfig();
     }
-    if (status = InitSdl(); !status.ok()) {
+    if (status = InitSdl(); !status.Ok()) {
         return status;
     }
-    if (status = InitGraphics(); !status.ok()) {
+    if (status = InitGraphics(); !status.Ok()) {
         return status;
     }
-    if (status = InitImgui(); !status.ok()) {
+    if (status = InitImgui(); !status.Ok()) {
         return status;
     }
-    if (status = audio::init(); !status.ok()) {
-        message::error(std::format("Failed to init audio system; {}", status.message()));
+    if (status = audio::Init(); !status.Ok()) {
+        message::Error(std::format("Failed to init audio system; {}", status.Message()));
     }
-    if (status = input::Init(); !status.ok()) {
-        message::error("Failed to init input system!");
+    if (status = input::Init(); !status.Ok()) {
+        message::Error("Failed to init input system!");
     }
     if (nfdresult_t result = NFD_Init(); result != NFD_OKAY) {
-        message::error(
+        message::Error(
           std::format("Failed to init nativefiledialog; NFD_Init returned {}", std::to_underlying(result)));
     }
     UpdateWindowTitle();
 
-    return status_ok();
+    return OkStatus();
 }
 
 Status InitGraphics()
 {
-    if (core_loaded()) {
-        return get_core()->init_graphics_system();
+    if (CoreIsLoaded()) {
+        return GetCore()->InitGraphics();
     } else {
         // TODO: temporary solution to get vulkan rendering while n64 core is not supposed to be running
-        Status status = load_core(System::N64);
-        if (!status.ok()) {
+        Status status = LoadCore(System::N64);
+        if (!status.Ok()) {
             return status;
         }
     }
-    return get_core()->init_graphics_system();
+    return GetCore()->InitGraphics();
 }
 
 Status InitImgui()
@@ -544,7 +544,7 @@ Status InitImgui()
       [](char const* fn, void*) { return vkGetInstanceProcAddr(vulkan::GetInstance(), fn); });
 
     if (!ImGui_ImplSDL3_InitForVulkan(sdl_window)) {
-        return status_failure("ImGui_ImplSDL3_InitForVulkan failed");
+        return FailureStatus("ImGui_ImplSDL3_InitForVulkan failed");
     }
 
     ImGui_ImplVulkan_InitInfo init_info = {
@@ -563,20 +563,20 @@ Status InitImgui()
     };
 
     if (!ImGui_ImplVulkan_Init(&init_info, vulkan::GetRenderPass())) {
-        return status_failure("ImGui_ImplVulkan_Init failed");
+        return FailureStatus("ImGui_ImplVulkan_Init failed");
     }
 
     io.Fonts->AddFontDefault();
     ImGui_ImplVulkan_CreateFontsTexture(vulkan::GetCommandBuffer());
     vulkan::SubmitRequestedCommandBuffer();
 
-    return status_ok();
+    return OkStatus();
 }
 
 Status InitSdl()
 {
     if (SDL_Init(SDL_INIT_EVERYTHING) != 0) {
-        return status_failure(std::format("Failed to init SDL: {}\n", SDL_GetError()));
+        return FailureStatus(std::format("Failed to init SDL: {}\n", SDL_GetError()));
     }
     sdl_window = SDL_CreateWindow("N63.5",
       SDL_WINDOWPOS_CENTERED,
@@ -585,25 +585,25 @@ Status InitSdl()
       window_height,
       SDL_WINDOW_INPUT_FOCUS | SDL_WINDOW_RESIZABLE | SDL_WINDOW_VULKAN);
     if (!sdl_window) {
-        return status_failure(std::format("Failed to create SDL window: {}\n", SDL_GetError()));
+        return FailureStatus(std::format("Failed to create SDL window: {}\n", SDL_GetError()));
     }
-    if (Status status = message::init(sdl_window); !status.ok()) {
-        log_error(std::format("Failed to initialize user message system; {}", status.message()));
+    if (Status status = message::Init(sdl_window); !status.Ok()) {
+        log_error(std::format("Failed to initialize user message system; {}", status.Message()));
     }
-    return status_ok();
+    return OkStatus();
 }
 
 Status LoadGame(fs::path const& path)
 {
-    std::unique_ptr<Core> const& core = get_core();
+    std::unique_ptr<Core> const& core = GetCore();
     assert(core);
-    System system = get_system();
+    System system = GetSystem();
     switch (system) {
-    case System::N64: core->apply_configuration(n64_configuration); break;
+    case System::N64: core->ApplyConfig(n64_configuration); break;
     default: assert(false);
     }
-    Status status = get_core()->load_rom(path);
-    if (status.ok()) {
+    Status status = GetCore()->LoadRom(path);
+    if (status.Ok()) {
         if (game_is_running) {
             StopGame();
         }
@@ -678,15 +678,15 @@ void OnExit()
 void OnGameSelected(System system, size_t list_index)
 {
     GameListEntry const& entry = game_lists[system].games[list_index];
-    if (core_loaded()) {
+    if (CoreIsLoaded()) {
         StopGame();
     }
-    Status status = load_core_and_game(entry.path);
-    if (status.ok()) {
+    Status status = LoadCoreAndGame(entry.path);
+    if (status.Ok()) {
         current_game_title = entry.name;
         start_game = true;
     } else {
-        message::error(status.message());
+        message::Error(status.Message());
     }
 }
 
@@ -698,8 +698,8 @@ void OnInputBindingsWindowResetAll()
 void OnInputBindingsWindowSave()
 {
     Status status = input::SaveBindingsToDisk();
-    if (!status.ok()) {
-        message::error(status.message());
+    if (!status.Ok()) {
+        message::Error(status.Message());
     }
 }
 
@@ -731,9 +731,9 @@ void OnMenuEnableAudio()
 void OnMenuFullscreen()
 {
     Status status = EnableFullscreen(menu_fullscreen);
-    if (!status.ok()) {
+    if (!status.Ok()) {
         menu_fullscreen = !menu_fullscreen; // revert change
-        message::error(status.message());
+        message::Error(status.Message());
     }
 }
 
@@ -745,9 +745,9 @@ void OnMenuOpen()
 {
     std::optional<fs::path> path = FileDialog();
     if (path) {
-        Status status = load_core_and_game(path.value());
-        if (!status.ok()) {
-            message::error(status.message());
+        Status status = LoadCoreAndGame(path.value());
+        if (!status.Ok()) {
+            message::Error(status.Message());
         }
     }
 }
@@ -758,7 +758,7 @@ void OnMenuOpenBios()
     if (path) {
         fs::path path_val = std::move(path.value());
         // if (!N64::LoadBios(path_val)) {
-        //     message::error(std::format("Could not load bios at path \"{}\"", path_val.string()));
+        //     message::Error(std::format("Could not load bios at path \"{}\"", path_val.string()));
         // }
     }
 }
@@ -770,8 +770,8 @@ void OnMenuOpenRecent()
 
 void OnMenuPause()
 {
-    if (core_loaded()) {
-        menu_pause_emulation ? get_core()->pause() : get_core()->resume();
+    if (CoreIsLoaded()) {
+        menu_pause_emulation ? GetCore()->Pause() : GetCore()->Resume();
     }
 }
 
@@ -782,8 +782,8 @@ void OnMenuQuit()
 
 void OnMenuReset()
 {
-    if (core_loaded()) {
-        get_core()->reset();
+    if (CoreIsLoaded()) {
+        GetCore()->Reset();
     }
 }
 
@@ -809,8 +809,8 @@ void OnMenuWindowScale()
 void OnSdlQuit()
 {
     quit = true;
-    if (core_loaded()) {
-        get_core()->stop();
+    if (CoreIsLoaded()) {
+        GetCore()->Stop();
     }
 }
 
@@ -824,8 +824,8 @@ void PollEvents()
     while (SDL_PollEvent(&event)) {
         ImGui_ImplSDL3_ProcessEvent(&event);
         switch (event.type) {
-        case SDL_EVENT_AUDIO_DEVICE_ADDED: audio::on_device_added(event); break;
-        case SDL_EVENT_AUDIO_DEVICE_REMOVED: audio::on_device_removed(event); break;
+        case SDL_EVENT_AUDIO_DEVICE_ADDED: audio::OnDeviceAdded(event); break;
+        case SDL_EVENT_AUDIO_DEVICE_REMOVED: audio::OnDeviceRemoved(event); break;
         case SDL_EVENT_GAMEPAD_AXIS_MOTION: input::OnGamepadAxisMotion(event); break;
         case SDL_EVENT_GAMEPAD_BUTTON_DOWN: input::OnGamepadButtonChange(event, true); break;
         case SDL_EVENT_GAMEPAD_BUTTON_UP: input::OnGamepadButtonChange(event, false); break;
@@ -858,7 +858,7 @@ Status ReadConfig()
 
         RefreshGameList(system);
     }
-    return status_ok();
+    return OkStatus();
 }
 
 void RefreshGameList(System system)
@@ -890,8 +890,8 @@ void Run(bool boot_game_immediately)
             StartGame();
         } else {
             PollEvents();
-            if (core_loaded()) {
-                get_core()->update_screen();
+            if (CoreIsLoaded()) {
+                GetCore()->UpdateScreen();
             } else {
                 vulkan::UpdateScreenNoCore();
             }
@@ -906,14 +906,14 @@ void StartGame()
     start_game = false;
     show_game_selection_window = false;
     UpdateWindowTitle();
-    get_core()->reset();
-    get_core()->run();
+    GetCore()->Reset();
+    GetCore()->Run();
 }
 
 void StopGame()
 {
-    if (core_loaded()) {
-        get_core()->stop();
+    if (CoreIsLoaded()) {
+        GetCore()->Stop();
     }
     game_is_running = false;
     UpdateWindowTitle();
@@ -925,7 +925,7 @@ void UpdateWindowTitle(float fps)
 {
     if (game_is_running) {
         std::string title =
-          std::format("teesoe | {} | {} | FPS: {}", system_to_string(get_system()), current_game_title, fps);
+          std::format("teesoe | {} | {} | FPS: {}", SystemToString(GetSystem()), current_game_title, fps);
         SDL_SetWindowTitle(sdl_window, title.c_str());
     } else {
         SDL_SetWindowTitle(sdl_window, "teesoe");

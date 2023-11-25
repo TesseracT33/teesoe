@@ -28,7 +28,7 @@ enum class System {
 
 constexpr std::array systems = { System::CHIP8, System::GB, System::GBA, System::N64, System::NES, System::PS2 };
 
-inline const std::map<System, std::vector<fs::path>> system_to_rom_exts = [] {
+inline std::map<System, std::vector<fs::path>> const system_to_rom_exts = [] {
     std::map<System, std::vector<fs::path>> system_exts{
         { System::CHIP8, { ".ch8", ".CH8" } },
         { System::GB, { ".gb", ".GB", ".gbc", ".GBC" } },
@@ -46,7 +46,7 @@ inline const std::map<System, std::vector<fs::path>> system_to_rom_exts = [] {
     return system_exts;
 }();
 
-inline const std::map<fs::path, System> rom_ext_to_system = [] {
+inline std::map<fs::path, System> const rom_ext_to_system = [] {
     std::map<fs::path, System> ext_to_system;
     std::vector<fs::path> colliding_exts;
     for (auto const& [system, exts] : system_to_rom_exts) {
@@ -63,11 +63,11 @@ inline const std::map<fs::path, System> rom_ext_to_system = [] {
     return ext_to_system;
 }();
 
-bool core_loaded();
-std::unique_ptr<Core> const& get_core();
-System get_system();
-Status load_core(System system);
-Status load_core_and_game(fs::path rom_path);
-std::string_view system_to_string(System system);
+bool CoreIsLoaded();
+std::unique_ptr<Core> const& GetCore();
+System GetSystem();
+Status LoadCore(System system);
+Status LoadCoreAndGame(fs::path rom_path);
+std::string_view SystemToString(System system);
 
 } // namespace frontend

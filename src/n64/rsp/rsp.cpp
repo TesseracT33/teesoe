@@ -371,8 +371,8 @@ void SetActiveCpuImpl(CpuImpl cpu_impl)
         TearDownRecompiler();
     } else {
         Status status = InitRecompiler();
-        if (!status.ok()) {
-            log_error(status.message());
+        if (!status.Ok()) {
+            log_error(status.Message());
         }
     }
 }

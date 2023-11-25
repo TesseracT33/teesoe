@@ -47,6 +47,7 @@ void CheckInterrupts()
 void ClearInterruptPending(ExternalInterruptSource interrupt)
 {
     cop0.cause.ip &= ~std::to_underlying(interrupt);
+    CheckInterrupts();
 }
 
 u64 GetElapsedCycles()
@@ -135,8 +136,8 @@ void SetActiveCpuImpl(CpuImpl cpu_impl)
         TearDownRecompiler();
     } else {
         Status status = InitRecompiler();
-        if (!status.ok()) {
-            log_error(status.message());
+        if (!status.Ok()) {
+            log_error(status.Message());
         }
     }
 }

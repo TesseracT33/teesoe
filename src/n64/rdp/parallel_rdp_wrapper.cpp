@@ -65,7 +65,7 @@ VkQueue ParallelRDPWrapper::GetVkQueue()
 Status ParallelRDPWrapper::Initialize()
 {
     if (volkInitialize() != VK_SUCCESS) {
-        return status_failure("[parallel-rdp] Failed to initialize volk.");
+        return FailureStatus("[parallel-rdp] Failed to initialize volk.");
     }
 
     SDL_Window* sdl_window = frontend::gui::GetSdlWindow();
@@ -78,7 +78,7 @@ Status ParallelRDPWrapper::Initialize()
     wsi.set_present_mode(Vulkan::PresentMode::UnlockedMaybeTear);
     Vulkan::Context::SystemHandles handles{};
     if (!wsi.init_simple(1, handles)) {
-        return status_failure("Failed to init wsi.");
+        return FailureStatus("Failed to init wsi.");
     }
 
     /* Construct command processor, which we later supply with RDP commands */
@@ -94,16 +94,16 @@ Status ParallelRDPWrapper::Initialize()
       hidden_rdram_size,
       flags);
     if (!cmd_processor->device_is_supported()) {
-        return status_failure("Vulkan device not supported.");
+        return FailureStatus("Vulkan device not supported.");
     }
 
-    if (Status status = vulkan::Init(); !status.ok()) {
+    if (Status status = vulkan::Init(); !status.Ok()) {
         return status;
     }
 
     ReloadViRegisters();
 
-    return status_ok();
+    return OkStatus();
 }
 
 void ParallelRDPWrapper::OnFullSync()

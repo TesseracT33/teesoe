@@ -15,23 +15,23 @@
 
 using namespace gba;
 
-void GBA::apply_configuration(CoreConfiguration config)
+void GBA::ApplyConfig(CoreConfiguration config)
 {
 }
 
-Status GBA::enable_audio(bool enable)
+Status GBA::EnableAudio(bool enable)
 {
-    return status_unimplemented();
+    return UnimplementedStatus();
 }
 
-std::span<const std::string_view> GBA::get_input_names() const
+std::span<const std::string_view> GBA::GetInputNames() const
 {
     static constexpr std::array<std::string_view, 10>
       names = { "A", "B", "Select", "Start", "Right", "Left", "Up", "Down", "R", "L" };
     return names;
 }
 
-Status GBA::init()
+Status GBA::Init()
 {
     apu::Initialize();
     arm7tdmi::Initialize();
@@ -48,61 +48,61 @@ Status GBA::init()
     if constexpr (LoggingIsEnabled()) {
         SetLogPath("F:\\gba.log");
     }
-    return status_ok();
+    return OkStatus();
 }
 
-Status GBA::init_graphics_system()
+Status GBA::InitGraphics()
 {
-    return status_unimplemented();
+    return UnimplementedStatus();
 }
 
-Status GBA::load_bios(std::filesystem::path const& path)
+Status GBA::LoadBios(std::filesystem::path const& path)
 {
     return bios::Load(path);
 }
 
-Status GBA::load_rom(std::filesystem::path const& path)
+Status GBA::LoadRom(std::filesystem::path const& path)
 {
     return cart::LoadRom(path);
 }
 
-void GBA::notify_axis_state(size_t player, size_t action_index, s32 axis_value)
+void GBA::NotifyAxisState(size_t player, size_t action_index, s32 axis_value)
 {
 }
 
-void GBA::notify_button_state(size_t player, size_t action_index, bool pressed)
+void GBA::NotifyButtonState(size_t player, size_t action_index, bool pressed)
 {
 }
 
-void GBA::pause()
+void GBA::Pause()
 {
 }
 
-void GBA::reset()
+void GBA::Reset()
 {
 }
 
-void GBA::resume()
+void GBA::Resume()
 {
 }
 
-void GBA::run()
+void GBA::Run()
 {
     scheduler::Run();
 }
 
-void GBA::stop()
+void GBA::Stop()
 {
 }
 
-void GBA::stream_state(Serializer& serializer)
+void GBA::StreamState(Serializer& serializer)
 {
 }
 
-void GBA::tear_down()
+void GBA::TearDown()
 {
 }
 
-void GBA::update_screen()
+void GBA::UpdateScreen()
 {
 }

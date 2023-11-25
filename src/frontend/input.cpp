@@ -70,19 +70,19 @@ std::optional<SDL_Scancode> GetKeyBinding(System system, size_t input_index)
 Status Init()
 {
     if (SDL_Init(SDL_INIT_GAMEPAD) != 0) {
-        return status_failure(std::format("Failed to init gamecontroller system: {}\n", SDL_GetError()));
+        return FailureStatus(std::format("Failed to init gamecontroller system: {}\n", SDL_GetError()));
     }
-    if (!LoadBindingsFromDisk().ok()) {
+    if (!LoadBindingsFromDisk().Ok()) {
         log_warn("Failed to load user bindings! Using defaults.");
         SetDefaultBindings();
         SaveBindingsToDisk();
     }
-    return status_ok();
+    return OkStatus();
 }
 
 Status LoadBindingsFromDisk()
 {
-    return status_unimplemented(); // TODO
+    return UnimplementedStatus(); // TODO
 }
 
 void OnCoreLoaded(System system)
@@ -123,10 +123,10 @@ void OnGamepadAxisMotion(SDL_Event const& event)
 void OnGamepadButtonChange(SDL_Event const& event, bool pressed)
 {
     if (current_bindings != nullptr) {
-        assert(core_loaded());
+        assert(CoreIsLoaded());
         auto it = current_bindings->gamepad_bindings.find(event.gbutton.button);
         if (it != current_bindings->gamepad_bindings.end()) {
-            get_core()->notify_button_state(0, it->second, pressed);
+            GetCore()->NotifyButtonState(0, it->second, pressed);
         }
     }
 }
@@ -144,10 +144,10 @@ void OnGamepadRemoved(SDL_Event const& event)
 void OnKeyChange(SDL_Event const& event, bool pressed)
 {
     if (current_bindings != nullptr) {
-        assert(core_loaded());
+        assert(CoreIsLoaded());
         auto it = current_bindings->key_bindings.find(event.key.keysym.scancode);
         if (it != current_bindings->key_bindings.end()) {
-            get_core()->notify_button_state(0, it->second, pressed);
+            GetCore()->NotifyButtonState(0, it->second, pressed);
         }
     }
     // SDL_Keycode keycode = event.key.keysym.sym;
@@ -183,7 +183,7 @@ void RemoveKeyBinding(System system, size_t input_index)
 
 Status SaveBindingsToDisk()
 {
-    return status_unimplemented(); // TODO
+    return UnimplementedStatus(); // TODO
 }
 
 void SetBinding(System system, size_t input_index, SDL_GamepadAxis axis)

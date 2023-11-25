@@ -140,12 +140,12 @@ void FinalizeAndExecuteBlock(Block*& block)
     c.endFunc();
     asmjit::Error err = c.finalize();
     if (err) {
-        message::error(
+        message::Error(
           std::format("Failed to finalize code block; returned {}", asmjit::DebugUtils::errorAsString(err)));
     }
     err = jit_runtime.add(&block->func, &code_holder);
     if (err) {
-        message::error(std::format("Failed to add code to asmjit runtime! Returned error code {}.", err));
+        message::Error(std::format("Failed to add code to asmjit runtime! Returned error code {}.", err));
     }
 
     ExecuteBlock(block);
@@ -173,7 +173,7 @@ Status InitRecompiler()
 {
     allocator.allocate(16_MiB);
     pools.resize(num_pools, nullptr);
-    return status_ok();
+    return OkStatus();
 }
 
 void Invalidate(u32 addr)

@@ -10,20 +10,20 @@ namespace frontend::audio {
 
 static SDL_AudioDeviceID audio_device_id;
 
-void disable()
+void Disable()
 {
     // TODO
 }
 
-void enable()
+void Enable()
 {
     // TODO
 }
 
-Status init()
+Status Init()
 {
     if (SDL_Init(SDL_INIT_AUDIO) != 0) {
-        return status_failure(std::format("Failed call to SDL_Init: {}", SDL_GetError()));
+        return FailureStatus(std::format("Failed call to SDL_Init: {}", SDL_GetError()));
     }
 
     static constexpr int default_sample_rate = 44100;
@@ -48,25 +48,25 @@ Status init()
 
     SDL_PauseAudioDevice(audio_device_id);
 
-    return status_ok();
+    return OkStatus();
 }
 
-void on_device_added(SDL_Event event)
+void OnDeviceAdded(SDL_Event event)
 {
     // TODO
 }
 
-void on_device_removed(SDL_Event event)
+void OnDeviceRemoved(SDL_Event event)
 {
     // TODO
 }
 
-void push_sample(s16 left, s16 right)
+void PushSample(s16 left, s16 right)
 {
     // TODO
 }
 
-void set_sample_rate(u32 sample_rate)
+void SetSampleRate(u32 sample_rate)
 {
     // TODO
 }

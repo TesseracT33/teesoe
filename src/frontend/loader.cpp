@@ -11,19 +11,19 @@
 
 namespace frontend {
 
-static std::optional<fs::path> extract_archive(fs::path const& path);
+static std::optional<fs::path> ExtractArchive(fs::path const& path);
 
 static std::unique_ptr<Core> core;
 static System system;
 
-static const std::array<fs::path, 4> rom_archive_exts = { ".7z", ".7Z", ".zip", ".ZIP" };
+static std::array<fs::path, 4> const rom_archive_exts = { ".7z", ".7Z", ".zip", ".ZIP" };
 
-bool core_loaded()
+bool CoreIsLoaded()
 {
     return core != nullptr;
 }
 
-static std::optional<fs::path> extract_archive(fs::path const& path)
+static std::optional<fs::path> ExtractArchive(fs::path const& path)
 {
     try {
         bit7z::BitInOutFormat const& format = [&path]() -> bit7z::BitInOutFormat const& {
@@ -48,20 +48,20 @@ static std::optional<fs::path> extract_archive(fs::path const& path)
     }
 }
 
-std::unique_ptr<Core> const& get_core()
+std::unique_ptr<Core> const& GetCore()
 {
     return core;
 }
 
-System get_system()
+System GetSystem()
 {
     return system;
 }
 
-Status load_core(System system_arg)
+Status LoadCore(System system_arg)
 {
-    if (core_loaded()) {
-        core->tear_down();
+    if (CoreIsLoaded()) {
+        core->TearDown();
     }
     switch (system_arg) {
     case System::CHIP8: core = nullptr; break;
@@ -72,22 +72,22 @@ Status load_core(System system_arg)
     case System::PS2: core = nullptr; break;
     }
     if (core) {
-        Status status = core->init();
-        system = status.ok() ? system_arg : System::None;
+        Status status = core->Init();
+        system = status.Ok() ? system_arg : System::None;
         return status;
     } else {
         system = System::None;
-        return status_failure("Core could not be created; factory returned null.");
+        return FailureStatus("Core could not be created; factory returned null.");
     }
 }
 
-Status load_core_and_game(fs::path rom_path)
+Status LoadCoreAndGame(fs::path rom_path)
 {
     fs::path rom_ext = rom_path.extension();
     if (rng::contains(rom_archive_exts, rom_ext)) {
-        std::optional<fs::path> extracted_dir = extract_archive(rom_path);
+        std::optional<fs::path> extracted_dir = ExtractArchive(rom_path);
         if (!extracted_dir) {
-            return status_failure("Failed to extract archive");
+            return FailureStatus("Failed to extract archive");
         }
         fs::path selected_file_path;
         for (fs::directory_entry const& file : fs::directory_iterator(extracted_dir.value())) {
@@ -97,24 +97,24 @@ Status load_core_and_game(fs::path rom_path)
             }
         }
         if (selected_file_path.empty()) {
-            return status_failure("The selected archive did not contain any viable rom files");
+            return FailureStatus("The selected archive did not contain any viable rom files");
         }
         rom_path = selected_file_path;
         rom_ext = rom_path.extension();
     }
     auto it = rom_ext_to_system.find(rom_ext);
     if (it == rom_ext_to_system.end()) {
-        if (core_loaded()) {
+        if (CoreIsLoaded()) {
             return gui::LoadGame(rom_path);
         } else {
-            return status_failure(
+            return FailureStatus(
               "Failed to identify which system the selected rom is associated with. Please load a core first.");
         }
     } else {
         System new_system = it->second;
-        if (!core_loaded() || new_system != system) {
-            Status status = load_core(new_system);
-            if (!status.ok()) {
+        if (!CoreIsLoaded() || new_system != system) {
+            Status status = LoadCore(new_system);
+            if (!status.Ok()) {
                 return status;
             }
         }
@@ -122,7 +122,7 @@ Status load_core_and_game(fs::path rom_path)
     }
 }
 
-std::string_view system_to_string(System system_arg)
+std::string_view SystemToString(System system_arg)
 {
     switch (system_arg) {
     case System::None: return "UNLOADED";

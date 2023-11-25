@@ -7,12 +7,12 @@ class Status;
 
 namespace frontend::audio {
 
-void disable();
-void enable();
-Status init();
-void on_device_added(SDL_Event event);
-void on_device_removed(SDL_Event event);
-void push_sample(s16 left, s16 right);
-void set_sample_rate(u32 sample_rate);
+void Disable();
+void Enable();
+Status Init();
+void OnDeviceAdded(SDL_Event event);
+void OnDeviceRemoved(SDL_Event event);
+void PushSample(s16 left, s16 right);
+void SetSampleRate(u32 sample_rate);
 
 } // namespace frontend::audio

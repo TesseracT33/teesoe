@@ -30,9 +30,9 @@ Status LoadRom(std::filesystem::path const& path)
         rom = expected_rom.value();
         ResizeRomToPowerOfTwo(rom);
         rom_size_mask = uint(rom.size() - 1);
-        return status_ok();
+        return OkStatus();
     } else {
-        return status_failure(expected_rom.error());
+        return FailureStatus(expected_rom.error());
     }
 }
 

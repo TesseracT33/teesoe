@@ -128,7 +128,10 @@ void WriteReg(u32 addr, u32 data)
         CheckVideoInterrupt();
         break;
 
-    case Register::VCurrent: mi::ClearInterrupt(mi::InterruptType::VI); break;
+    case Register::VCurrent:
+        mi::ClearInterrupt(mi::InterruptType::VI);
+        interrupt = false;
+        break;
 
     case Register::Burst: vi.burst = data & 0x3FFF'FFFF; break;
 

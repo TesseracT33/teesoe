@@ -20,7 +20,7 @@ public:
     };
 
     Serializer(Mode mode) : has_error_(false), is_open_(false), mode_(mode) {}
-    Serializer(Mode mode, std::filesystem::path const& path) : mode_(mode) { open(path); }
+    Serializer(Mode mode, std::filesystem::path const& path) : mode_(mode) { Open(path); }
     Serializer(Serializer const&) = delete;
     Serializer(Serializer&& other) noexcept { *this = std::move(other); }
     Serializer& operator=(Serializer const&) = delete;
@@ -31,12 +31,12 @@ public:
             is_open_ = other.is_open_;
             has_error_ = other.has_error_;
             mode_ = other.mode_;
-            other.close();
+            other.Close();
         }
         return *this;
     }
 
-    void close()
+    void Close()
     {
         if (is_open_) {
             fstream_.close();
@@ -45,9 +45,9 @@ public:
         has_error_ = false;
     }
 
-    bool has_error() const { return has_error_; }
+    bool HasError() const { return has_error_; }
 
-    void open(std::filesystem::path const& path)
+    void Open(std::filesystem::path const& path)
     {
         if (is_open_) {
             fstream_.close();
@@ -59,32 +59,32 @@ public:
     }
 
     template<typename T>
-    void stream_deque(std::deque<T>& deque)
+    void StreamDeque(std::deque<T>& deque)
         requires(std::is_trivially_copyable_v<T>)
     {
         if (mode_ == Mode::Read) {
             deque.clear();
             size_t size;
-            stream(&size, sizeof(size_t));
+            Stream(&size, sizeof(size_t));
             if (size > 0) {
                 deque.reserve(size);
             }
             for (size_t i = 0; i < size; i++) {
                 T t;
-                stream(&t, sizeof(T));
+                Stream(&t, sizeof(T));
                 deque.push_back(t);
             }
         } else {
             size_t size = deque.size();
-            stream(&size, sizeof(size_t));
+            Stream(&size, sizeof(size_t));
             for (T& t : deque) {
-                stream(&t, sizeof(T));
+                Stream(&t, sizeof(T));
             }
         }
     }
 
     template<typename T>
-    void stream_queue(std::queue<T>& queue)
+    void StreamQueue(std::queue<T>& queue)
         requires(std::is_trivially_copyable_v<T>)
     {
         if (mode_ == Mode::Read) {
@@ -92,69 +92,69 @@ public:
                 queue.pop();
             }
             size_t size;
-            stream(&size, sizeof(size_t));
+            Stream(&size, sizeof(size_t));
             for (size_t i = 0; i < size; i++) {
                 T t;
-                stream(&t, sizeof(T));
+                Stream(&t, sizeof(T));
                 queue.push(t);
             }
         } else {
             size_t size = queue.size();
-            stream(&size, sizeof(size_t));
+            Stream(&size, sizeof(size_t));
             auto tmp_queue = queue;
             while (!tmp_queue.empty()) {
                 T t = tmp_queue.front();
                 tmp_queue.pop();
-                stream(&t, sizeof(T));
+                Stream(&t, sizeof(T));
             }
         }
     }
 
-    void stream_string(std::string& str)
+    void StreamString(std::string& str)
     {
         if (mode_ == Mode::Read) {
             size_t size;
-            stream(&size, sizeof(size_t));
+            Stream(&size, sizeof(size_t));
             char* c_str = new char[size + 1]{};
-            stream(c_str, size * sizeof(char));
+            Stream(c_str, size * sizeof(char));
             str = std::string(c_str);
             delete[] c_str;
         } else {
             char const* c_str = str.c_str();
             size_t size = std::strlen(c_str);
-            stream(&size, sizeof(size_t));
-            stream((void*)c_str, size * sizeof(char));
+            Stream(&size, sizeof(size_t));
+            Stream((void*)c_str, size * sizeof(char));
         }
     }
 
     template<typename T>
-    void stream_trivial(T& val)
+    void StreamTrivial(T& val)
         requires(std::is_trivially_copyable_v<T>)
     {
-        stream(&val, sizeof(T));
+        Stream(&val, sizeof(T));
     }
 
     template<typename T>
-    void stream_vector(std::vector<T>& vec)
+    void StreamVector(std::vector<T>& vec)
         requires(std::is_trivially_copyable_v<T>)
     {
         if (mode_ == Mode::Read) {
             vec.clear();
             size_t size = 0;
-            stream(&size, sizeof(size_t));
+            Stream(&size, sizeof(size_t));
             if (size > 0) {
                 vec.reserve(size);
             }
             for (size_t i = 0; i < size; i++) {
                 T t;
-                stream(&t, sizeof(T));
+                Stream(&t, sizeof(T));
                 vec.push_back(t);
             }
         } else {
             size_t size = vec.size();
-            stream(&size, sizeof(size_t));
+            Stream(&size, sizeof(size_t));
             for (T& t : vec) {
-                stream(&t, sizeof(T));
+                Stream(&t, sizeof(T));
             }
         }
     }
@@ -165,7 +165,7 @@ private:
     std::fstream fstream_;
     Mode mode_;
 
-    void stream(void* obj, size_t size)
+    void Stream(void* obj, size_t size)
     {
         if (has_error_) {
             return;
@@ -176,7 +176,7 @@ private:
             fstream_.write(reinterpret_cast<char const*>(obj), size);
         }
         if (!fstream_) {
-            has_error_ = true; // todo; implement better error handling
+            has_error_ = true; // todo; implement better Error handling
         }
     }
 };

@@ -114,10 +114,10 @@ Status LoadIPL12(std::filesystem::path const& path)
 {
     std::expected<std::vector<u8>, std::string> expected_rom = read_file(path, sizeof(mem));
     if (!expected_rom) {
-        return status_failure(std::format("Failed to open boot rom (IPL) file; {}", expected_rom.error()));
+        return FailureStatus(std::format("Failed to open boot rom (IPL) file; {}", expected_rom.error()));
     }
     std::copy(expected_rom.value().begin(), expected_rom.value().end(), mem.rom.begin());
-    return status_ok();
+    return OkStatus();
 }
 
 void OnButtonAction(Control control, bool pressed)

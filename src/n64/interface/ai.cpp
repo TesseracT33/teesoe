@@ -73,13 +73,13 @@ constexpr std::string_view RegOffsetToStr(u32 reg_offset)
 void Sample()
 {
     if (dma_count == 0) {
-        frontend::audio::push_sample(0, 0);
+        frontend::audio::PushSample(0, 0);
     } else {
         if (dma_enable && dma_len[0] > 0) {
             s32 data = memory::Read<s32>(dma_addr[0]);
             s16 left = data >> 16;
             s16 right = data & 0xFFFF;
-            frontend::audio::push_sample(left, right);
+            frontend::audio::PushSample(left, right);
             dma_addr[0] += 4;
             dma_len[0] -= 4;
         }
@@ -137,7 +137,7 @@ void WriteReg(u32 addr, u32 data)
         dac_freq = std::max(1u, u32(cpu_cycles_per_second / 2 / (dacrate + 1) * 1.037));
         dac_period = cpu_cycles_per_second / dac_freq;
         if (dac_freq != prev_freq) {
-            frontend::audio::set_sample_rate(dac_freq);
+            frontend::audio::SetSampleRate(dac_freq);
         }
     } break;
 

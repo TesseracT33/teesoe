@@ -20,13 +20,13 @@ Status Load(std::filesystem::path const& path)
     if (expected_bios) {
         if (expected_bios.value().size() == 0x4000) {
             bios = expected_bios.value();
-            return status_ok();
+            return OkStatus();
         } else {
-            return status_failure(
+            return FailureStatus(
               std::format("BIOS must be 16 KiB large, but was {} bytes", expected_bios.value().size()));
         }
     } else {
-        return status_failure(expected_bios.error());
+        return FailureStatus(expected_bios.error());
     }
 }
 

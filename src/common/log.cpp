@@ -82,9 +82,9 @@ Status init_file_log()
 {
     if constexpr (enable_file_logging) {
         file_log.open(log_path.data());
-        return file_log.is_open() ? status_ok() : status_failure("Failed to open log file");
+        return file_log.is_open() ? OkStatus() : FailureStatus("Failed to open log file");
     } else {
-        return status_ok();
+        return OkStatus();
     }
 }
 

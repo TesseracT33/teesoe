@@ -18,29 +18,29 @@
 
 using namespace n64;
 
-void N64::apply_configuration(CoreConfiguration config)
+void N64::ApplyConfig(CoreConfiguration config)
 {
     CpuImpl prev_cpu_impl =
       std::exchange(cpu_impl, config.n64.use_cpu_recompiler ? CpuImpl::Recompiler : CpuImpl::Interpreter);
     CpuImpl prev_rsp_impl =
       std::exchange(rsp_impl, config.n64.use_rsp_recompiler ? CpuImpl::Recompiler : CpuImpl::Interpreter);
     if (running && (cpu_impl != prev_cpu_impl || rsp_impl != prev_rsp_impl)) {
-        stop();
-        run();
+        Stop();
+        Run();
     }
 }
 
-Status N64::enable_audio(bool enable)
+Status N64::EnableAudio(bool enable)
 {
-    return status_unimplemented();
+    return UnimplementedStatus();
 }
 
-std::span<const std::string_view> N64::get_input_names() const
+std::span<std::string_view const> N64::GetInputNames() const
 {
     return control_names;
 }
 
-Status N64::init()
+Status N64::Init()
 {
     ai::Initialize();
     mi::Initialize();
@@ -54,56 +54,56 @@ Status N64::init()
     rsp::PowerOn();
     rdp::Initialize();
 
-    scheduler::Initialize(); // init last
+    scheduler::Initialize(); // Init last
 
-    return status_ok();
+    return OkStatus();
 }
 
-Status N64::init_graphics_system()
+Status N64::InitGraphics()
 {
     return rdp::MakeParallelRdp();
 }
 
-Status N64::load_bios(std::filesystem::path const& path)
+Status N64::LoadBios(std::filesystem::path const& path)
 {
     Status status = pif::LoadIPL12(path);
-    bios_loaded = status.ok();
+    bios_loaded = status.Ok();
     return status;
 }
 
-Status N64::load_rom(std::filesystem::path const& path)
+Status N64::LoadRom(std::filesystem::path const& path)
 {
     Status status = cart::LoadRom(path);
-    game_loaded = status.ok();
+    game_loaded = status.Ok();
     return status;
 }
 
-void N64::notify_axis_state(size_t player, size_t action_index, s32 axis_value)
+void N64::NotifyAxisState(size_t player, size_t action_index, s32 axis_value)
 {
     pif::OnJoystickMovement(static_cast<Control>(action_index), s16(axis_value));
 }
 
-void N64::notify_button_state(size_t player, size_t action_index, bool pressed)
+void N64::NotifyButtonState(size_t player, size_t action_index, bool pressed)
 {
     pif::OnButtonAction(static_cast<Control>(action_index), pressed);
 }
 
-void N64::pause()
+void N64::Pause()
 {
 }
 
-void N64::reset()
+void N64::Reset()
 {
 }
 
-void N64::resume()
+void N64::Resume()
 {
 }
 
-void N64::run()
+void N64::Run()
 {
     if (!running) {
-        reset();
+        Reset();
         bool hle_pif = !bios_loaded || skip_boot_rom;
         vr4300::InitRun(hle_pif);
         running = true;
@@ -117,21 +117,21 @@ void N64::run()
     }
 }
 
-void N64::stop()
+void N64::Stop()
 {
     scheduler::Stop();
     running = false;
 }
 
-void N64::stream_state(Serializer& serializer)
+void N64::StreamState(Serializer& serializer)
 {
 }
 
-void N64::tear_down()
+void N64::TearDown()
 {
 }
 
-void N64::update_screen()
+void N64::UpdateScreen()
 {
     rdp::implementation->UpdateScreen();
 }
