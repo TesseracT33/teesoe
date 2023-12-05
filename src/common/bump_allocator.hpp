@@ -13,7 +13,7 @@ public:
     u8* acquire(size_t size)
     {
         if (index_ + size >= memory_.size()) {
-            log_warn("Bump allocator ran out of memory; resetting all available memory.");
+            LogWarn("Bump allocator ran out of memory; resetting all available memory.");
             std::ranges::fill(memory_, 0);
             index_ = 0;
             ran_out_of_memory_on_last_acquire_ = true;

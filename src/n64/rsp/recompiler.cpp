@@ -79,12 +79,11 @@ void BlockProlog()
     code_holder.reset();
     asmjit::Error err = code_holder.init(jit_runtime.environment(), jit_runtime.cpuFeatures());
     if (err) {
-        log_error(
-          std::format("Failed to init asmjit code holder; returned {}", asmjit::DebugUtils::errorAsString(err)));
+        LogError(std::format("Failed to init asmjit code holder; returned {}", asmjit::DebugUtils::errorAsString(err)));
     }
     err = code_holder.attach(&compiler);
     if (err) {
-        log_error(std::format("Failed to attach asmjit compiler to code holder; returned {}",
+        LogError(std::format("Failed to attach asmjit compiler to code holder; returned {}",
           asmjit::DebugUtils::errorAsString(err)));
     }
     if constexpr (enable_rsp_jit_error_handler) {

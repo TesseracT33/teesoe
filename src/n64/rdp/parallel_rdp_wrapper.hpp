@@ -10,6 +10,7 @@
 #include "types.hpp"
 
 #include <array>
+#include <vector>
 
 /* https://github.com/Themaister/parallel-rdp/blob/master/integration_example.cpp */
 

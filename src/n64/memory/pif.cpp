@@ -221,7 +221,7 @@ void RunJoybusProtocol()
             ControllerId(result);
             ++channel;
             break;
-        default: log_warn(std::format("Unexpected joybus command {} encountered.", cmd));
+        default: LogWarn(std::format("Unexpected joybus command {} encountered.", cmd));
         }
     }
 }

@@ -173,7 +173,7 @@ void SetVaddrToPaddrFuncs()
             addressing_mode = _64bit;
         }
     } else { /* Unknown?! */
-        log_error("cop0.status.ksu was set to 3.");
+        LogError("cop0.status.ksu was set to 3.");
         assert(false);
     }
     can_execute_dword_instrs = operating_mode == Kernel || addressing_mode == _64bit;

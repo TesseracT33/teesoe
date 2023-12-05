@@ -10,8 +10,8 @@
 #include <iostream>
 #include <string>
 
-static void file_out(std::string_view output);
-static void std_out(std::string_view output);
+static void FileOut(std::string_view output);
+static void StdOut(std::string_view output);
 
 static std::ofstream file_log;
 static u64 file_output_repeat_counter;
@@ -19,7 +19,7 @@ static u32 loop_index;
 static std::string prev_file_output;
 static std::vector<std::string> file_output_loop;
 
-void file_out(std::string_view output)
+void FileOut(std::string_view output)
 {
     if constexpr (enable_file_logging) {
         if (!file_log.is_open()) {
@@ -78,7 +78,7 @@ void file_out(std::string_view output)
     }
 }
 
-Status init_file_log()
+Status InitFileLog()
 {
     if constexpr (enable_file_logging) {
         file_log.open(log_path.data());
@@ -88,21 +88,21 @@ Status init_file_log()
     }
 }
 
-void log(std::string_view output)
+void Log(std::string_view output)
 {
-    std_out(output);
-    file_out(output);
+    StdOut(output);
+    FileOut(output);
 }
 
-void log_error(std::string_view output)
+void LogError(std::string_view output)
 {
     std::string shown_output = std::format("[ERROR] {}", output);
-    std_out(shown_output);
-    file_out(shown_output);
+    StdOut(shown_output);
+    FileOut(shown_output);
 }
 
 // TODO: std::source_location not working with clang-cl for some obscure reason
-void log_fatal(std::string_view output /*, std::source_location loc*/)
+void LogFatal(std::string_view output /*, std::source_location loc*/)
 {
     // std::string shown_output = std::format("[FATAL] {}({}:{}), function {}: {}",
     //   loc.file_name(),
@@ -111,32 +111,32 @@ void log_fatal(std::string_view output /*, std::source_location loc*/)
     //   loc.function_name(),
     //   output);
     std::string shown_output = std::format("[FATAL] {}", output);
-    std_out(shown_output);
-    file_out(shown_output);
+    StdOut(shown_output);
+    FileOut(shown_output);
 }
 
-void log_info(std::string_view output)
+void LogInfo(std::string_view output)
 {
     std::string shown_output = std::format("[INFO] {}", output);
-    std_out(shown_output);
-    file_out(shown_output);
+    StdOut(shown_output);
+    FileOut(shown_output);
 }
 
-void log_warn(std::string_view output)
+void LogWarn(std::string_view output)
 {
     std::string shown_output = std::format("[WARN] {}", output);
-    std_out(shown_output);
-    file_out(shown_output);
+    StdOut(shown_output);
+    FileOut(shown_output);
 }
 
-void std_out(std::string_view output)
+void StdOut(std::string_view output)
 {
     if constexpr (enable_console_logging) {
         std::cout << output << '\n';
     }
 }
 
-void tear_down_log()
+void TearDownLog()
 {
     if (file_log) {
         std::flush(file_log);

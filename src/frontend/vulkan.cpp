@@ -1,13 +1,12 @@
 #include "vulkan_headers.hpp"
 
 #include "frontend/message.hpp"
+#include "imgui_impl_vulkan.h"
 #include "log.hpp"
 #include "n64/rdp/parallel_rdp_wrapper.hpp"
 #include "n64/rdp/rdp.hpp"
-#include "vulkan.hpp"
-
-#include "imgui_impl_vulkan.h"
 #include "parallel-rdp-standalone/volk/volk.h"
+#include "vulkan.hpp"
 
 #include <cassert>
 #include <cstdlib>
@@ -33,7 +32,7 @@ static bool vk_swap_chain_rebuild;
 void CheckVkResult(VkResult vk_result)
 {
     if (vk_result != 0) {
-        log_error(std::format("[vulkan]: Error: VkResult = {}", std::to_underlying(vk_result)));
+        LogError(std::format("[vulkan]: Error: VkResult = {}", std::to_underlying(vk_result)));
         if (vk_result < 0) {
             exit(1);
         }

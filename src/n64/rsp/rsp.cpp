@@ -107,7 +107,7 @@ template<DmaType dma_type> void InitDma()
                   bytes_to_copy);
             }
         }();
-        log(output);
+        Log(output);
     }
 
     scheduler::AddEvent(scheduler::EventType::SpDmaFinish, cpu_cycles_until_finish, OnDmaFinish);
@@ -194,12 +194,12 @@ void Link(u32 reg)
 
 void NotifyIllegalInstr(std::string_view instr)
 {
-    log_error(std::format("Illegal RSP instruction {} encountered.\n", instr));
+    LogError(std::format("Illegal RSP instruction {} encountered.\n", instr));
 }
 
 void NotifyIllegalInstrCode(u32 instr_code)
 {
-    log_error(std::format("Illegal RSP instruction code {:08X} encountered.\n", instr_code));
+    LogError(std::format("Illegal RSP instruction code {:08X} encountered.\n", instr_code));
 }
 
 void OnDmaFinish()
@@ -242,7 +242,7 @@ void PerformBranch()
     pc = jump_addr;
     jump_is_pending = in_branch_delay_slot = false;
     if constexpr (log_rsp_branches) {
-        log(std::format("RSP branch to 0x{:03X}; RA = 0x{:08X}; SP = 0x{:08X}", u32(pc), u32(gpr[31]), u32(gpr[29])));
+        Log(std::format("RSP branch to 0x{:03X}; RA = 0x{:08X}; SP = 0x{:08X}", u32(pc), u32(gpr[31]), u32(gpr[29])));
     }
 }
 
@@ -274,7 +274,7 @@ template<std::signed_integral Int> Int ReadMemoryCpu(u32 addr)
     } else if constexpr (sizeof(Int) == 4) {
         return ReadReg(addr);
     } else {
-        log_warn(
+        LogWarn(
           std::format("Attempted to read RSP memory region at address ${:08X} for sized int {}", addr, sizeof(Int)));
         return {};
     }
@@ -286,7 +286,7 @@ u32 ReadReg(u32 addr)
         // TODO: return random number if !halted, else pc
         // return halted ? pc : Int(Random<s32>(0, 0xFFF));
         if constexpr (log_io_rsp) {
-            log(std::format("RSP IO: SP_PC => ${:08X}", pc));
+            Log(std::format("RSP IO: SP_PC => ${:08X}", pc));
         }
         return pc;
     } else {
@@ -334,7 +334,7 @@ u32 ReadReg(u32 addr)
             }
         }();
         if constexpr (log_io_rsp) {
-            log(std::format("RSP IO: {} => ${:08X}", RegOffsetToStr(offset), ret));
+            Log(std::format("RSP IO: {} => ${:08X}", RegOffsetToStr(offset), ret));
         }
         return ret;
     }
@@ -372,7 +372,7 @@ void SetActiveCpuImpl(CpuImpl cpu_impl)
     } else {
         Status status = InitRecompiler();
         if (!status.Ok()) {
-            log_error(status.Message());
+            LogError(status.Message());
         }
     }
 }
@@ -416,7 +416,7 @@ void WriteReg(u32 addr, u32 data)
 {
     if (addr == sp_pc_addr) {
         if constexpr (log_io_rsp) {
-            log(std::format("RSP IO: SP_PC <= ${:08X}", data));
+            Log(std::format("RSP IO: SP_PC <= ${:08X}", data));
         }
         jump_addr = data & 0xFFC;
         PerformBranch();
@@ -424,7 +424,7 @@ void WriteReg(u32 addr, u32 data)
         static_assert(sizeof(sp) >> 2 == 8);
         u32 offset = addr >> 2 & 7;
         if constexpr (log_io_rsp) {
-            log(std::format("RSP IO: {} <= ${:08X}", RegOffsetToStr(offset), data));
+            Log(std::format("RSP IO: {} <= ${:08X}", RegOffsetToStr(offset), data));
         }
 
         switch (offset) {

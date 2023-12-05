@@ -37,7 +37,7 @@ template<> struct SizeToHostReg<8> {
 struct AsmjitLogErrorHandler : public asmjit::ErrorHandler {
     void handleError(asmjit::Error err, char const* message, asmjit::BaseEmitter* origin) override
     {
-        log_error(std::format("AsmJit error {}: {}", err, message));
+        LogError(std::format("AsmJit error {}: {}", err, message));
     }
 };
 

@@ -155,7 +155,7 @@ void FillCacheLine(auto& cache_line, u32 paddr)
     https://discord.com/channels/465585922579103744/600463718924681232/1034605516900544582 */
     auto rdram_offset = paddr & ~(sizeof(cache_line.data) - 1);
     if (rdram_offset >= rdram::GetSize()) {
-        log_warn(std::format("Attempted to fill cache line from physical addr ${:08X} (beyond RDRAM)", rdram_offset));
+        LogWarn(std::format("Attempted to fill cache line from physical addr ${:08X} (beyond RDRAM)", rdram_offset));
     }
     std::memcpy(cache_line.data, rdram_ptr + rdram_offset, sizeof(cache_line.data));
     cache_line.ptag = paddr & ~0xFFF;

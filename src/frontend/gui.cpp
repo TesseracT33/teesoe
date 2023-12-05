@@ -459,7 +459,7 @@ SDL_Window* GetSdlWindow()
     if (!sdl_window) {
         Status status = InitSdl();
         if (!status.Ok()) {
-            log_fatal(std::format("Failed to init SDL; {}", status.Message()));
+            LogFatal(std::format("Failed to init SDL; {}", status.Message()));
             exit(1);
         }
     }
@@ -491,8 +491,8 @@ Status Init(fs::path work_path)
     Status status{ Status::Code::Ok };
     config::Open(work_path);
     if (status = ReadConfig(); !status.Ok()) {
-        log_error(status.Message());
-        log_info("Using default configuration.");
+        LogError(status.Message());
+        LogInfo("Using default configuration.");
         UseDefaultConfig();
     }
     if (status = InitSdl(); !status.Ok()) {
@@ -567,7 +567,7 @@ Status InitImgui()
     }
 
     io.Fonts->AddFontDefault();
-    ImGui_ImplVulkan_CreateFontsTexture(vulkan::GetCommandBuffer());
+    ImGui_ImplVulkan_CreateFontsTexture();
     vulkan::SubmitRequestedCommandBuffer();
 
     return OkStatus();
@@ -578,9 +578,7 @@ Status InitSdl()
     if (SDL_Init(SDL_INIT_EVERYTHING) != 0) {
         return FailureStatus(std::format("Failed to init SDL: {}\n", SDL_GetError()));
     }
-    sdl_window = SDL_CreateWindow("N63.5",
-      SDL_WINDOWPOS_CENTERED,
-      SDL_WINDOWPOS_CENTERED,
+    sdl_window = SDL_CreateWindow("tessoe",
       window_width,
       window_height,
       SDL_WINDOW_INPUT_FOCUS | SDL_WINDOW_RESIZABLE | SDL_WINDOW_VULKAN);
@@ -588,7 +586,7 @@ Status InitSdl()
         return FailureStatus(std::format("Failed to create SDL window: {}\n", SDL_GetError()));
     }
     if (Status status = message::Init(sdl_window); !status.Ok()) {
-        log_error(std::format("Failed to initialize user message system; {}", status.Message()));
+        LogError(std::format("Failed to initialize user message system; {}", status.Message()));
     }
     return OkStatus();
 }

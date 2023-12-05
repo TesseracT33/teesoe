@@ -80,7 +80,7 @@ u32 ReadReg(u32 addr)
     u32 ret;
     std::memcpy(&ret, (s32*)(&vi) + offset, 4);
     if constexpr (log_io_vi) {
-        log(std::format("VI: {} => ${:08X}", RegOffsetToStr(offset), ret));
+        Log(std::format("VI: {} => ${:08X}", RegOffsetToStr(offset), ret));
     }
     return ret;
 }
@@ -113,7 +113,7 @@ void WriteReg(u32 addr, u32 data)
     static_assert(sizeof(vi) >> 2 == 0x10);
     u32 offset = addr >> 2 & 0xF;
     if constexpr (log_io_vi) {
-        log(std::format("VI: {} <= ${:08X}", RegOffsetToStr(offset), data));
+        Log(std::format("VI: {} <= ${:08X}", RegOffsetToStr(offset), data));
     }
 
     switch (offset) {

@@ -14,12 +14,12 @@ int main(int argc, char* argv[])
 {
     fs::path work_path = fs::current_path();
 
-    if (Status status = init_file_log(); !status.Ok()) {
-        log_warn(status.Message());
+    if (Status status = InitFileLog(); !status.Ok()) {
+        LogWarn(status.Message());
     }
 
     if (Status status = frontend::gui::Init(work_path); !status.Ok()) {
-        log_fatal(status.Message());
+        LogFatal(status.Message());
         return EXIT_FAILURE;
     }
 
@@ -45,7 +45,7 @@ int main(int argc, char* argv[])
 
     frontend::gui::Run(start_game_immediately);
 
-    tear_down_log();
+    TearDownLog();
 
     return EXIT_SUCCESS;
 }

@@ -58,7 +58,7 @@ u32 ReadReg(u32 addr)
     u32 ret;
     std::memcpy(&ret, (u32*)(&mi) + offset, 4);
     if constexpr (log_io_mi) {
-        log(std::format("MI: {} => ${:08X}", RegOffsetToStr(offset), ret));
+        Log(std::format("MI: {} => ${:08X}", RegOffsetToStr(offset), ret));
     }
     return ret;
 }
@@ -79,7 +79,7 @@ void WriteReg(u32 addr, u32 data)
     static_assert(sizeof(mi) >> 2 == 4);
     u32 offset = addr >> 2 & 3;
     if constexpr (log_io_mi) {
-        log(std::format("MI: {} <= ${:08X}", RegOffsetToStr(offset), data));
+        Log(std::format("MI: {} <= ${:08X}", RegOffsetToStr(offset), data));
     }
 
     if (offset == Register::Mode) {

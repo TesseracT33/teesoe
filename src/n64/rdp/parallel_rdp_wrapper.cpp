@@ -221,8 +221,8 @@ VkSurfaceKHR ParallelRDPWrapper::SDLWSIPlatform::create_surface(VkInstance insta
   [[maybe_unused]] VkPhysicalDevice gpu)
 {
     VkSurfaceKHR vk_surface = VK_NULL_HANDLE;
-    if (!SDL_Vulkan_CreateSurface(sdl_window, instance, &vk_surface)) {
-        log_error(std::format("Failed to create Vulkan surface: {}", SDL_GetError()));
+    if (!SDL_Vulkan_CreateSurface(sdl_window, instance, nullptr, &vk_surface)) {
+        LogError(std::format("Failed to create Vulkan surface: {}", SDL_GetError()));
         return VK_NULL_HANDLE;
     }
     return vk_surface;
@@ -246,16 +246,8 @@ VkApplicationInfo const* ParallelRDPWrapper::SDLWSIPlatform::get_application_inf
 std::vector<char const*> ParallelRDPWrapper::SDLWSIPlatform::get_instance_extensions()
 {
     uint num_extensions;
-    if (!SDL_Vulkan_GetInstanceExtensions(&num_extensions, nullptr)) {
-        log_error("Failed to get Vulkan instance extensions.");
-        return {};
-    }
-    std::vector<char const*> extensions(num_extensions);
-    if (!SDL_Vulkan_GetInstanceExtensions(&num_extensions, extensions.data())) {
-        log_error("Failed to get Vulkan instance extensions.");
-        return {};
-    }
-    return extensions;
+    char const* const* extensions = SDL_Vulkan_GetInstanceExtensions(&num_extensions);
+    return std::vector<char const*>{ extensions, extensions + num_extensions };
 }
 
 u32 ParallelRDPWrapper::SDLWSIPlatform::get_surface_width()

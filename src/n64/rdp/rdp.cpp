@@ -140,7 +140,7 @@ u32 ReadReg(u32 addr)
     u32 ret;
     std::memcpy(&ret, (u32*)(&dp) + offset, 4);
     if constexpr (log_io_rdp) {
-        log(std::format("RDP IO: {} => ${:08X}", RegOffsetToStr(offset), ret));
+        Log(std::format("RDP IO: {} => ${:08X}", RegOffsetToStr(offset), ret));
     }
     return ret;
 }
@@ -165,7 +165,7 @@ void WriteReg(u32 addr, u32 data)
     static_assert(sizeof(dp) >> 2 == 8);
     u32 offset = addr >> 2 & 7;
     if constexpr (log_io_rdp) {
-        log(std::format("RDP IO: {} <= ${:08X}", RegOffsetToStr(offset), data));
+        Log(std::format("RDP IO: {} <= ${:08X}", RegOffsetToStr(offset), data));
     }
 
     switch (offset) {

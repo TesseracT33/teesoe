@@ -15,7 +15,7 @@ static SDL_Window* sdl_window; /* Must be set via 'Init' before any messages are
 
 void Error(std::string_view message)
 {
-    log_error(message);
+    LogError(message);
     if (sdl_window) {
         SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Error", message.data(), sdl_window);
     }
@@ -23,7 +23,7 @@ void Error(std::string_view message)
 
 void Fatal(std::string_view message /*, std::source_location loc*/)
 {
-    log_fatal(message /*, loc*/);
+    LogFatal(message /*, loc*/);
     if (sdl_window) {
         /* std::string shown_message = std::format("Fatal Error at {}({}:{}), function {}: {}",
           loc.file_name(),
@@ -38,7 +38,7 @@ void Fatal(std::string_view message /*, std::source_location loc*/)
 
 void Info(std::string_view message)
 {
-    log_info(message);
+    LogInfo(message);
     if (sdl_window) {
         SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_INFORMATION, "Information", message.data(), sdl_window);
     }
@@ -56,7 +56,7 @@ Status Init(SDL_Window* sdl_window_arg)
 
 void Warn(std::string_view message)
 {
-    log_warn(message);
+    LogWarn(message);
     if (sdl_window) {
         SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_WARNING, "Warning", message.data(), sdl_window);
     }

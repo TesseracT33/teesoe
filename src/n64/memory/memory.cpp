@@ -23,7 +23,7 @@ namespace n64::memory {
         if constexpr (sizeof(INT) == 4) {                                                                         \
             return io::ReadReg(addr);                                                                             \
         } else {                                                                                                  \
-            log_warn(                                                                                             \
+            LogWarn(                                                                                             \
               std::format("Attempted to read IO region at address ${:08X} for sized int {}", addr, sizeof(INT))); \
             return INT{};                                                                                         \
         }                                                                                                         \
@@ -33,7 +33,7 @@ namespace n64::memory {
     if constexpr (access_size == 4) {                                                                                 \
         io::WriteReg(addr, data);                                                                                     \
     } else {                                                                                                          \
-        log_warn(std::format("Attempted to write IO region at address ${:08X} for sized int {}", addr, access_size)); \
+        LogWarn(std::format("Attempted to write IO region at address ${:08X} for sized int {}", addr, access_size)); \
     }
 
 template<std::signed_integral Int> Int Read(u32 addr)
@@ -47,7 +47,7 @@ template<std::signed_integral Int> Int Read(u32 addr)
         case 1: /* $0400'0000 - $040F'FFFF */ return rsp::ReadMemoryCpu<Int>(addr);
         case 2: /* $0410'0000 - $041F'FFFF */ return READ_INTERFACE(rdp, Int, addr);
         case 3: /* $0420'0000 - $042F'FFFF */
-            log_warn(std::format("Unexpected cpu read to address ${:08X}", addr));
+            LogWarn(std::format("Unexpected cpu read to address ${:08X}", addr));
             return Int{};
         case 4: /* $0430'0000 - $043F'FFFF */ return READ_INTERFACE(mi, Int, addr);
         case 5: /* $0440'0000 - $044F'FFFF */ return READ_INTERFACE(vi, Int, addr);
@@ -67,7 +67,7 @@ template<std::signed_integral Int> Int Read(u32 addr)
     if ((addr & 0xFFFF'F800) == 0x1FC0'0000) { /* $1FC0'0000 - $1FC0'07FF */
         return pif::ReadMemory<Int>(addr);
     }
-    log_warn(std::format("Unexpected cpu read to address ${:08X}", addr));
+    LogWarn(std::format("Unexpected cpu read to address ${:08X}", addr));
     return Int{};
 }
 
@@ -83,7 +83,7 @@ template<size_t access_size, typename... MaskT> void Write(u32 addr, s64 data, M
         case 1: /* $0400'0000 - $040F'FFFF */ rsp::WriteMemoryCpu<access_size>(addr, data); break;
         case 2: /* $0410'0000 - $041F'FFFF */ WRITE_INTERFACE(rdp, access_size, addr, data); break;
         case 3: /* $0420'0000 - $042F'FFFF */
-            log_warn(std::format("Unexpected cpu write to address ${:08X}", addr));
+            LogWarn(std::format("Unexpected cpu write to address ${:08X}", addr));
             break;
         case 4: /* $0430'0000 - $043F'FFFF */ WRITE_INTERFACE(mi, access_size, addr, data); break;
         case 5: /* $0440'0000 - $044F'FFFF */ WRITE_INTERFACE(vi, access_size, addr, data); break;
@@ -100,7 +100,7 @@ template<size_t access_size, typename... MaskT> void Write(u32 addr, s64 data, M
     } else if ((addr & 0xFFFF'F800) == 0x1FC0'0000) { /* $1FC0'0000 - $1FC0'07FF */
         pif::WriteMemory<access_size>(addr, data);
     } else {
-        log_warn(std::format("Unexpected cpu write to address ${:08X}", addr));
+        LogWarn(std::format("Unexpected cpu write to address ${:08X}", addr));
     }
 }
 

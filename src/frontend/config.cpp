@@ -41,7 +41,7 @@ void EmitN64(YAML::Emitter& out)
     out << YAML::EndMap;
     out << YAML::EndMap;
     if (!out.good()) {
-        log_error(std::format("yaml emitter error: {}", out.GetLastError()));
+        LogError(std::format("yaml emitter error: {}", out.GetLastError()));
     }
 }
 

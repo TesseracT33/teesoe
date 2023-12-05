@@ -30,13 +30,14 @@ Status Init()
     static constexpr int default_num_output_channels = 2;
     static constexpr int default_sample_buffer_size_per_channel = 512;
 
-    SDL_AudioSpec desired_spec = { .freq = default_sample_rate,
-        .format = AUDIO_S16MSB,
+    SDL_AudioSpec spec = {
+        .format = SDL_AUDIO_S16BE,
         .channels = default_num_output_channels,
-        .samples = default_sample_buffer_size_per_channel };
+        .freq = default_sample_rate,
+    };
 
     SDL_AudioSpec obtained_spec;
-    audio_device_id = SDL_OpenAudioDevice(nullptr, 0, &desired_spec, &obtained_spec, 0);
+    audio_device_id = SDL_OpenAudioDevice(0, &spec);
     if (audio_device_id == 0) {
         // message::warning(std::format("Could not open an audio device; {}", SDL_GetError()));
         // return false;

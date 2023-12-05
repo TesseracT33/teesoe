@@ -16,7 +16,7 @@ static void HandleException();
 
 template<MemOp mem_op> void AddressErrorException(u64 bad_vaddr)
 {
-    if constexpr (log_exceptions) log(std::format("EXCEPTION: Address Error; vaddr {:016X}", bad_vaddr));
+    if constexpr (log_exceptions) Log(std::format("EXCEPTION: Address Error; vaddr {:016X}", bad_vaddr));
     HandleException();
     pc = GetCommonExceptionVector();
     cop0.cause.exc_code = mem_op == MemOp::Write ? 5 : 4;
@@ -28,7 +28,7 @@ template<MemOp mem_op> void AddressErrorException(u64 bad_vaddr)
 
 void BreakpointException()
 {
-    if constexpr (log_exceptions) log("EXCEPTION: Breakpoint");
+    if constexpr (log_exceptions) Log("EXCEPTION: Breakpoint");
     HandleException();
     pc = GetCommonExceptionVector();
     cop0.cause.exc_code = 9;
@@ -37,7 +37,7 @@ void BreakpointException()
 
 template<MemOp mem_op> void BusErrorException()
 {
-    if constexpr (log_exceptions) log("EXCEPTION: Bus Error");
+    if constexpr (log_exceptions) Log("EXCEPTION: Bus Error");
     HandleException();
     pc = GetCommonExceptionVector();
     cop0.cause.exc_code = mem_op == MemOp::InstrFetch ? 6 : 7;
@@ -46,7 +46,7 @@ template<MemOp mem_op> void BusErrorException()
 
 void ColdResetException()
 {
-    if constexpr (log_exceptions) log("EXCEPTION: Cold Reset");
+    if constexpr (log_exceptions) Log("EXCEPTION: Cold Reset");
     HandleException();
     pc = 0xFFFF'FFFF'BFC0'0000;
     cop0.status.rp = cop0.status.sr = cop0.status.ts = 0;
@@ -59,7 +59,7 @@ void ColdResetException()
 
 void CoprocessorUnusableException(int cop)
 {
-    if constexpr (log_exceptions) log(std::format("EXCEPTION: Cop{} Unusable", cop));
+    if constexpr (log_exceptions) Log(std::format("EXCEPTION: Cop{} Unusable", cop));
     HandleException();
     pc = GetCommonExceptionVector();
     cop0.cause.exc_code = 11;
@@ -68,7 +68,7 @@ void CoprocessorUnusableException(int cop)
 
 void FloatingPointException()
 {
-    if constexpr (log_exceptions) log("EXCEPTION: Floating-point");
+    if constexpr (log_exceptions) Log("EXCEPTION: Floating-point");
     HandleException();
     pc = GetCommonExceptionVector();
     cop0.cause.exc_code = 15;
@@ -82,7 +82,7 @@ u64 GetCommonExceptionVector()
 
 void IntegerOverflowException()
 {
-    if constexpr (log_exceptions) log("EXCEPTION: Integer Overflow");
+    if constexpr (log_exceptions) Log("EXCEPTION: Integer Overflow");
     HandleException();
     pc = GetCommonExceptionVector();
     cop0.cause.exc_code = 12;
@@ -91,7 +91,7 @@ void IntegerOverflowException()
 
 void InterruptException()
 {
-    if constexpr (log_exceptions) log("EXCEPTION: Interrupt");
+    if constexpr (log_exceptions) Log("EXCEPTION: Interrupt");
     HandleException();
     pc = GetCommonExceptionVector();
     cop0.cause.exc_code = 0;
@@ -115,7 +115,7 @@ void HandleException()
 
 void NmiException()
 {
-    if constexpr (log_exceptions) log("EXCEPTION: NMI");
+    if constexpr (log_exceptions) Log("EXCEPTION: NMI");
     HandleException();
     pc = cop0.error_epc; // TODO: not 0xFFFF'FFFF'BFC0'0000?
     cop0.status.ts = 0;
@@ -125,7 +125,7 @@ void NmiException()
 
 void ReservedInstructionException()
 {
-    if constexpr (log_exceptions) log("EXCEPTION: Reserved Instruction");
+    if constexpr (log_exceptions) Log("EXCEPTION: Reserved Instruction");
     HandleException();
     pc = GetCommonExceptionVector();
     cop0.cause.exc_code = 10;
@@ -134,7 +134,7 @@ void ReservedInstructionException()
 
 void ReservedInstructionCop2Exception()
 {
-    if constexpr (log_exceptions) log("EXCEPTION: Reserved Instruction");
+    if constexpr (log_exceptions) Log("EXCEPTION: Reserved Instruction");
     HandleException();
     pc = GetCommonExceptionVector();
     cop0.cause.exc_code = 10;
@@ -143,7 +143,7 @@ void ReservedInstructionCop2Exception()
 
 void SoftResetException()
 {
-    if constexpr (log_exceptions) log("EXCEPTION: Soft Reset");
+    if constexpr (log_exceptions) Log("EXCEPTION: Soft Reset");
     HandleException();
     pc = cop0.status.erl ? 0xFFFF'FFFF'BFC0'0000 : cop0.error_epc;
     cop0.status.rp = cop0.status.ts = 0;
@@ -152,7 +152,7 @@ void SoftResetException()
 
 void SyscallException()
 {
-    if constexpr (log_exceptions) log("EXCEPTION: Syscall");
+    if constexpr (log_exceptions) Log("EXCEPTION: Syscall");
     HandleException();
     pc = GetCommonExceptionVector();
     cop0.cause.exc_code = 8;
@@ -161,7 +161,7 @@ void SyscallException()
 
 template<MemOp mem_op> void TlbInvalidException(u64 bad_vaddr)
 {
-    if constexpr (log_exceptions) log(std::format("EXCEPTION: TLB Invalid; vaddr {:016X}", bad_vaddr));
+    if constexpr (log_exceptions) Log(std::format("EXCEPTION: TLB Invalid; vaddr {:016X}", bad_vaddr));
     HandleException();
     pc = GetCommonExceptionVector();
     cop0.cause.exc_code = mem_op == MemOp::Write ? 3 : 2;
@@ -172,7 +172,7 @@ template<MemOp mem_op> void TlbInvalidException(u64 bad_vaddr)
 
 template<MemOp mem_op> void TlbMissException(u64 bad_vaddr)
 {
-    if constexpr (log_exceptions) log(std::format("EXCEPTION: TLB Miss; vaddr {:016X}", bad_vaddr));
+    if constexpr (log_exceptions) Log(std::format("EXCEPTION: TLB Miss; vaddr {:016X}", bad_vaddr));
     static constexpr s32 base_addr[2][2] = {
         0x8000'0000_s32,
         0x8000'0180_s32,
@@ -190,7 +190,7 @@ template<MemOp mem_op> void TlbMissException(u64 bad_vaddr)
 
 void TlbModificationException(u64 bad_vaddr)
 {
-    if constexpr (log_exceptions) log(std::format("EXCEPTION: TLB Modification; vaddr {:016X}", bad_vaddr));
+    if constexpr (log_exceptions) Log(std::format("EXCEPTION: TLB Modification; vaddr {:016X}", bad_vaddr));
     HandleException();
     pc = GetCommonExceptionVector();
     cop0.cause.exc_code = 1;
@@ -201,7 +201,7 @@ void TlbModificationException(u64 bad_vaddr)
 
 void TrapException()
 {
-    if constexpr (log_exceptions) log("EXCEPTION: Trap");
+    if constexpr (log_exceptions) Log("EXCEPTION: Trap");
     HandleException();
     pc = GetCommonExceptionVector();
     cop0.cause.exc_code = 13;
@@ -210,7 +210,7 @@ void TrapException()
 
 void WatchException()
 {
-    if constexpr (log_exceptions) log("EXCEPTION: Watch");
+    if constexpr (log_exceptions) Log("EXCEPTION: Watch");
     HandleException();
     pc = GetCommonExceptionVector();
     cop0.cause.exc_code = 23;
@@ -219,7 +219,7 @@ void WatchException()
 
 template<MemOp mem_op> void XtlbMissException(u64 bad_vaddr)
 {
-    if constexpr (log_exceptions) log(std::format("EXCEPTION: XTLB Miss; vaddr {:016X}", bad_vaddr));
+    if constexpr (log_exceptions) Log(std::format("EXCEPTION: XTLB Miss; vaddr {:016X}", bad_vaddr));
     static constexpr s32 base_addr[2][2] = {
         0x8000'0080_s32,
         0x8000'0180_s32,

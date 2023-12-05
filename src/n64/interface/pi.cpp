@@ -67,7 +67,7 @@ template<DmaType type> void InitDma()
     u32 dma_len = pi.wr_len + 1;
     if constexpr (type == DmaType::CartToRdram) {
         if constexpr (log_dma) {
-            log(
+            Log(
               std::format("DMA: from cart ROM ${:X} to RDRAM ${:X}: ${:X} bytes", pi.cart_addr, pi.dram_addr, dma_len));
         }
 
@@ -103,7 +103,7 @@ template<DmaType type> void InitDma()
         vr4300::InvalidateRange(pi.dram_addr, dram_addr_end);
     } else { /* RDRAM to cart */
         /* TODO: it seems we can write to SRAM/FLASH. */
-        log_warn("Attempted DMA from RDRAM to Cart, but this is unimplemented.");
+        LogWarn("Attempted DMA from RDRAM to Cart, but this is unimplemented.");
         OnDmaFinish();
         return;
     }
@@ -149,7 +149,7 @@ u32 ReadReg(u32 addr)
         std::memcpy(&ret, (u32*)(&pi) + offset, 4);
     }
     if constexpr (log_io_pi) {
-        log(std::format("PI: {} => ${:08X}", RegOffsetToStr(offset), ret));
+        Log(std::format("PI: {} => ${:08X}", RegOffsetToStr(offset), ret));
     }
     return ret;
 }
@@ -197,7 +197,7 @@ void WriteReg(u32 addr, u32 data)
     static_assert(sizeof(pi) >> 2 == 0x10);
     u32 offset = addr >> 2 & 0xF;
     if constexpr (log_io_pi) {
-        log(std::format("PI: {} <= ${:08X}", RegOffsetToStr(offset), data));
+        Log(std::format("PI: {} <= ${:08X}", RegOffsetToStr(offset), data));
     }
 
     switch (offset) {
@@ -240,7 +240,7 @@ void WriteReg(u32 addr, u32 data)
     case Register::BsdDom2Pgs: pi.bsd_dom2_pgs = data; break;
     case Register::BsdDom2Rls: pi.bsd_dom2_rls = data; break;
 
-    default: log_warn(std::format("Unexpected write made to PI register at address ${:08X}", addr));
+    default: LogWarn(std::format("Unexpected write made to PI register at address ${:08X}", addr));
     }
 }
 

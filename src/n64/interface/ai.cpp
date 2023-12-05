@@ -52,7 +52,7 @@ u32 ReadReg(u32 addr)
         ret = dma_len[0];
     }
     if constexpr (log_io_ai) {
-        log(std::format("AI: {} => ${:08X}", RegOffsetToStr(addr >> 2 & 7), ret));
+        Log(std::format("AI: {} => ${:08X}", RegOffsetToStr(addr >> 2 & 7), ret));
     }
     return ret;
 }
@@ -108,7 +108,7 @@ void WriteReg(u32 addr, u32 data)
 {
     u32 offset = addr >> 2 & 7;
     if constexpr (log_io_ai) {
-        log(std::format("AI: {} <= ${:08X}", RegOffsetToStr(offset), data));
+        Log(std::format("AI: {} <= ${:08X}", RegOffsetToStr(offset), data));
     }
 
     switch (offset) {
@@ -143,7 +143,7 @@ void WriteReg(u32 addr, u32 data)
 
     case Register::Bitrate: break;
 
-    default: log_warn(std::format("Unexpected write made to AI register at address ${:08X}", addr));
+    default: LogWarn(std::format("Unexpected write made to AI register at address ${:08X}", addr));
     }
 }
 

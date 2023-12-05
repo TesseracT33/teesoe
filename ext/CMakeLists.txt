@@ -29,6 +29,7 @@ add_library(imgui STATIC
 	imgui/imgui_tables.cpp
 	imgui/imgui_widgets.cpp
 	imgui/backends/imgui_impl_sdl3.cpp
+	imgui/backends/imgui_impl_sdlrenderer3.cpp
 	imgui/backends/imgui_impl_vulkan.cpp
 )
 target_include_directories(imgui PUBLIC 
@@ -61,6 +62,7 @@ add_library(parallel-rdp-standalone STATIC
 	parallel-rdp-standalone/util/timeline_trace_file.cpp
 	parallel-rdp-standalone/util/timer.cpp
 	parallel-rdp-standalone/volk/volk.c
+	parallel-rdp-standalone/vulkan/texture/texture_format.cpp
 	parallel-rdp-standalone/vulkan/buffer.cpp
 	parallel-rdp-standalone/vulkan/buffer_pool.cpp
 	parallel-rdp-standalone/vulkan/command_buffer.cpp
@@ -73,6 +75,7 @@ add_library(parallel-rdp-standalone STATIC
 	parallel-rdp-standalone/vulkan/fence.cpp
 	parallel-rdp-standalone/vulkan/fence_manager.cpp
 	parallel-rdp-standalone/vulkan/image.cpp
+	parallel-rdp-standalone/vulkan/indirect_layout.cpp
 	parallel-rdp-standalone/vulkan/memory_allocator.cpp
 	parallel-rdp-standalone/vulkan/pipeline_event.cpp
 	parallel-rdp-standalone/vulkan/query_pool.cpp
@@ -81,7 +84,6 @@ add_library(parallel-rdp-standalone STATIC
 	parallel-rdp-standalone/vulkan/semaphore.cpp
 	parallel-rdp-standalone/vulkan/semaphore_manager.cpp
 	parallel-rdp-standalone/vulkan/shader.cpp
-	parallel-rdp-standalone/vulkan/texture_format.cpp
 	parallel-rdp-standalone/vulkan/wsi.cpp
 )
 target_include_directories(parallel-rdp-standalone PUBLIC 

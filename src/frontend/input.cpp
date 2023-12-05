@@ -73,7 +73,7 @@ Status Init()
         return FailureStatus(std::format("Failed to init gamecontroller system: {}\n", SDL_GetError()));
     }
     if (!LoadBindingsFromDisk().Ok()) {
-        log_warn("Failed to load user bindings! Using defaults.");
+        LogWarn("Failed to load user bindings! Using defaults.");
         SetDefaultBindings();
         SaveBindingsToDisk();
     }
