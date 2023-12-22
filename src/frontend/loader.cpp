@@ -61,7 +61,7 @@ System GetSystem()
 Status LoadCore(System system_arg)
 {
     if (CoreIsLoaded()) {
-        core->TearDown();
+        core = {};
     }
     switch (system_arg) {
     case System::CHIP8: core = nullptr; break;

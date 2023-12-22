@@ -12,7 +12,6 @@ public:
     virtual void EnqueueCommand(int cmd_len, u32* cmd_ptr) = 0;
     virtual Status Initialize() = 0;
     virtual void OnFullSync() = 0;
-    virtual void TearDown() = 0;
     virtual void UpdateScreen() = 0;
 };
 

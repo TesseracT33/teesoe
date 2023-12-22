@@ -2,6 +2,8 @@
 
 #include "types.hpp"
 
+#include <stop_token>
+
 namespace gba::scheduler {
 
 using DriverRunFunc = u64 (*)(u64);
@@ -34,6 +36,6 @@ void EngageDriver(DriverType type, DriverRunFunc run_func, DriverSuspendFunc sus
 u64 GetGlobalTime();
 void Initialize();
 void RemoveEvent(EventType type);
-void Run();
+void Run(std::stop_token stop_token);
 
 } // namespace gba::scheduler

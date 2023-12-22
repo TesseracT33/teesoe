@@ -92,14 +92,14 @@ void RemoveEvent(EventType event_type)
     }
 }
 
-template<CpuImpl vr4300_impl, CpuImpl rsp_impl> void Run()
+template<CpuImpl vr4300_impl, CpuImpl rsp_impl> void Run(std::stop_token stop_token)
 {
     Initialize();
     rsp::SetActiveCpuImpl(rsp_impl);
     vr4300::SetActiveCpuImpl(vr4300_impl);
 
     s32 cpu_cycle_overrun = 0, rsp_cycle_overrun = 0;
-    while (!quit) {
+    while (!stop_token.stop_requested()) {
         if (cpu_cycle_overrun < cpu_cycles_per_update) {
             u32 cpu_step = u32(cpu_cycles_per_update - cpu_cycle_overrun);
             cpu_cycle_overrun =
@@ -121,14 +121,9 @@ template<CpuImpl vr4300_impl, CpuImpl rsp_impl> void Run()
     }
 }
 
-void Stop()
-{
-    quit = true;
-}
-
-template void Run<CpuImpl::Interpreter, CpuImpl::Interpreter>();
-template void Run<CpuImpl::Interpreter, CpuImpl::Recompiler>();
-template void Run<CpuImpl::Recompiler, CpuImpl::Interpreter>();
-template void Run<CpuImpl::Recompiler, CpuImpl::Recompiler>();
+template void Run<CpuImpl::Interpreter, CpuImpl::Interpreter>(std::stop_token);
+template void Run<CpuImpl::Interpreter, CpuImpl::Recompiler>(std::stop_token);
+template void Run<CpuImpl::Recompiler, CpuImpl::Interpreter>(std::stop_token);
+template void Run<CpuImpl::Recompiler, CpuImpl::Recompiler>(std::stop_token);
 
 } // namespace n64::scheduler

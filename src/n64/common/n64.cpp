@@ -24,9 +24,11 @@ void N64::ApplyConfig(CoreConfiguration config)
       std::exchange(cpu_impl, config.n64.use_cpu_recompiler ? CpuImpl::Recompiler : CpuImpl::Interpreter);
     CpuImpl prev_rsp_impl =
       std::exchange(rsp_impl, config.n64.use_rsp_recompiler ? CpuImpl::Recompiler : CpuImpl::Interpreter);
+    // TODO: handle this
     if (running && (cpu_impl != prev_cpu_impl || rsp_impl != prev_rsp_impl)) {
-        Stop();
-        Run();
+        /*Stop();
+        Run();*/
+        throw std::exception("Unhandled");
     }
 }
 
@@ -59,9 +61,13 @@ Status N64::Init()
     return OkStatus();
 }
 
-Status N64::InitGraphics()
+Status N64::InitGraphics(std::shared_ptr<RenderContext> render_context)
 {
-    return rdp::MakeParallelRdp();
+    auto vulkan_render_context = std::dynamic_pointer_cast<VulkanRenderContext>(render_context);
+    if (!vulkan_render_context) {
+        throw std::invalid_argument("Invalid RenderContext provided to N64, not of type VulkanRenderContext");
+    }
+    return rdp::MakeParallelRdp(std::move(vulkan_render_context));
 }
 
 Status N64::LoadBios(std::filesystem::path const& path)
@@ -100,34 +106,23 @@ void N64::Resume()
 {
 }
 
-void N64::Run()
+void N64::Run(std::stop_token stop_token)
 {
-    if (!running) {
+    if (std::exchange(running, true)) {
         Reset();
         bool hle_pif = !bios_loaded || skip_boot_rom;
         vr4300::InitRun(hle_pif);
-        running = true;
     }
     if (cpu_impl == n64::CpuImpl::Interpreter) {
-        rsp_impl == n64::CpuImpl::Interpreter ? scheduler::Run<CpuImpl::Interpreter, CpuImpl::Interpreter>()
-                                              : scheduler::Run<CpuImpl::Interpreter, CpuImpl::Recompiler>();
+        rsp_impl == n64::CpuImpl::Interpreter ? scheduler::Run<CpuImpl::Interpreter, CpuImpl::Interpreter>(stop_token)
+                                              : scheduler::Run<CpuImpl::Interpreter, CpuImpl::Recompiler>(stop_token);
     } else {
-        rsp_impl == n64::CpuImpl::Interpreter ? scheduler::Run<CpuImpl::Recompiler, CpuImpl::Interpreter>()
-                                              : scheduler::Run<CpuImpl::Recompiler, CpuImpl::Recompiler>();
+        rsp_impl == n64::CpuImpl::Interpreter ? scheduler::Run<CpuImpl::Recompiler, CpuImpl::Interpreter>(stop_token)
+                                              : scheduler::Run<CpuImpl::Recompiler, CpuImpl::Recompiler>(stop_token);
     }
-}
-
-void N64::Stop()
-{
-    scheduler::Stop();
-    running = false;
 }
 
 void N64::StreamState(Serializer& serializer)
-{
-}
-
-void N64::TearDown()
 {
 }
 

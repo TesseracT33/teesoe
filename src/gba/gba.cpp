@@ -24,7 +24,7 @@ Status GBA::EnableAudio(bool enable)
     return UnimplementedStatus();
 }
 
-std::span<const std::string_view> GBA::GetInputNames() const
+std::span<std::string_view const> GBA::GetInputNames() const
 {
     static constexpr std::array<std::string_view, 10>
       names = { "A", "B", "Select", "Start", "Right", "Left", "Up", "Down", "R", "L" };
@@ -86,20 +86,12 @@ void GBA::Resume()
 {
 }
 
-void GBA::Run()
+void GBA::Run(std::stop_token stop_token)
 {
-    scheduler::Run();
-}
-
-void GBA::Stop()
-{
+    scheduler::Run(stop_token);
 }
 
 void GBA::StreamState(Serializer& serializer)
-{
-}
-
-void GBA::TearDown()
 {
 }
 
