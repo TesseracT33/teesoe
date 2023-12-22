@@ -1,15 +1,12 @@
 #pragma once
 
-#include "status.hpp"
-
-#include "imgui_impl_vulkan.h"
 #include "SDL.h"
+#include "status.hpp"
 
 #include <filesystem>
 
 namespace frontend::gui {
 
-void FrameVulkan(VkCommandBuffer vk_command_buffer); // To be called by a core while game is running
 SDL_Window* GetSdlWindow();
 void GetWindowSize(int* w, int* h);
 Status Init(std::filesystem::path work_path);

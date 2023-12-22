@@ -3,10 +3,12 @@
 #include "core.hpp"
 #include "types.hpp"
 
+#include <stop_token>
+
 struct GBA : public Core {
     void ApplyConfig(CoreConfiguration config) override;
     Status EnableAudio(bool enable) override;
-    std::span<const std::string_view> GetInputNames() const override;
+    std::span<std::string_view const> GetInputNames() const override;
     Status Init() override;
     Status InitGraphics() override;
     Status LoadBios(std::filesystem::path const& path) override;
@@ -16,9 +18,7 @@ struct GBA : public Core {
     void Pause() override;
     void Reset() override;
     void Resume() override;
-    void Run() override;
-    void Stop() override;
+    void Run(std::stop_token stop_token) override;
     void StreamState(Serializer& serializer) override;
-    void TearDown() override;
     void UpdateScreen() override;
 };

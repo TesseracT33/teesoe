@@ -118,9 +118,9 @@ void RemoveEvent(EventType type)
     }
 }
 
-void Run()
+void Run(std::stop_token stop_token)
 {
-    while (true) {
+    while (!stop_token.stop_requested()) {
         while (global_time < events.front().time) {
             global_time += drivers.front().run_function(events.front().time - global_time);
         }

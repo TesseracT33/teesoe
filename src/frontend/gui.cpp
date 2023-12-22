@@ -1,18 +1,20 @@
-#include "gui.hpp"
+#include "vulkan_headers.hpp"
+
 #include "audio.hpp"
 #include "config.hpp"
 #include "core_configuration.hpp"
 #include "frontend/message.hpp"
+#include "gui.hpp"
 #include "imgui.h"
 #include "imgui_impl_sdl3.h"
-#include "imgui_impl_vulkan.h"
 #include "input.hpp"
 #include "loader.hpp"
 #include "log.hpp"
 #include "nfd.h"
-#include "parallel-rdp-standalone/volk/volk.h"
+#include "render_context.hpp"
+#include "sdl_render_context.hpp"
 #include "serializer.hpp"
-#include "vulkan.hpp"
+#include "vulkan_render_context.hpp"
 
 #include <algorithm>
 #include <array>
@@ -21,11 +23,16 @@
 #include <filesystem>
 #include <format>
 #include <optional>
+#include <stop_token>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <unordered_map>
 #include <utility>
 #include <vector>
+
+#undef min
+#undef max
 
 namespace fs = std::filesystem;
 namespace rng = std::ranges;
@@ -85,6 +92,8 @@ static void StopGame();
 static void UpdateWindowTitle(float fps = 0.f);
 static void UseDefaultConfig();
 
+constexpr std::chrono::milliseconds gui_update_period{ 10 };
+
 static bool game_is_running;
 static bool menu_enable_audio;
 static bool menu_fullscreen;
@@ -96,7 +105,6 @@ static bool show_core_settings_window;
 static bool show_menu;
 static bool start_game;
 
-static int frame_counter;
 static int window_height, window_width;
 
 static fs::path exe_path;
@@ -108,6 +116,10 @@ static std::unordered_map<System, GameList> game_lists;
 static SDL_Window* sdl_window;
 
 static CoreConfiguration n64_configuration;
+
+static std::shared_ptr<RenderContext> render_context;
+
+static std::jthread emulator_thread;
 
 void Draw()
 {
@@ -432,28 +444,6 @@ std::optional<fs::path> FolderDialog()
     return {};
 }
 
-void FrameVulkan(VkCommandBuffer vk_command_buffer)
-{
-    PollEvents();
-    if (NeedsDraw()) {
-        ImGui_ImplVulkan_NewFrame();
-        ImGui_ImplSDL3_NewFrame();
-        ImGui::NewFrame();
-        Draw();
-        ImGui::Render();
-        ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), vk_command_buffer);
-    }
-    if (++frame_counter == 60) {
-        static std::chrono::time_point time = std::chrono::steady_clock::now();
-        auto microsecs_to_render_60_frames =
-          std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - time).count();
-        float fps = 60.0f * 1'000'000.0f / float(microsecs_to_render_60_frames);
-        UpdateWindowTitle(fps);
-        frame_counter = 0;
-        time = std::chrono::steady_clock::now();
-    }
-}
-
 SDL_Window* GetSdlWindow()
 {
     if (!sdl_window) {
@@ -498,11 +488,14 @@ Status Init(fs::path work_path)
     if (status = InitSdl(); !status.Ok()) {
         return status;
     }
+    if (status = InitImgui(); !status.Ok()) {
+        return status;
+    }
     if (status = InitGraphics(); !status.Ok()) {
         return status;
     }
-    if (status = InitImgui(); !status.Ok()) {
-        return status;
+    if (status = message::Init(GetSdlWindow()); !status.Ok()) {
+        LogError(std::format("Failed to initialize user message system; {}", status.Message()));
     }
     if (status = audio::Init(); !status.Ok()) {
         message::Error(std::format("Failed to init audio system; {}", status.Message()));
@@ -521,16 +514,26 @@ Status Init(fs::path work_path)
 
 Status InitGraphics()
 {
-    if (CoreIsLoaded()) {
-        return GetCore()->InitGraphics();
-    } else {
-        // TODO: temporary solution to get vulkan rendering while n64 core is not supposed to be running
-        Status status = LoadCore(System::N64);
-        if (!status.Ok()) {
-            return status;
-        }
+    System system = GetSystem();
+    switch (system) {
+    case System::None:
+    case System::CHIP8:
+    case System::GB:
+    case System::GBA:
+    case System::NES: render_context = SdlRenderContext::Create(Draw);
+    case System::N64: render_context = VulkanRenderContext::Create(Draw);
+    default: throw std::exception("Unknown system loaded; failed to create render context");
     }
-    return GetCore()->InitGraphics();
+    if (render_context) {
+        if (system == System::None) {
+            render_context->EnableRendering(false);
+            return OkStatus();
+        } else {
+            return GetCore()->InitGraphics(render_context);
+        }
+    } else {
+        return FailureStatus("Failed to initialize render context!");
+    }
 }
 
 Status InitImgui()
@@ -538,37 +541,8 @@ Status InitImgui()
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
+    (void)io;
     ImGui::StyleColorsDark();
-
-    ImGui_ImplVulkan_LoadFunctions(
-      [](char const* fn, void*) { return vkGetInstanceProcAddr(vulkan::GetInstance(), fn); });
-
-    if (!ImGui_ImplSDL3_InitForVulkan(sdl_window)) {
-        return FailureStatus("ImGui_ImplSDL3_InitForVulkan failed");
-    }
-
-    ImGui_ImplVulkan_InitInfo init_info = {
-        .Instance = vulkan::GetInstance(),
-        .PhysicalDevice = vulkan::GetPhysicalDevice(),
-        .Device = vulkan::GetDevice(),
-        .QueueFamily = vulkan::GetGraphicsQueueFamily(),
-        .Queue = vulkan::GetQueue(),
-        .PipelineCache = vulkan::GetPipelineCache(),
-        .DescriptorPool = vulkan::GetDescriptorPool(),
-        .MinImageCount = 2,
-        .ImageCount = 2,
-        .MSAASamples = VK_SAMPLE_COUNT_1_BIT,
-        .Allocator = vulkan::GetAllocator(),
-        .CheckVkResultFn = vulkan::CheckVkResult,
-    };
-
-    if (!ImGui_ImplVulkan_Init(&init_info, vulkan::GetRenderPass())) {
-        return FailureStatus("ImGui_ImplVulkan_Init failed");
-    }
-
-    io.Fonts->AddFontDefault();
-    ImGui_ImplVulkan_CreateFontsTexture();
-    vulkan::SubmitRequestedCommandBuffer();
 
     return OkStatus();
 }
@@ -577,16 +551,6 @@ Status InitSdl()
 {
     if (SDL_Init(SDL_INIT_EVERYTHING) != 0) {
         return FailureStatus(std::format("Failed to init SDL: {}\n", SDL_GetError()));
-    }
-    sdl_window = SDL_CreateWindow("tessoe",
-      window_width,
-      window_height,
-      SDL_WINDOW_INPUT_FOCUS | SDL_WINDOW_RESIZABLE | SDL_WINDOW_VULKAN);
-    if (!sdl_window) {
-        return FailureStatus(std::format("Failed to create SDL window: {}\n", SDL_GetError()));
-    }
-    if (Status status = message::Init(sdl_window); !status.Ok()) {
-        LogError(std::format("Failed to initialize user message system; {}", status.Message()));
     }
     return OkStatus();
 }
@@ -658,18 +622,8 @@ void OnCtrlKeyPress(SDL_Keycode keycode)
 void OnExit()
 {
     StopGame();
-
-    VkResult vk_result = vkDeviceWaitIdle(vulkan::GetDevice());
-    vulkan::CheckVkResult(vk_result);
-    ImGui_ImplVulkan_Shutdown();
-    ImGui_ImplSDL3_Shutdown();
-    ImGui::DestroyContext();
-    // ImGui::Gui_ImplVulkanH_DestroyWindow(vulkan::GetInstance(), vulkan::GetDevice(), &vk_main_window_data,
-    // vulkan::GetAllocator());
-    vulkan::TearDown();
-
+    render_context = {};
     NFD_Quit();
-    SDL_DestroyWindow(sdl_window);
     SDL_Quit();
 }
 
@@ -808,7 +762,7 @@ void OnSdlQuit()
 {
     quit = true;
     if (CoreIsLoaded()) {
-        GetCore()->Stop();
+        emulator_thread = {};
     }
 }
 
@@ -886,14 +840,10 @@ void Run(bool boot_game_immediately)
     while (!quit) {
         if (start_game) {
             StartGame();
-        } else {
-            PollEvents();
-            if (CoreIsLoaded()) {
-                GetCore()->UpdateScreen();
-            } else {
-                vulkan::UpdateScreenNoCore();
-            }
         }
+        Draw();
+        PollEvents();
+        std::this_thread::sleep_for(gui_update_period);
     }
     OnExit();
 }
@@ -905,15 +855,14 @@ void StartGame()
     show_game_selection_window = false;
     UpdateWindowTitle();
     GetCore()->Reset();
-    GetCore()->Run();
+    emulator_thread = std::jthread([](std::stop_token token) { GetCore()->Run(token); });
 }
 
 void StopGame()
 {
-    if (CoreIsLoaded()) {
-        GetCore()->Stop();
+    if (std::exchange(game_is_running, false)) {
+        emulator_thread = {};
     }
-    game_is_running = false;
     UpdateWindowTitle();
     show_game_selection_window = true;
     // TODO: show nice n64 background on window

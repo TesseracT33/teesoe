@@ -1,6 +1,5 @@
 #include "parallel_rdp_wrapper.hpp"
 #include "frontend/gui.hpp"
-#include "frontend/vulkan.hpp"
 #include "interface/vi.hpp"
 #include "log.hpp"
 #include "memory/rdram.hpp"
@@ -20,6 +19,10 @@
 #include <vector>
 
 namespace n64::rdp {
+
+ParallelRDPWrapper::~ParallelRDPWrapper()
+{
+}
 
 void ParallelRDPWrapper::EnqueueCommand(int cmd_len, u32* cmd_ptr)
 {
@@ -62,8 +65,12 @@ VkQueue ParallelRDPWrapper::GetVkQueue()
     return wsi.get_context().get_queue_info().queues[Vulkan::QueueIndices::QUEUE_INDEX_GRAPHICS];
 }
 
-Status ParallelRDPWrapper::Initialize()
+Status ParallelRDPWrapper::Init(std::shared_ptr<VulkanRenderContext> render_context)
 {
+    if (!render_context) {
+        throw std::invalid_argument("Nullptr VulkanRenderContext provided to ParallelRDP");
+    }
+
     if (volkInitialize() != VK_SUCCESS) {
         return FailureStatus("[parallel-rdp] Failed to initialize volk.");
     }
@@ -95,10 +102,6 @@ Status ParallelRDPWrapper::Initialize()
       flags);
     if (!cmd_processor->device_is_supported()) {
         return FailureStatus("Vulkan device not supported.");
-    }
-
-    if (Status status = vulkan::Init(); !status.Ok()) {
-        return status;
     }
 
     ReloadViRegisters();
@@ -135,10 +138,6 @@ void ParallelRDPWrapper::ReloadViRegisters()
 void ParallelRDPWrapper::SubmitRequestedVkCommandBuffer()
 {
     wsi.get_device().submit(requested_command_buffer);
-}
-
-void ParallelRDPWrapper::TearDown()
-{
 }
 
 void ParallelRDPWrapper::UpdateScreen()
@@ -200,7 +199,7 @@ void ParallelRDPWrapper::UpdateScreen()
             cmd->draw(3);
         }
 
-        frontend::gui::FrameVulkan(cmd->get_command_buffer());
+        render_context->Render(cmd->get_command_buffer());
 
         cmd->end_render_pass();
     }
@@ -237,7 +236,7 @@ VkApplicationInfo const* ParallelRDPWrapper::SDLWSIPlatform::get_application_inf
 {
     static constexpr VkApplicationInfo app_info = {
         .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
-        .pApplicationName = "N63.5",
+        .pApplicationName = "tessoe",
         .apiVersion = VK_API_VERSION_1_1,
     };
     return &app_info;

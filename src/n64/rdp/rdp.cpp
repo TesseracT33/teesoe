@@ -119,12 +119,9 @@ void LoadExecuteCommands()
     dp.current = dp.end;
 }
 
-Status MakeParallelRdp()
+Status MakeParallelRdp(std::shared_ptr<VulkanRenderContext> render_context)
 {
-    if (implementation) {
-        implementation->TearDown();
-    }
-    implementation = std::make_unique<ParallelRDPWrapper>();
+    implementation = std::make_unique<ParallelRDPWrapper>(std::move(render_context));
     return implementation->Initialize();
 }
 

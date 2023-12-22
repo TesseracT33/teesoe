@@ -12,7 +12,9 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
 	frontend/input.cpp
 	frontend/loader.cpp
 	frontend/message.cpp
-	frontend/vulkan.cpp
+	frontend/render_context.cpp
+	frontend/sdl_render_context.cpp
+	frontend/vulkan_render_context.cpp
 
 	mips/disassembler.hpp
 	mips/interpreter.hpp
