@@ -1,8 +1,8 @@
 #include "timers.hpp"
+#include "bit.hpp"
 #include "bus.hpp"
 #include "irq.hpp"
 #include "scheduler.hpp"
-#include "util.hpp"
 
 #include <algorithm>
 #include <array>
@@ -223,8 +223,8 @@ void Timer::OnDisable()
 
 void Timer::OnWriteControlTimerEnabled(Control new_control)
 {
-    const u64 global_time = scheduler::GetGlobalTime();
-    const u16 real_counter =
+    u64 const global_time = scheduler::GetGlobalTime();
+    u16 const real_counter =
       GetRealCounter(); /* important: call before setting new control, as this depends on control */
     bool const prev_enable = control.enable;
     control = new_control;
@@ -359,7 +359,7 @@ void Timer::WriteControl(u8 data)
 
 void Timer::WriteReload(u8 value, u8 byte_index)
 {
-    set_byte(reload, byte_index, value);
+    SetByte(reload, byte_index, value);
     if (control.enable) {
         UpdatePeriod();
     }

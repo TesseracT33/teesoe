@@ -1,7 +1,7 @@
 #pragma once
 
 #include "mmu.hpp"
-#include "types.hpp"
+#include "numtypes.hpp"
 
 namespace n64::vr4300 {
 

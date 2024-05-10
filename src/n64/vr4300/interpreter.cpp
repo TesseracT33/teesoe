@@ -2,7 +2,7 @@
 #include "cop0.hpp"
 #include "decoder.hpp"
 #include "exceptions.hpp"
-#include "host.hpp"
+#include "platform.hpp"
 #include "mmu.hpp"
 
 #include <array>

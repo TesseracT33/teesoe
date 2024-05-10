@@ -1,6 +1,6 @@
 #pragma once
 
-#include "types.hpp"
+#include "numtypes.hpp"
 
 namespace ps1::r3000a {
 

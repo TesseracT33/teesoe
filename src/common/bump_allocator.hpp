@@ -1,7 +1,7 @@
 #pragma once
 
 #include "log.hpp"
-#include "types.hpp"
+#include "numtypes.hpp"
 
 #include <algorithm>
 #include <vector>

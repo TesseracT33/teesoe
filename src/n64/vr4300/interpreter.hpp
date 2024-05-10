@@ -3,7 +3,7 @@
 #include "exceptions.hpp"
 #include "mips/interpreter.hpp"
 #include "mmu.hpp"
-#include "types.hpp"
+#include "numtypes.hpp"
 #include "vr4300.hpp"
 
 namespace n64::vr4300 {

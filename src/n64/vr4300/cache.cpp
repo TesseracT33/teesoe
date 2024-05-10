@@ -1,4 +1,5 @@
 #include "cache.hpp"
+#include "algorithm"
 #include "cop0.hpp"
 #include "exceptions.hpp"
 #include "log.hpp"
@@ -7,7 +8,7 @@
 #include "mmu.hpp"
 #include "n64_build_options.hpp"
 #include "recompiler.hpp"
-#include "util.hpp"
+
 #include "vr4300.hpp"
 
 #include <algorithm>
@@ -173,7 +174,7 @@ void InitCache()
 
 template<std::signed_integral Int, MemOp mem_op> Int ReadCacheableArea(u32 paddr)
 { /* Precondition: paddr is aligned to sizeof(Int) */
-    static_assert(one_of(mem_op, MemOp::InstrFetch, MemOp::Read));
+    static_assert(OneOf(mem_op, MemOp::InstrFetch, MemOp::Read));
     if constexpr (log_cpu_instructions && mem_op == MemOp::InstrFetch) {
         last_paddr_on_instr_fetch = paddr;
     }

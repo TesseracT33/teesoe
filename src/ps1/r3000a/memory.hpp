@@ -1,7 +1,7 @@
 #pragma once
 
-#include "types.hpp"
-#include "util.hpp"
+#include "numtypes.hpp"
+
 
 #include <array>
 #include <concepts>

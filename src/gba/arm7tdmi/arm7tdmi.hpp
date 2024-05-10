@@ -1,7 +1,7 @@
 #pragma once
 
 #include "serializer.hpp"
-#include "types.hpp"
+#include "numtypes.hpp"
 
 #include <algorithm>
 #include <array>

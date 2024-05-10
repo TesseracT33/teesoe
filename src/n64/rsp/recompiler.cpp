@@ -187,7 +187,6 @@ void Invalidate(u32 addr)
 void InvalidateRange(u32 addr_lo, u32 addr_hi)
 {
     if (cpu_impl == CpuImpl::Recompiler) {
-        ASSUME(addr_lo <= addr_hi);
         assert(addr_hi <= 0x1000);
         addr_lo = std::min(addr_lo, 0xFFF_u32);
         addr_hi = std::min(addr_hi, 0xFFF_u32);

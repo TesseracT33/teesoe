@@ -1,12 +1,12 @@
 #pragma once
 
+#include "algorithm.hpp"
 #include "asmjit/a64.h"
 #include "asmjit/x86.h"
 #include "build_options.hpp"
-#include "host.hpp"
 #include "log.hpp"
-#include "types.hpp"
-#include "util.hpp"
+#include "numtypes.hpp"
+#include "platform.hpp"
 
 #include <array>
 #include <bit>
@@ -162,9 +162,9 @@ constexpr bool is_volatile(HostGpr gpr)
     } else {
         using namespace asmjit::x86;
         if constexpr (os.windows) {
-            return one_of(gpr, rax, rcx, rdx, r8, r9, r10, r11);
+            return OneOf(gpr, rax, rcx, rdx, r8, r9, r10, r11);
         } else {
-            return one_of(gpr, rax, rdi, rsi, rdx, rcx, r8, r9, r10, r11);
+            return OneOf(gpr, rax, rdi, rsi, rdx, rcx, r8, r9, r10, r11);
         }
     }
 }

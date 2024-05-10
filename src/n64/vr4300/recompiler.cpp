@@ -11,7 +11,7 @@
 #include "jit_util.hpp"
 #include "mmu.hpp"
 #include "n64_build_options.hpp"
-#include "util.hpp"
+
 #include "vr4300.hpp"
 
 #include <algorithm>
@@ -235,7 +235,6 @@ void Invalidate(u32 addr)
 void InvalidateRange(u32 addr_lo, u32 addr_hi)
 {
     if (cpu_impl == CpuImpl::Recompiler) {
-        ASSUME(addr_lo <= addr_hi);
         assert(addr_hi <= pool_max_addr_excl);
         addr_lo = std::min(addr_lo, pool_max_addr_excl - 1);
         addr_hi = std::min(addr_hi, pool_max_addr_excl - 1);

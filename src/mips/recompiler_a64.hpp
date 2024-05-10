@@ -1,6 +1,6 @@
 #pragma once
 
-#include "host.hpp"
+#include "platform.hpp"
 #include "recompiler.hpp"
 
 // WIP

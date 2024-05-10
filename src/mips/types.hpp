@@ -1,8 +1,7 @@
 #pragma once
 
-#include "common/types.hpp"
-#include "common/util.hpp"
 #include "disassembler.hpp"
+#include "numtypes.hpp"
 
 #include <array>
 #include <concepts>
@@ -47,7 +46,7 @@ template<std::signed_integral Int> struct Gpr {
 
     Int operator[](u32 idx) const { return gpr[idx]; } // return by value so that writes have to be made through 'set'
 
-    std::span<const Int, 32> view() const { return gpr; }
+    std::span<Int const, 32> view() const { return gpr; }
 
     std::string Format() const
     {

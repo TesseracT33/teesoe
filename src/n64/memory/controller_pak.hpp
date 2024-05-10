@@ -1,7 +1,7 @@
 #pragma once
 
 #include "status.hpp"
-#include "types.hpp"
+#include "numtypes.hpp"
 
 #include <filesystem>
 #include <span>

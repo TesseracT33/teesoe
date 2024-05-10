@@ -1,7 +1,7 @@
 #include "irq.hpp"
 #include "arm7tdmi/arm7tdmi.hpp"
+#include "bit.hpp"
 #include "scheduler.hpp"
-#include "util.hpp"
 
 #include <utility>
 
@@ -37,7 +37,7 @@ void Raise(Source source)
 
 u8 ReadIE(u8 byte_index)
 {
-    return get_byte(IE, byte_index);
+    return GetByte(IE, byte_index);
 }
 
 u16 ReadIE()
@@ -47,7 +47,7 @@ u16 ReadIE()
 
 u8 ReadIF(u8 byte_index)
 {
-    return get_byte(IF, byte_index);
+    return GetByte(IF, byte_index);
 }
 
 u16 ReadIF()
@@ -66,7 +66,7 @@ void StreamState(Serializer& stream)
 
 void WriteIE(u8 data, u8 byte_index)
 {
-    set_byte(IE, byte_index, data);
+    SetByte(IE, byte_index, data);
     CheckIrq();
 }
 
@@ -78,7 +78,7 @@ void WriteIE(u16 data)
 
 void WriteIF(u8 data, u8 byte_index)
 {
-    set_byte(IF, byte_index, IF & ~data & 0xFF);
+    SetByte(IF, byte_index, IF & ~data & 0xFF);
     CheckIrq();
 }
 

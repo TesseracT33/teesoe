@@ -1,7 +1,7 @@
 #pragma once
 
 #include "core.hpp"
-#include "types.hpp"
+#include "numtypes.hpp"
 
 struct GBA : public Core {
     void ApplyConfig(CoreConfiguration config) override;

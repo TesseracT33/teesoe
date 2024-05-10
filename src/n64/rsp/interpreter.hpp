@@ -2,7 +2,7 @@
 
 #include "mips/interpreter.hpp"
 #include "rsp.hpp"
-#include "types.hpp"
+#include "numtypes.hpp"
 
 namespace n64::rsp {
 

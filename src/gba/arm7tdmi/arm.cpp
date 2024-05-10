@@ -1,6 +1,8 @@
 #include "../bus.hpp"
+#include "algorithm.hpp"
 #include "arm7tdmi.hpp"
-#include "util.hpp"
+#include "bit.hpp"
+#include "numeric.hpp"
 
 #define sp (r[13])
 #define lr (r[14])
@@ -266,7 +268,7 @@ void BlockDataTransfer(u32 opcode) /* LDM, STM */
 
 void Branch(u32 opcode) /* B */
 {
-    s32 offset = sign_extend<s32, 26>((opcode & 0xFF'FFFF) << 2);
+    s32 offset = SignExtend<s32, 26>((opcode & 0xFF'FFFF) << 2);
     pc += offset;
     FlushPipeline();
 }
@@ -289,7 +291,7 @@ void BranchAndExchange(u32 opcode) /* BX */
 
 void BranchAndLink(u32 opcode) /* BL */
 {
-    s32 offset = sign_extend<s32, 26>((opcode & 0xFF'FFFF) << 2);
+    s32 offset = SignExtend<s32, 26>((opcode & 0xFF'FFFF) << 2);
     lr = pc - 4; /* The PC value written into R14 is adjusted to allow for the prefetch, and contains the address of the
                     instruction following the BL instruction */
     pc += offset;
@@ -301,7 +303,7 @@ void DataProcessing(u32 opcode) /* ADC, ADD, AND, BIC, CMN, CMP, EOR, MOV, MVN, 
 {
     using enum ArmDataProcessingInstruction;
 
-    static constexpr bool is_arithmetic_instr = one_of(instr, ADC, ADD, CMN, CMP, RSB, RSC, SBC, SUB);
+    static constexpr bool is_arithmetic_instr = OneOf(instr, ADC, ADD, CMN, CMP, RSB, RSC, SBC, SUB);
 
     auto rd = opcode >> 12 & 0xF;
     auto rn = opcode >> 16 & 0xF;
@@ -343,7 +345,7 @@ void DataProcessing(u32 opcode) /* ADC, ADD, AND, BIC, CMN, CMP, EOR, MOV, MVN, 
         if constexpr (instr == SBC) return op1 - op2 + cpsr.carry - 1;
     }();
 
-    if constexpr (!one_of(instr, CMN, CMP, TEQ, TST)) {
+    if constexpr (!OneOf(instr, CMN, CMP, TEQ, TST)) {
         r[rd] = result;
         if (rd == 15) {
             FlushPipeline();
@@ -363,19 +365,19 @@ void DataProcessing(u32 opcode) /* ADC, ADD, AND, BIC, CMN, CMP, EOR, MOV, MVN, 
                 case cpsr_mode_bits_system: SetMode<Mode::System>(); break;
                 default: assert(false); break;
                 }
-                SetExecutionState(static_cast<ExecutionState>(get_bit(spsr, 5)));
+                SetExecutionState(static_cast<ExecutionState>(GetBit(spsr, 5)));
                 cpsr = std::bit_cast<CPSR>(spsr);
             }
         } else {
             cpsr.zero = result == 0;
-            cpsr.negative = get_bit(result, 31);
+            cpsr.negative = GetBit(result, 31);
             if constexpr (is_arithmetic_instr) {
                 auto cond = [&] {
-                    if constexpr (one_of(instr, ADC, ADD, CMN)) return (op1 ^ result) & (op2 ^ result);
-                    if constexpr (one_of(instr, CMP, SBC, SUB)) return (op1 ^ op2) & (op1 ^ result);
-                    if constexpr (one_of(instr, RSB, RSC)) return (op1 ^ op2) & (op2 ^ result);
+                    if constexpr (OneOf(instr, ADC, ADD, CMN)) return (op1 ^ result) & (op2 ^ result);
+                    if constexpr (OneOf(instr, CMP, SBC, SUB)) return (op1 ^ op2) & (op1 ^ result);
+                    if constexpr (OneOf(instr, RSB, RSC)) return (op1 ^ op2) & (op2 ^ result);
                 }();
-                cpsr.overflow = get_bit(cond, 31);
+                cpsr.overflow = GetBit(cond, 31);
             }
             if constexpr (instr == ADC)
                 cpsr.carry = u64(op1) + u64(op2) + u64(cpsr.carry) > std::numeric_limits<u32>::max();
@@ -536,7 +538,7 @@ template<bool psr /* 0=CPSR; 1=SPSR */> void MSR(u32 opcode) /* MSR */
 
     u32 mask{};
     if (mode == cpsr_mode_bits_user) {
-        mask |= 0xF0000000 * get_bit(opcode, 19); /* User mode can only change the flag bits. TODO: bits 24-27? */
+        mask |= 0xF0000000 * GetBit(opcode, 19); /* User mode can only change the flag bits. TODO: bits 24-27? */
         if constexpr (psr == 0) { /* cpsr */
             u32 prev_cpsr = std::bit_cast<u32>(cpsr);
             cpsr = std::bit_cast<CPSR>(oper & mask | prev_cpsr & ~mask);
@@ -544,10 +546,10 @@ template<bool psr /* 0=CPSR; 1=SPSR */> void MSR(u32 opcode) /* MSR */
             spsr = oper & mask | spsr & ~mask;
         }
     } else {
-        mask |= 0xFF000000 * get_bit(opcode, 19);
-        mask |= 0x00FF0000 * get_bit(opcode, 18);
-        mask |= 0x0000FF00 * get_bit(opcode, 17);
-        mask |= 0x000000FF * get_bit(opcode, 16);
+        mask |= 0xFF000000 * GetBit(opcode, 19);
+        mask |= 0x00FF0000 * GetBit(opcode, 18);
+        mask |= 0x0000FF00 * GetBit(opcode, 17);
+        mask |= 0x000000FF * GetBit(opcode, 16);
         if constexpr (psr == 0) { /* cpsr */
             if (mask & 0xFF) {
                 oper |= 0x10; /* bit 4 is forced to 1 */
@@ -561,7 +563,7 @@ template<bool psr /* 0=CPSR; 1=SPSR */> void MSR(u32 opcode) /* MSR */
                 case cpsr_mode_bits_system: SetMode<Mode::System>(); break;
                 default: assert(false); break;
                 }
-                SetExecutionState(static_cast<ExecutionState>(get_bit(oper, 5)));
+                SetExecutionState(static_cast<ExecutionState>(GetBit(oper, 5)));
             }
             u32 prev_cpsr = std::bit_cast<u32>(cpsr);
             cpsr = std::bit_cast<CPSR>(oper & mask | prev_cpsr & ~mask);
@@ -586,7 +588,7 @@ void Multiply(u32 opcode) /* MUL, MLA */
     r[rd] = result;
     if (set_flags) {
         cpsr.zero = result == 0;
-        cpsr.negative = get_bit(result, 31);
+        cpsr.negative = GetBit(result, 31);
     }
     uint cycles_stalled = accumulate + [&] {
         if ((r[rs] & 0xFFFF'FF00) == 0) {
@@ -624,7 +626,7 @@ void MultiplyLong(u32 opcode) /* MULL, MLAL */
     r[rd_hi] = result >> 32 & 0xFFFF'FFFF;
     if (set_flags) {
         cpsr.zero = result == 0;
-        cpsr.negative = get_bit(result, 63);
+        cpsr.negative = GetBit(result, 63);
     }
     uint cycles_stalled = accumulate + [&] {
         if ((r[rs] & 0xFFFF'FF00) == 0) {
@@ -722,12 +724,12 @@ u32 Shift(u32 opcode, bool set_conds)
             return oper;
         } else if (shift_amount < 32) {
             if (set_conds) {
-                cpsr.carry = get_bit(oper, 32 - shift_amount);
+                cpsr.carry = GetBit(oper, 32 - shift_amount);
             }
             return oper << shift_amount;
         } else {
             if (set_conds) {
-                cpsr.carry = shift_amount == 32 ? get_bit(oper, 0) : 0;
+                cpsr.carry = shift_amount == 32 ? GetBit(oper, 0) : 0;
             }
             return 0;
         }
@@ -735,13 +737,13 @@ u32 Shift(u32 opcode, bool set_conds)
     case 0b01: /* logical right */
         if (shift_amount > 0 && shift_amount < 32) {
             if (set_conds) {
-                cpsr.carry = get_bit(oper, shift_amount - 1);
+                cpsr.carry = GetBit(oper, shift_amount - 1);
             }
             return u32(oper) >> shift_amount;
         } else {
             /* LSR#0: Interpreted as LSR#32, ie. result becomes zero, C becomes Bit 31 of the input */
             if (set_conds) {
-                cpsr.carry = shift_amount > 32 ? 0 : get_bit(oper, 31);
+                cpsr.carry = shift_amount > 32 ? 0 : GetBit(oper, 31);
             }
             return 0;
         }
@@ -749,12 +751,12 @@ u32 Shift(u32 opcode, bool set_conds)
     case 0b10: /* arithmetic right */
         if (shift_amount > 0 && shift_amount < 32) {
             if (set_conds) {
-                cpsr.carry = get_bit(oper, shift_amount - 1);
+                cpsr.carry = GetBit(oper, shift_amount - 1);
             }
             return s32(oper) >> shift_amount;
         } else {
             /* ASR#0: Interpreted as ASR#32, ie. the result and C are filled by Bit 31 of the input. */
-            bool bit31 = get_bit(oper, 31);
+            bool bit31 = GetBit(oper, 31);
             if (set_conds) {
                 cpsr.carry = bit31;
             }

@@ -3,7 +3,7 @@
 #include "mips/recompiler.hpp"
 #include "rsp.hpp"
 #include "status.hpp"
-#include "types.hpp"
+#include "numtypes.hpp"
 #include "vu.hpp"
 
 namespace n64::rsp {

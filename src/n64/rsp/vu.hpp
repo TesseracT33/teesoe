@@ -1,7 +1,7 @@
 #pragma once
 
 #include "n64.hpp"
-#include "types.hpp"
+#include "numtypes.hpp"
 
 #include <array>
 

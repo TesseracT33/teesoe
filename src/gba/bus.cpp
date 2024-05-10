@@ -2,6 +2,7 @@
 #include "apu.hpp"
 #include "arm7tdmi/arm7tdmi.hpp"
 #include "bios.hpp"
+#include "bit.hpp"
 #include "cart.hpp"
 #include "debug.hpp"
 #include "dma.hpp"
@@ -11,7 +12,6 @@
 #include "scheduler.hpp"
 #include "serial.hpp"
 #include "timers.hpp"
-#include "util.hpp"
 
 namespace gba::bus {
 
@@ -307,8 +307,8 @@ template<std::integral Int> Int ReadIo(u32 addr)
                 case ADDR_IF + 1: return irq::ReadIF(1);
                 case ADDR_IME: return u8(irq::ReadIME());
                 case ADDR_IME + 1: u8(0);
-                case ADDR_WAITCNT: return get_byte(waitcnt.raw, 0);
-                case ADDR_WAITCNT + 1: return get_byte(waitcnt.raw, 1);
+                case ADDR_WAITCNT: return GetByte(waitcnt.raw, 0);
+                case ADDR_WAITCNT + 1: return GetByte(waitcnt.raw, 1);
                 default: return ReadOpenBus<u8>(addr);
                 }
             };

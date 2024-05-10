@@ -1,7 +1,7 @@
 #pragma once
 
 #include "status.hpp"
-#include "types.hpp"
+#include "numtypes.hpp"
 
 #include "imgui_impl_vulkan.h"
 #include "SDL.h"

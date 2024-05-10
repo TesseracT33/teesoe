@@ -2,7 +2,7 @@
 
 #include "rdp_implementation.hpp"
 #include "status.hpp"
-#include "types.hpp"
+#include "numtypes.hpp"
 
 #include <memory>
 

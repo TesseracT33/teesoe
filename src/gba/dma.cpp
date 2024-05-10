@@ -1,8 +1,8 @@
 #include "dma.hpp"
+#include "bit.hpp"
 #include "bus.hpp"
 #include "irq.hpp"
 #include "scheduler.hpp"
-#include "util.hpp"
 
 #include <algorithm>
 #include <array>
@@ -179,20 +179,20 @@ template<std::integral Int> Int ReadReg(u32 addr)
         switch (addr) {
         case bus::ADDR_DMA0CNT_L:
         case bus::ADDR_DMA0CNT_L + 1: return u8(0);
-        case bus::ADDR_DMA0CNT_H: return get_byte(dma_ch[0].control, 0);
-        case bus::ADDR_DMA0CNT_H + 1: return get_byte(dma_ch[0].control, 1);
+        case bus::ADDR_DMA0CNT_H: return GetByte(dma_ch[0].control, 0);
+        case bus::ADDR_DMA0CNT_H + 1: return GetByte(dma_ch[0].control, 1);
         case bus::ADDR_DMA1CNT_L:
         case bus::ADDR_DMA1CNT_L + 1: return u8(0);
-        case bus::ADDR_DMA1CNT_H: return get_byte(dma_ch[1].control, 0);
-        case bus::ADDR_DMA1CNT_H + 1: return get_byte(dma_ch[1].control, 1);
+        case bus::ADDR_DMA1CNT_H: return GetByte(dma_ch[1].control, 0);
+        case bus::ADDR_DMA1CNT_H + 1: return GetByte(dma_ch[1].control, 1);
         case bus::ADDR_DMA2CNT_L:
         case bus::ADDR_DMA2CNT_L + 1: return u8(0);
-        case bus::ADDR_DMA2CNT_H: return get_byte(dma_ch[2].control, 0);
-        case bus::ADDR_DMA2CNT_H + 1: return get_byte(dma_ch[2].control, 1);
+        case bus::ADDR_DMA2CNT_H: return GetByte(dma_ch[2].control, 0);
+        case bus::ADDR_DMA2CNT_H + 1: return GetByte(dma_ch[2].control, 1);
         case bus::ADDR_DMA3CNT_L:
         case bus::ADDR_DMA3CNT_L + 1: return u8(0);
-        case bus::ADDR_DMA3CNT_H: return get_byte(dma_ch[3].control, 0);
-        case bus::ADDR_DMA3CNT_H + 1: return get_byte(dma_ch[3].control, 1);
+        case bus::ADDR_DMA3CNT_H: return GetByte(dma_ch[3].control, 0);
+        case bus::ADDR_DMA3CNT_H + 1: return GetByte(dma_ch[3].control, 1);
         default: return bus::ReadOpenBus<u8>(addr);
         }
     };
@@ -237,52 +237,52 @@ template<std::integral Int> void WriteReg(u32 addr, Int data)
 {
     auto WriteByte = [](u32 addr, u8 data) {
         switch (addr) {
-        case bus::ADDR_DMA0SAD: set_byte(dma_ch[0].src_addr, 0, data); break;
-        case bus::ADDR_DMA0SAD + 1: set_byte(dma_ch[0].src_addr, 1, data); break;
-        case bus::ADDR_DMA0SAD + 2: set_byte(dma_ch[0].src_addr, 2, data); break;
-        case bus::ADDR_DMA0SAD + 3: set_byte(dma_ch[0].src_addr, 3, data & 0xF); break;
-        case bus::ADDR_DMA0DAD: set_byte(dma_ch[0].dst_addr, 0, data); break;
-        case bus::ADDR_DMA0DAD + 1: set_byte(dma_ch[0].dst_addr, 1, data); break;
-        case bus::ADDR_DMA0DAD + 2: set_byte(dma_ch[0].dst_addr, 2, data); break;
-        case bus::ADDR_DMA0DAD + 3: set_byte(dma_ch[0].dst_addr, 3, data & 0xF); break;
-        case bus::ADDR_DMA0CNT_L: set_byte(dma_ch[0].count, 0, data); break;
-        case bus::ADDR_DMA0CNT_L + 1: set_byte(dma_ch[0].count, 1, data & 0x3F); break;
+        case bus::ADDR_DMA0SAD: SetByte(dma_ch[0].src_addr, 0, data); break;
+        case bus::ADDR_DMA0SAD + 1: SetByte(dma_ch[0].src_addr, 1, data); break;
+        case bus::ADDR_DMA0SAD + 2: SetByte(dma_ch[0].src_addr, 2, data); break;
+        case bus::ADDR_DMA0SAD + 3: SetByte(dma_ch[0].src_addr, 3, data & 0xF); break;
+        case bus::ADDR_DMA0DAD: SetByte(dma_ch[0].dst_addr, 0, data); break;
+        case bus::ADDR_DMA0DAD + 1: SetByte(dma_ch[0].dst_addr, 1, data); break;
+        case bus::ADDR_DMA0DAD + 2: SetByte(dma_ch[0].dst_addr, 2, data); break;
+        case bus::ADDR_DMA0DAD + 3: SetByte(dma_ch[0].dst_addr, 3, data & 0xF); break;
+        case bus::ADDR_DMA0CNT_L: SetByte(dma_ch[0].count, 0, data); break;
+        case bus::ADDR_DMA0CNT_L + 1: SetByte(dma_ch[0].count, 1, data & 0x3F); break;
         case bus::ADDR_DMA0CNT_H: dma_ch[0].WriteControlLo(data); break;
         case bus::ADDR_DMA0CNT_H + 1: dma_ch[0].WriteControlHi(data); break;
-        case bus::ADDR_DMA1SAD: set_byte(dma_ch[1].src_addr, 0, data); break;
-        case bus::ADDR_DMA1SAD + 1: set_byte(dma_ch[1].src_addr, 1, data); break;
-        case bus::ADDR_DMA1SAD + 2: set_byte(dma_ch[1].src_addr, 2, data); break;
-        case bus::ADDR_DMA1SAD + 3: set_byte(dma_ch[1].src_addr, 3, data & 0xF); break;
-        case bus::ADDR_DMA1DAD: set_byte(dma_ch[1].dst_addr, 0, data); break;
-        case bus::ADDR_DMA1DAD + 1: set_byte(dma_ch[1].dst_addr, 1, data); break;
-        case bus::ADDR_DMA1DAD + 2: set_byte(dma_ch[1].dst_addr, 2, data); break;
-        case bus::ADDR_DMA1DAD + 3: set_byte(dma_ch[1].dst_addr, 3, data & 0xF); break;
-        case bus::ADDR_DMA1CNT_L: set_byte(dma_ch[1].count, 0, data); break;
-        case bus::ADDR_DMA1CNT_L + 1: set_byte(dma_ch[1].count, 1, data & 0x3F); break;
+        case bus::ADDR_DMA1SAD: SetByte(dma_ch[1].src_addr, 0, data); break;
+        case bus::ADDR_DMA1SAD + 1: SetByte(dma_ch[1].src_addr, 1, data); break;
+        case bus::ADDR_DMA1SAD + 2: SetByte(dma_ch[1].src_addr, 2, data); break;
+        case bus::ADDR_DMA1SAD + 3: SetByte(dma_ch[1].src_addr, 3, data & 0xF); break;
+        case bus::ADDR_DMA1DAD: SetByte(dma_ch[1].dst_addr, 0, data); break;
+        case bus::ADDR_DMA1DAD + 1: SetByte(dma_ch[1].dst_addr, 1, data); break;
+        case bus::ADDR_DMA1DAD + 2: SetByte(dma_ch[1].dst_addr, 2, data); break;
+        case bus::ADDR_DMA1DAD + 3: SetByte(dma_ch[1].dst_addr, 3, data & 0xF); break;
+        case bus::ADDR_DMA1CNT_L: SetByte(dma_ch[1].count, 0, data); break;
+        case bus::ADDR_DMA1CNT_L + 1: SetByte(dma_ch[1].count, 1, data & 0x3F); break;
         case bus::ADDR_DMA1CNT_H: dma_ch[1].WriteControlLo(data); break;
         case bus::ADDR_DMA1CNT_H + 1: dma_ch[1].WriteControlHi(data); break;
-        case bus::ADDR_DMA2SAD: set_byte(dma_ch[2].src_addr, 0, data); break;
-        case bus::ADDR_DMA2SAD + 1: set_byte(dma_ch[2].src_addr, 1, data); break;
-        case bus::ADDR_DMA2SAD + 2: set_byte(dma_ch[2].src_addr, 2, data); break;
-        case bus::ADDR_DMA2SAD + 3: set_byte(dma_ch[2].src_addr, 3, data & 0xF); break;
-        case bus::ADDR_DMA2DAD: set_byte(dma_ch[2].dst_addr, 0, data); break;
-        case bus::ADDR_DMA2DAD + 1: set_byte(dma_ch[2].dst_addr, 1, data); break;
-        case bus::ADDR_DMA2DAD + 2: set_byte(dma_ch[2].dst_addr, 2, data); break;
-        case bus::ADDR_DMA2DAD + 3: set_byte(dma_ch[2].dst_addr, 3, data & 0xF); break;
-        case bus::ADDR_DMA2CNT_L: set_byte(dma_ch[2].count, 0, data); break;
-        case bus::ADDR_DMA2CNT_L + 1: set_byte(dma_ch[2].count, 1, data & 0x3F); break;
+        case bus::ADDR_DMA2SAD: SetByte(dma_ch[2].src_addr, 0, data); break;
+        case bus::ADDR_DMA2SAD + 1: SetByte(dma_ch[2].src_addr, 1, data); break;
+        case bus::ADDR_DMA2SAD + 2: SetByte(dma_ch[2].src_addr, 2, data); break;
+        case bus::ADDR_DMA2SAD + 3: SetByte(dma_ch[2].src_addr, 3, data & 0xF); break;
+        case bus::ADDR_DMA2DAD: SetByte(dma_ch[2].dst_addr, 0, data); break;
+        case bus::ADDR_DMA2DAD + 1: SetByte(dma_ch[2].dst_addr, 1, data); break;
+        case bus::ADDR_DMA2DAD + 2: SetByte(dma_ch[2].dst_addr, 2, data); break;
+        case bus::ADDR_DMA2DAD + 3: SetByte(dma_ch[2].dst_addr, 3, data & 0xF); break;
+        case bus::ADDR_DMA2CNT_L: SetByte(dma_ch[2].count, 0, data); break;
+        case bus::ADDR_DMA2CNT_L + 1: SetByte(dma_ch[2].count, 1, data & 0x3F); break;
         case bus::ADDR_DMA2CNT_H: dma_ch[2].WriteControlLo(data); break;
         case bus::ADDR_DMA2CNT_H + 1: dma_ch[2].WriteControlHi(data); break;
-        case bus::ADDR_DMA3SAD: set_byte(dma_ch[3].src_addr, 0, data); break;
-        case bus::ADDR_DMA3SAD + 1: set_byte(dma_ch[3].src_addr, 1, data); break;
-        case bus::ADDR_DMA3SAD + 2: set_byte(dma_ch[3].src_addr, 2, data); break;
-        case bus::ADDR_DMA3SAD + 3: set_byte(dma_ch[3].src_addr, 3, data & 0xF); break;
-        case bus::ADDR_DMA3DAD: set_byte(dma_ch[3].dst_addr, 0, data); break;
-        case bus::ADDR_DMA3DAD + 1: set_byte(dma_ch[3].dst_addr, 1, data); break;
-        case bus::ADDR_DMA3DAD + 2: set_byte(dma_ch[3].dst_addr, 2, data); break;
-        case bus::ADDR_DMA3DAD + 3: set_byte(dma_ch[3].dst_addr, 3, data & 0xF); break;
-        case bus::ADDR_DMA3CNT_L: set_byte(dma_ch[3].count, 0, data); break;
-        case bus::ADDR_DMA3CNT_L + 1: set_byte(dma_ch[3].count, 1, data); break;
+        case bus::ADDR_DMA3SAD: SetByte(dma_ch[3].src_addr, 0, data); break;
+        case bus::ADDR_DMA3SAD + 1: SetByte(dma_ch[3].src_addr, 1, data); break;
+        case bus::ADDR_DMA3SAD + 2: SetByte(dma_ch[3].src_addr, 2, data); break;
+        case bus::ADDR_DMA3SAD + 3: SetByte(dma_ch[3].src_addr, 3, data & 0xF); break;
+        case bus::ADDR_DMA3DAD: SetByte(dma_ch[3].dst_addr, 0, data); break;
+        case bus::ADDR_DMA3DAD + 1: SetByte(dma_ch[3].dst_addr, 1, data); break;
+        case bus::ADDR_DMA3DAD + 2: SetByte(dma_ch[3].dst_addr, 2, data); break;
+        case bus::ADDR_DMA3DAD + 3: SetByte(dma_ch[3].dst_addr, 3, data & 0xF); break;
+        case bus::ADDR_DMA3CNT_L: SetByte(dma_ch[3].count, 0, data); break;
+        case bus::ADDR_DMA3CNT_L + 1: SetByte(dma_ch[3].count, 1, data); break;
         case bus::ADDR_DMA3CNT_H: dma_ch[3].WriteControlLo(data); break;
         case bus::ADDR_DMA3CNT_H + 1: dma_ch[3].WriteControlHi(data); break;
         }
@@ -392,13 +392,13 @@ void DmaChannel::ReloadSrcAddr()
 
 void DmaChannel::WriteControlLo(u8 data)
 {
-    set_byte(control, 0, data);
+    SetByte(control, 0, data);
 }
 
 void DmaChannel::WriteControlHi(u8 data)
 {
     Control prev_control = control;
-    set_byte(control, 1, data);
+    SetByte(control, 1, data);
     if (control.enable ^ prev_control.enable) {
         control.enable ? OnDmaEnable() : OnDmaDisable();
     }

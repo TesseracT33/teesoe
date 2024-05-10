@@ -1,12 +1,13 @@
 #pragma once
 
+#include "always_false.hpp"
 #include "exceptions.hpp"
-#include "host.hpp"
 #include "jit_util.hpp"
 #include "mips/recompiler.hpp"
 #include "mips/register_allocator.hpp"
+#include "numtypes.hpp"
+#include "platform.hpp"
 #include "status.hpp"
-#include "types.hpp"
 #include "vr4300.hpp"
 
 #include <concepts>
@@ -110,7 +111,7 @@ inline void JitCallInterpreterImpl(auto impl, Arg first_arg, Args... remaining_a
     } else if constexpr (sizeof(first_arg) <= 8) {
         compiler.mov(host_gpr_arg[r_idx].r64(), first_arg);
     } else {
-        always_false<sizeof(first_arg)>;
+        AlwaysFalse<sizeof(first_arg)>;
     }
     if constexpr (sizeof...(remaining_args)) {
         r_idx++;

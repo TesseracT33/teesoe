@@ -1,9 +1,10 @@
 #include "cart.hpp"
-#include "util.hpp"
+#include "files.hpp"
 
 #include <algorithm>
 #include <bit>
 #include <cassert>
+#include <expected>
 #include <filesystem>
 #include <vector>
 
@@ -25,7 +26,7 @@ void Initialize()
 
 Status LoadRom(std::filesystem::path const& path)
 {
-    std::expected<std::vector<u8>, std::string> expected_rom = read_file(path);
+    std::expected<std::vector<u8>, std::string> expected_rom = OpenFile(path);
     if (expected_rom) {
         rom = expected_rom.value();
         ResizeRomToPowerOfTwo(rom);

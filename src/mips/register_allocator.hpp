@@ -1,11 +1,12 @@
 #pragma once
 
+#include "always_false.hpp"
 #include "asmjit/a64.h"
 #include "asmjit/x86.h"
-#include "common/types.hpp"
-#include "host.hpp"
 #include "jit_util.hpp"
 #include "mips/disassembler.hpp"
+#include "numtypes.hpp"
+#include "platform.hpp"
 
 #include <algorithm>
 #include <array>
@@ -128,7 +129,7 @@ struct RegisterAllocatorState {
                 c.vmovaps(dst, src);
             }
         } else {
-            static_assert(always_false<sizeof(HostReg)>);
+            static_assert(AlwaysFalse<sizeof(HostReg)>);
         }
     }
 

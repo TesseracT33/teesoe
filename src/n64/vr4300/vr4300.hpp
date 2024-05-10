@@ -2,7 +2,7 @@
 
 #include "mips/types.hpp"
 #include "n64.hpp"
-#include "types.hpp"
+#include "numtypes.hpp"
 
 namespace n64::vr4300 {
 

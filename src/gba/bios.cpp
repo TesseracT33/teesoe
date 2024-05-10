@@ -1,5 +1,5 @@
 #include "bios.hpp"
-#include "util.hpp"
+#include "files.hpp"
 
 #include <cstring>
 #include <expected>
@@ -16,7 +16,7 @@ void Initialize()
 
 Status Load(std::filesystem::path const& path)
 {
-    std::expected<std::vector<u8>, std::string> expected_bios = read_file(path);
+    std::expected<std::vector<u8>, std::string> expected_bios = OpenFile(path);
     if (expected_bios) {
         if (expected_bios.value().size() == 0x4000) {
             bios = expected_bios.value();
