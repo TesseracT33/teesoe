@@ -12,7 +12,7 @@ using namespace asmjit::x86;
 void Cop2Prolog()
 {
     Label l_usable = c.newLabel();
-    c.bt(GlobalVarPtr(cop0.status), 30); // cu2
+    c.bt(JitPtr(cop0.status), 30); // cu2
     c.jc(l_usable);
     reg_alloc.ReserveArgs(1);
     c.mov(host_gpr_arg[0].r32(), 2);
@@ -24,7 +24,7 @@ void Cop2Prolog()
 void cfc2(u32 rt)
 {
     Cop2Prolog();
-    if (rt) c.movsxd(reg_alloc.GetHostGprMarkDirty(rt), GlobalVarPtr(cop2_latch, 4));
+    if (rt) c.movsxd(reg_alloc.GetHostGprMarkDirty(rt), JitPtr(cop2_latch, 4));
 }
 
 void cop2_reserved()
@@ -37,7 +37,7 @@ void cop2_reserved()
 void ctc2(u32 rt)
 {
     Cop2Prolog();
-    c.mov(GlobalVarPtr(cop2_latch), reg_alloc.GetHostGpr(rt));
+    c.mov(JitPtr(cop2_latch), reg_alloc.GetHostGpr(rt));
 }
 
 void dcfc2()
@@ -55,7 +55,7 @@ void dctc2()
 void dmfc2(u32 rt)
 {
     Cop2Prolog();
-    if (rt) c.mov(reg_alloc.GetHostGprMarkDirty(rt), GlobalVarPtr(cop2_latch));
+    if (rt) c.mov(reg_alloc.GetHostGprMarkDirty(rt), JitPtr(cop2_latch));
 }
 
 void dmtc2(u32 rt)

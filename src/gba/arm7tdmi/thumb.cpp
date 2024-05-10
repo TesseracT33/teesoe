@@ -1,6 +1,8 @@
 #include "../bus.hpp"
+#include "algorithm.hpp"
 #include "arm7tdmi.hpp"
-#include "util.hpp"
+#include "bit.hpp"
+#include "numeric.hpp"
 
 #define sp (r[13])
 #define lr (r[14])
@@ -148,27 +150,27 @@ void Shift(u16 opcode) /* Format 1: ASR, LSL, LSR */
                 /* LSL#0: No shift performed, ie. directly Rd=Rs, the C flag is NOT affected. */
                 return r[rs];
             } else {
-                cpsr.carry = get_bit(r[rs], 32 - shift_amount);
+                cpsr.carry = GetBit(r[rs], 32 - shift_amount);
                 return r[rs] << shift_amount;
             }
 
         case 0b01: /* LSR */
             if (shift_amount == 0) {
                 /* LSR#0: Interpreted as LSR#32, ie. Rd becomes zero, C becomes Bit 31 of Rs */
-                cpsr.carry = get_bit(r[rs], 31);
+                cpsr.carry = GetBit(r[rs], 31);
                 return 0u;
             } else {
-                cpsr.carry = get_bit(r[rs], shift_amount - 1);
+                cpsr.carry = GetBit(r[rs], shift_amount - 1);
                 return u32(r[rs]) >> shift_amount;
             }
 
         case 0b10: /* ASR */
             if (shift_amount == 0) {
                 /* ASR#0: Interpreted as ASR#32, ie. Rd and C are filled by Bit 31 of Rs. */
-                cpsr.carry = get_bit(r[rs], 31);
+                cpsr.carry = GetBit(r[rs], 31);
                 return cpsr.carry ? 0xFFFF'FFFF : 0;
             } else {
-                cpsr.carry = get_bit(r[rs], shift_amount - 1);
+                cpsr.carry = GetBit(r[rs], shift_amount - 1);
                 return u32(s32(r[rs]) >> shift_amount);
             }
 
@@ -178,7 +180,7 @@ void Shift(u16 opcode) /* Format 1: ASR, LSL, LSR */
 
     r[rd] = result;
     cpsr.zero = result == 0;
-    cpsr.negative = get_bit(result, 31);
+    cpsr.negative = GetBit(result, 31);
 }
 
 void AddSubtract(u16 opcode) /* Format 2: ADD, SUB */
@@ -196,19 +198,19 @@ void AddSubtract(u16 opcode) /* Format 2: ADD, SUB */
         if (op == 0) { /* ADD */
             u64 result = u64(oper1) + u64(oper2);
             cpsr.carry = result > std::numeric_limits<u32>::max();
-            cpsr.overflow = get_bit((oper1 ^ result) & (oper2 ^ result), 31);
+            cpsr.overflow = GetBit((oper1 ^ result) & (oper2 ^ result), 31);
             return u32(result);
         } else { /* SUB */
             u32 result = oper1 - oper2;
             cpsr.carry = oper2 <= oper1; /* this is not borrow */
-            cpsr.overflow = get_bit((oper1 ^ oper2) & (oper1 ^ result), 31);
+            cpsr.overflow = GetBit((oper1 ^ oper2) & (oper1 ^ result), 31);
             return result;
         }
     }();
 
     r[rd] = result;
     cpsr.zero = result == 0;
-    cpsr.negative = get_bit(result, 31);
+    cpsr.negative = GetBit(result, 31);
 }
 
 void MoveCompareAddSubtractImm(u16 opcode) /* Format 3: ADD, CMP, MOV, SUB */
@@ -226,18 +228,18 @@ void MoveCompareAddSubtractImm(u16 opcode) /* Format 3: ADD, CMP, MOV, SUB */
 
     case 0b01: { /* CMP */
         u32 result = r[rd] - imm;
-        cpsr.overflow = get_bit((r[rd] ^ imm) & (r[rd] ^ result), 31);
+        cpsr.overflow = GetBit((r[rd] ^ imm) & (r[rd] ^ result), 31);
         cpsr.carry = imm <= r[rd];
-        cpsr.negative = get_bit(result, 31);
+        cpsr.negative = GetBit(result, 31);
         cpsr.zero = result == 0;
         break;
     }
 
     case 0b10: { /* ADD */
         u64 result = u64(r[rd]) + u64(imm);
-        cpsr.overflow = get_bit((r[rd] ^ result) & (imm ^ result), 31);
+        cpsr.overflow = GetBit((r[rd] ^ result) & (imm ^ result), 31);
         cpsr.carry = result > std::numeric_limits<u32>::max();
-        cpsr.negative = get_bit(result, 31);
+        cpsr.negative = GetBit(result, 31);
         cpsr.zero = u32(result) == 0;
         r[rd] = u32(result);
         break;
@@ -245,9 +247,9 @@ void MoveCompareAddSubtractImm(u16 opcode) /* Format 3: ADD, CMP, MOV, SUB */
 
     case 0b11: { /* SUB */
         u32 result = r[rd] - imm;
-        cpsr.overflow = get_bit((r[rd] ^ imm) & (r[rd] ^ result), 31);
+        cpsr.overflow = GetBit((r[rd] ^ imm) & (r[rd] ^ result), 31);
         cpsr.carry = imm <= r[rd];
-        cpsr.negative = get_bit(result, 31);
+        cpsr.negative = GetBit(result, 31);
         cpsr.zero = result == 0;
         r[rd] = result;
         break;
@@ -263,7 +265,7 @@ void AluOperation(
 {
     using enum ThumbAluInstruction;
 
-    static constexpr bool is_arithmetic_instr = one_of(instr, ADC, CMN, CMP, NEG, SBC);
+    static constexpr bool is_arithmetic_instr = OneOf(instr, ADC, CMN, CMP, NEG, SBC);
 
     auto rd = opcode & 7;
     auto rs = opcode >> 3 & 7;
@@ -292,10 +294,10 @@ void AluOperation(
             if (shift_amount == 0) {
                 return op1;
             } else if (shift_amount < 32) {
-                cpsr.carry = get_bit(op1, shift_amount - 1);
+                cpsr.carry = GetBit(op1, shift_amount - 1);
                 return u32(s32(op1) >> shift_amount);
             } else {
-                bool bit31 = get_bit(op1, 31);
+                bool bit31 = GetBit(op1, 31);
                 cpsr.carry = bit31;
                 return bit31 ? 0xFFFF'FFFFu : 0u;
             }
@@ -320,10 +322,10 @@ void AluOperation(
             if (shift_amount == 0) {
                 return op1;
             } else if (shift_amount < 32) {
-                cpsr.carry = get_bit(op1, 32 - shift_amount);
+                cpsr.carry = GetBit(op1, 32 - shift_amount);
                 return op1 << shift_amount;
             } else {
-                cpsr.carry = shift_amount == 32 ? get_bit(op1, 0) : 0;
+                cpsr.carry = shift_amount == 32 ? GetBit(op1, 0) : 0;
                 return 0u;
             }
         }
@@ -332,10 +334,10 @@ void AluOperation(
             if (shift_amount == 0) {
                 return op1;
             } else if (shift_amount < 32) {
-                cpsr.carry = get_bit(op1, shift_amount - 1);
+                cpsr.carry = GetBit(op1, shift_amount - 1);
                 return u32(op1) >> shift_amount;
             } else {
-                cpsr.carry = shift_amount > 32 ? 0 : get_bit(op1, 31);
+                cpsr.carry = shift_amount > 32 ? 0 : GetBit(op1, 31);
                 return 0u;
             }
         }
@@ -369,18 +371,18 @@ void AluOperation(
         }
     }();
 
-    if constexpr (!one_of(instr, CMP, CMN, TST)) {
+    if constexpr (!OneOf(instr, CMP, CMN, TST)) {
         r[rd] = result;
     }
     cpsr.zero = result == 0;
-    cpsr.negative = get_bit(result, 31);
+    cpsr.negative = GetBit(result, 31);
     if constexpr (is_arithmetic_instr) {
         auto cond = [&] {
             if constexpr (instr == ADC || instr == CMN) return (op1 ^ result) & (op2 ^ result);
             if constexpr (instr == CMP || instr == SBC) return (op1 ^ op2) & (op1 ^ result);
             if constexpr (instr == NEG) return op2 & result; /* SUB with op1 == 0 */
         }();
-        cpsr.overflow = get_bit(cond, 31);
+        cpsr.overflow = GetBit(cond, 31);
     }
 }
 
@@ -414,10 +416,10 @@ void HiReg(u16 opcode) /* Format 5: ADD, BX, CMP, MOV */
         auto h1 = opcode >> 7 & 1;
         rd += h1 << 3;
         auto result = r[rd] - oper;
-        cpsr.overflow = get_bit((r[rd] ^ oper) & (r[rd] ^ result), 31);
+        cpsr.overflow = GetBit((r[rd] ^ oper) & (r[rd] ^ result), 31);
         cpsr.carry = oper <= r[rd];
         cpsr.zero = result == 0;
-        cpsr.negative = get_bit(result, 31);
+        cpsr.negative = GetBit(result, 31);
         break;
     }
 
@@ -652,7 +654,7 @@ void ConditionalBranch(u16 opcode) /* Format 16: BEQ, BNE, BCS, BCC, BMI, BPL, B
     auto cond = opcode >> 8 & 0xF;
     bool branch = CheckCondition(cond);
     if (branch) {
-        s32 offset = sign_extend<s32, 9>(opcode << 1 & 0x1FE); /* [-256, 254] in steps of 2 */
+        s32 offset = SignExtend<s32, 9>(opcode << 1 & 0x1FE); /* [-256, 254] in steps of 2 */
         pc += offset;
         FlushPipeline();
     }
@@ -665,7 +667,7 @@ void SoftwareInterrupt() /* Format 17: SWI */
 
 void UnconditionalBranch(u16 opcode) /* Format 18: B */
 {
-    s32 offset = sign_extend<s32, 12>(opcode << 1 & 0xFFE); /* [-2048, 2046] in steps of 2 */
+    s32 offset = SignExtend<s32, 12>(opcode << 1 & 0xFFE); /* [-2048, 2046] in steps of 2 */
     pc += offset;
     FlushPipeline();
 }
@@ -675,7 +677,7 @@ void LongBranchWithLink(u16 opcode) /* Format 19: BL */
     auto immediate = opcode & 0x7FF;
     bool low_or_high_offset = opcode >> 11 & 1; /* 0: offset high; 1: offset low */
     if (low_or_high_offset == 0) {
-        s32 offset = sign_extend<s32, 23>(immediate << 12);
+        s32 offset = SignExtend<s32, 23>(immediate << 12);
         lr = pc + offset;
     } else {
         s32 offset = immediate << 1;

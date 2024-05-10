@@ -1,6 +1,6 @@
 #include "pif.hpp"
+#include "files.hpp"
 #include "log.hpp"
-#include "util.hpp"
 
 #include <algorithm>
 #include <array>
@@ -112,7 +112,7 @@ u8 DataCrc(std::string_view data)
 
 Status LoadIPL12(std::filesystem::path const& path)
 {
-    std::expected<std::vector<u8>, std::string> expected_rom = read_file(path, sizeof(mem));
+    std::expected<std::vector<u8>, std::string> expected_rom = OpenFile(path, sizeof(mem));
     if (!expected_rom) {
         return FailureStatus(std::format("Failed to open boot rom (IPL) file; {}", expected_rom.error()));
     }

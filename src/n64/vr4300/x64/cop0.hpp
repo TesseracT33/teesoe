@@ -26,11 +26,11 @@ template<size_t size> inline void ReadCop0(Gpq dst, u32 idx)
 {
     auto Read = [dst](auto const& cop0_reg) {
         if constexpr (size == 4) {
-            c.movsxd(dst, GlobalVarPtr(cop0_reg, 4));
+            c.movsxd(dst, JitPtr(cop0_reg, 4));
         } else if constexpr (sizeof(cop0_reg) == 4) {
-            c.mov(dst.r32(), GlobalVarPtr(cop0_reg));
+            c.mov(dst.r32(), JitPtr(cop0_reg));
         } else {
-            c.mov(dst, GlobalVarPtr(cop0_reg));
+            c.mov(dst, JitPtr(cop0_reg));
         }
     };
 
@@ -51,7 +51,7 @@ template<size_t size> inline void ReadCop0(Gpq dst, u32 idx)
     case Cop0Reg::wired: Read(cop0.wired); break;
     case Cop0Reg::bad_v_addr: Read(cop0.bad_v_addr); break;
     case Cop0Reg::count: /* See the declaration of 'count' */
-        c.mov(rax, GlobalVarPtr(cop0.count));
+        c.mov(rax, JitPtr(cop0.count));
         c.add(rax, block_cycles);
         c.shr(rax, 1);
         if constexpr (size == 4) {
@@ -62,7 +62,7 @@ template<size_t size> inline void ReadCop0(Gpq dst, u32 idx)
         break;
     case Cop0Reg::entry_hi: Read(cop0.entry_hi); break;
     case Cop0Reg::compare: /* See the declaration of 'compare' */
-        c.mov(rax, GlobalVarPtr(cop0.compare));
+        c.mov(rax, JitPtr(cop0.compare));
         c.shr(rax, 1);
         if constexpr (size == 4) {
             c.movsxd(dst, eax);
@@ -104,12 +104,12 @@ template<size_t size> inline void WriteCop0(Gpq src, u32 idx)
 {
     auto Write = [src](auto& cop0_reg) {
         if constexpr (sizeof(cop0_reg) == 4) {
-            c.mov(GlobalVarPtr(cop0_reg), src.r32());
+            c.mov(JitPtr(cop0_reg), src.r32());
         } else if constexpr (size == 4) {
             c.movsxd(rax, src.r32());
-            c.mov(GlobalVarPtr(cop0_reg), rax);
+            c.mov(JitPtr(cop0_reg), rax);
         } else {
-            c.mov(GlobalVarPtr(cop0_reg), src);
+            c.mov(JitPtr(cop0_reg), src);
         }
     };
 
@@ -118,20 +118,20 @@ template<size_t size> inline void WriteCop0(Gpq src, u32 idx)
         if constexpr (sizeof(cop0_reg) == 4) {
             c.mov(eax, src.r32());
             c.and_(eax, mask);
-            c.and_(GlobalVarPtr(cop0_reg), ~mask);
-            c.or_(GlobalVarPtr(cop0_reg), eax);
+            c.and_(JitPtr(cop0_reg), ~mask);
+            c.or_(JitPtr(cop0_reg), eax);
         } else {
             Gpq t = reg_alloc.GetTemporary().r64();
             size == 8 ? c.mov(rax, src) : c.movsxd(rax, src.r32());
             c.mov(t, mask);
             c.and_(rax, t);
             c.not_(t);
-            c.and_(GlobalVarPtr(cop0_reg), t);
-            c.or_(GlobalVarPtr(cop0_reg), rax);
+            c.and_(JitPtr(cop0_reg), t);
+            c.or_(JitPtr(cop0_reg), rax);
         }
     };
 
-    c.mov(GlobalVarPtr(last_cop0_write), src.r32());
+    c.mov(JitPtr(last_cop0_write), src.r32());
 
     switch (idx & 31) {
     case Cop0Reg::index: WriteMasked(cop0.index, 0x8000'003F); break;
@@ -147,17 +147,17 @@ template<size_t size> inline void WriteCop0(Gpq src, u32 idx)
     case Cop0Reg::bad_v_addr: break;
     case Cop0Reg::count:
         c.lea(rax, ptr(src, src));
-        c.mov(GlobalVarPtr(cop0.count), rax);
+        c.mov(JitPtr(cop0.count), rax);
         reg_alloc.Call(OnWriteToCount);
         break;
     case Cop0Reg::entry_hi: WriteMasked(cop0.entry_hi, 0xC000'00FF'FFFF'E0FF); break;
     case Cop0Reg::compare: {
         Label l_noexception = c.newLabel();
         c.lea(rax, ptr(src, src));
-        c.mov(GlobalVarPtr(cop0.compare), rax);
+        c.mov(JitPtr(cop0.compare), rax);
         FlushPc();
         reg_alloc.Call(OnWriteToCompare);
-        c.cmp(GlobalVarPtr(exception_occurred), 0);
+        c.cmp(JitPtr(exception_occurred), 0);
         c.je(l_noexception);
         BlockEpilog();
         c.bind(l_noexception);
@@ -172,7 +172,7 @@ template<size_t size> inline void WriteCop0(Gpq src, u32 idx)
         Label l_noexception = c.newLabel();
         FlushPc();
         reg_alloc.Call(OnWriteToCause);
-        c.cmp(GlobalVarPtr(exception_occurred), 0);
+        c.cmp(JitPtr(exception_occurred), 0);
         c.je(l_noexception);
         BlockEpilog();
         c.bind(l_noexception);
@@ -198,7 +198,7 @@ inline void cache(u32 rs, u32 rt, s16 imm)
     rt ? c.mov(host_gpr_arg[1].r32(), rt) : c.xor_(host_gpr_arg[1].r32(), host_gpr_arg[1].r32());
     imm ? c.mov(host_gpr_arg[2].r32(), imm) : c.xor_(host_gpr_arg[2].r32(), host_gpr_arg[2].r32());
     reg_alloc.Call(vr4300::cache);
-    c.cmp(GlobalVarPtr(exception_occurred), 0);
+    c.cmp(JitPtr(exception_occurred), 0);
     c.je(l_no_exception);
     BlockEpilog();
 
@@ -209,9 +209,9 @@ inline void dmfc0(u32 rt, u32 rd)
 {
     if (can_exec_cop0_instrs) {
         Label l_noexception = c.newLabel();
-        c.cmp(GlobalVarPtr(operating_mode), mips::OperatingMode::Kernel);
+        c.cmp(JitPtr(operating_mode), mips::OperatingMode::Kernel);
         c.je(l_noexception);
-        c.cmp(GlobalVarPtr(addressing_mode), AddressingMode::_64bit);
+        c.cmp(JitPtr(addressing_mode), AddressingMode::_64bit);
         c.je(l_noexception);
         BlockEpilogWithPcFlushAndJmp(ReservedInstructionException);
 
@@ -228,9 +228,9 @@ inline void dmtc0(u32 rt, u32 rd)
 {
     if (can_exec_cop0_instrs) {
         Label l_noexception = c.newLabel();
-        c.cmp(GlobalVarPtr(operating_mode), mips::OperatingMode::Kernel);
+        c.cmp(JitPtr(operating_mode), mips::OperatingMode::Kernel);
         c.je(l_noexception);
-        c.cmp(GlobalVarPtr(addressing_mode), AddressingMode::_64bit);
+        c.cmp(JitPtr(addressing_mode), AddressingMode::_64bit);
         c.je(l_noexception);
         BlockEpilogWithPcFlushAndJmp(ReservedInstructionException);
 
@@ -246,22 +246,22 @@ inline void eret()
 {
     if (can_exec_cop0_instrs) {
         Label l0 = c.newLabel(), l1 = c.newLabel(), l2 = c.newLabel(), l3 = c.newLabel();
-        c.bt(GlobalVarPtr(cop0.status), 2); // erl
+        c.bt(JitPtr(cop0.status), 2); // erl
         c.jc(l0);
-        c.mov(rax, GlobalVarPtr(cop0.epc));
-        c.mov(GlobalVarPtr(pc), rax);
-        c.btr(GlobalVarPtr(cop0.status), 1); // exl
+        c.mov(rax, JitPtr(cop0.epc));
+        c.mov(JitPtr(pc), rax);
+        c.btr(JitPtr(cop0.status), 1); // exl
         c.jmp(l1);
 
         c.bind(l0);
-        c.mov(rax, GlobalVarPtr(cop0.error_epc));
-        c.mov(GlobalVarPtr(pc), rax);
-        c.btr(GlobalVarPtr(cop0.status), 2); // erl
+        c.mov(rax, JitPtr(cop0.error_epc));
+        c.mov(JitPtr(pc), rax);
+        c.btr(JitPtr(cop0.status), 2); // erl
 
         c.bind(l1);
         reg_alloc.Call(CheckInterrupts);
-        c.mov(GlobalVarPtr(ll_bit), 0);
-        c.mov(host_gpr_arg[0], GlobalVarPtr(pc));
+        c.mov(JitPtr(ll_bit), 0);
+        c.mov(host_gpr_arg[0], JitPtr(pc));
         c.mov(eax, host_gpr_arg[0].r32());
         c.and_(eax, 3);
         c.jz(l2);
@@ -270,9 +270,9 @@ inline void eret()
         c.jmp(l3);
 
         c.bind(l2);
-        c.mov(GlobalVarPtr(in_branch_delay_slot_taken), 0);
-        c.mov(GlobalVarPtr(in_branch_delay_slot_not_taken), 0);
-        c.mov(GlobalVarPtr(branch_state), std::to_underlying(mips::BranchState::NoBranch));
+        c.mov(JitPtr(in_branch_delay_slot_taken), 0);
+        c.mov(JitPtr(in_branch_delay_slot_not_taken), 0);
+        c.mov(JitPtr(branch_state), std::to_underlying(mips::BranchState::NoBranch));
 
         c.bind(l3);
         BlockEpilogWithJmp(SetVaddrToPaddrFuncs);

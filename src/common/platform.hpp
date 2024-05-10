@@ -30,6 +30,12 @@ struct Os {
 } constexpr os;
 #endif
 
+struct Abi {
+    static constexpr bool arm64 = arch.a64;
+    static constexpr bool system_v = arch.x64 && os.linux;
+    static constexpr bool win_x64 = arch.x64 && os.windows;
+} constexpr abi;
+
 // TODO: do this properly
 #ifdef __AVX512F__
 constexpr bool avx512 = 1;

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "types.hpp"
+#include "numtypes.hpp"
 
 #include <array>
 #include <string_view>

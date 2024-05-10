@@ -1,6 +1,6 @@
 #pragma once
 
-#include "host.hpp"
+#include "platform.hpp"
 #include "recompiler.hpp"
 
 // WIP
@@ -316,14 +316,14 @@ struct RecompilerA64 : public Recompiler<GprInt, PcInt, RegisterAllocator> {
     void mfhi(u32 rd) const
     {
         // if (rd) {
-        //     c.mov(GetDirtyGpr(rd), GlobalVarPtr(hi));
+        //     c.mov(GetDirtyGpr(rd), JitPtr(hi));
         // }
     }
 
     void mflo(u32 rd) const
     {
         /*if (rd) {
-            c.mov(GetDirtyGpr(rd), GlobalVarPtr(lo));
+            c.mov(GetDirtyGpr(rd), JitPtr(lo));
         }*/
     }
 
@@ -344,12 +344,12 @@ struct RecompilerA64 : public Recompiler<GprInt, PcInt, RegisterAllocator> {
     }
 
     void mthi(u32 rs) const
-    { /*c.mov(GlobalVarPtr(hi), GetGpr(rs));*/
+    { /*c.mov(JitPtr(hi), GetGpr(rs));*/
     }
 
     void mtlo(u32 rs) const
     { /*
-        c.mov(GlobalVarPtr(lo), GetGpr(rs));*/
+        c.mov(JitPtr(lo), GetGpr(rs));*/
     }
 
     void nor(u32 rs, u32 rt, u32 rd) const

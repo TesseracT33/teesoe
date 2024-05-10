@@ -4,7 +4,7 @@
 #include "log.hpp"
 #include "n64_build_options.hpp"
 #include "recompiler.hpp"
-#include "util.hpp"
+
 #include "vr4300.hpp"
 
 #include <format>

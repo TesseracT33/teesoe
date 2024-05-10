@@ -3,6 +3,7 @@ cmake_minimum_required (VERSION 3.25)
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
 	main.cpp
 
+	common/files.cpp
 	common/log.cpp
 	common/sse_util.cpp
 

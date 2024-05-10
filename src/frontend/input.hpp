@@ -2,7 +2,7 @@
 
 #include "loader.hpp"
 #include "status.hpp"
-#include "types.hpp"
+#include "numtypes.hpp"
 
 #include "SDL.h"
 

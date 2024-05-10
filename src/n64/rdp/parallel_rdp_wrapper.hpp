@@ -8,7 +8,7 @@
 #include "SDL.h"
 #include "SDL_vulkan.h"
 #include "status.hpp"
-#include "types.hpp"
+#include "numtypes.hpp"
 
 #include <array>
 #include <vector>

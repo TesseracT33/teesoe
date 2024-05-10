@@ -122,13 +122,13 @@ public:
     void BlockEpilog()
     {
         FlushAndRestoreAll();
-        if (is_nonvolatile(guest_gprs_pointer_reg)) {
+        if (!IsVolatile(guest_gprs_pointer_reg)) {
             RestoreHost(guest_gprs_pointer_reg);
         }
-        if (is_nonvolatile(guest_vprs_pointer_reg)) {
+        if (!IsVolatile(guest_vprs_pointer_reg)) {
             RestoreHost(guest_vprs_pointer_reg);
         }
-        if constexpr (is_nonvolatile(reg_alloc_vte_reg)) {
+        if constexpr (!IsVolatile(reg_alloc_vte_reg)) {
             if (vte_reg_saved) {
                 RestoreHost(reg_alloc_vte_reg);
             }
@@ -143,13 +143,13 @@ public:
     void BlockEpilogWithJmp(void* func)
     {
         FlushAndRestoreAll();
-        if (is_nonvolatile(guest_gprs_pointer_reg)) {
+        if (!IsVolatile(guest_gprs_pointer_reg)) {
             RestoreHost(guest_gprs_pointer_reg);
         }
-        if (is_nonvolatile(guest_vprs_pointer_reg)) {
+        if (!IsVolatile(guest_vprs_pointer_reg)) {
             RestoreHost(guest_vprs_pointer_reg);
         }
-        if constexpr (is_nonvolatile(reg_alloc_vte_reg)) {
+        if constexpr (!IsVolatile(reg_alloc_vte_reg)) {
             if (vte_reg_saved) {
                 RestoreHost(reg_alloc_vte_reg);
             }
@@ -168,10 +168,10 @@ public:
         if constexpr (arch.a64) {
         } else {
             c.sub(x86::rsp, register_stack_space);
-            if (is_nonvolatile(guest_gprs_pointer_reg)) {
+            if (!IsVolatile(guest_gprs_pointer_reg)) {
                 SaveHost(guest_gprs_pointer_reg);
             }
-            if (is_nonvolatile(guest_vprs_pointer_reg)) {
+            if (!IsVolatile(guest_vprs_pointer_reg)) {
                 SaveHost(guest_vprs_pointer_reg);
             }
             c.mov(guest_gprs_pointer_reg, gpr.ptr(0));
@@ -190,10 +190,10 @@ public:
         } else {
             jit_x86_call_no_stack_alignment(c, func);
         }
-        if (is_volatile(guest_gprs_pointer_reg)) {
+        if (IsVolatile(guest_gprs_pointer_reg)) {
             c.mov(guest_gprs_pointer_reg, gpr.ptr(0));
         }
-        if (is_volatile(guest_vprs_pointer_reg)) {
+        if (IsVolatile(guest_vprs_pointer_reg)) {
             c.mov(guest_vprs_pointer_reg, vpr.data());
         }
     }
@@ -205,10 +205,10 @@ public:
         } else {
             jit_x64_call(c, func);
         }
-        if (is_volatile(guest_gprs_pointer_reg)) {
+        if (IsVolatile(guest_gprs_pointer_reg)) {
             c.mov(guest_gprs_pointer_reg, gpr.ptr(0));
         }
-        if (is_volatile(guest_vprs_pointer_reg)) {
+        if (IsVolatile(guest_vprs_pointer_reg)) {
             c.mov(guest_vprs_pointer_reg, vpr.data());
         }
     }
@@ -274,7 +274,7 @@ public:
 
     HostVpr128 GetVte()
     {
-        if constexpr (is_nonvolatile(reg_alloc_vte_reg)) {
+        if constexpr (!IsVolatile(reg_alloc_vte_reg)) {
             if (!vte_reg_saved) {
                 vte_reg_saved = true;
                 SaveHost(reg_alloc_vte_reg);
@@ -398,16 +398,16 @@ private:
                         c.vmovaps(xmmword_ptr(guest_vprs_pointer_reg, 16 * guest), binding.host);
                     } else {
                         switch (guest) {
-                        case acc_low_idx: c.vmovaps(GlobalVarPtr(acc.low), binding.host); break;
-                        case acc_mid_idx: c.vmovaps(GlobalVarPtr(acc.mid), binding.host); break;
-                        case acc_high_idx: c.vmovaps(GlobalVarPtr(acc.high), binding.host); break;
+                        case acc_low_idx: c.vmovaps(JitPtr(acc.low), binding.host); break;
+                        case acc_mid_idx: c.vmovaps(JitPtr(acc.mid), binding.host); break;
+                        case acc_high_idx: c.vmovaps(JitPtr(acc.high), binding.host); break;
                         default: assert(false);
                         }
                     }
                 }
             }
         }
-        if (!binding.is_volatile && restore) {
+        if (!binding.IsVolatile && restore) {
             RestoreHost(binding.host);
         }
     }
@@ -415,12 +415,12 @@ private:
     void FlushAndDestroyAllVolatile()
     {
         for (auto& b : gpr_state.bindings) {
-            if (b.is_volatile) {
+            if (b.IsVolatile) {
                 FlushAndDestroyBinding(b, false, true);
             }
         }
         for (auto& b : vpr_state.bindings) {
-            if (b.is_volatile) {
+            if (b.IsVolatile) {
                 FlushAndDestroyBinding(b, false, true);
             }
         }
@@ -501,7 +501,7 @@ private:
 
     void Load(auto& binding, bool save)
     {
-        if (!binding.is_volatile && save) {
+        if (!binding.IsVolatile && save) {
             SaveHost(binding.host);
         }
         if constexpr (arch.a64) {
@@ -518,9 +518,9 @@ private:
                     c.vmovaps(binding.host, xmmword_ptr(guest_vprs_pointer_reg, 16 * guest));
                 } else {
                     switch (guest) {
-                    case acc_low_idx: c.vmovaps(binding.host, GlobalVarPtr(acc.low)); break;
-                    case acc_mid_idx: c.vmovaps(binding.host, GlobalVarPtr(acc.mid)); break;
-                    case acc_high_idx: c.vmovaps(binding.host, GlobalVarPtr(acc.high)); break;
+                    case acc_low_idx: c.vmovaps(binding.host, JitPtr(acc.low)); break;
+                    case acc_mid_idx: c.vmovaps(binding.host, JitPtr(acc.mid)); break;
+                    case acc_high_idx: c.vmovaps(binding.host, JitPtr(acc.high)); break;
                     default: assert(false);
                     }
                 }

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "algorithm"
 #include "vr4300/cop1.hpp"
 #include "vr4300/recompiler.hpp"
 
@@ -25,7 +26,7 @@ void CallCop1InterpreterImpl(auto impl, u32 fs, u32 fd)
     fd ? c.mov(host_gpr_arg[1].r32(), fd) : c.xor_(host_gpr_arg[1].r32(), host_gpr_arg[1].r32());
     reg_alloc.Call(impl);
     reg_alloc.FreeArgs(2);
-    c.cmp(GlobalVarPtr(exception_occurred), 0);
+    c.cmp(JitPtr(exception_occurred), 0);
     c.je(l_noexception);
     BlockEpilog();
     c.bind(l_noexception);
@@ -41,7 +42,7 @@ void CallCop1InterpreterImpl(auto impl, u32 fs, u32 ft, u32 fd)
     fd ? c.mov(host_gpr_arg[2].r32(), fd) : c.xor_(host_gpr_arg[2].r32(), host_gpr_arg[2].r32());
     reg_alloc.Call(impl);
     reg_alloc.FreeArgs(3);
-    c.cmp(GlobalVarPtr(exception_occurred), 0);
+    c.cmp(JitPtr(exception_occurred), 0);
     c.je(l_noexception);
     BlockEpilog();
     c.bind(l_noexception);
@@ -50,7 +51,7 @@ void CallCop1InterpreterImpl(auto impl, u32 fs, u32 ft, u32 fd)
 bool CheckCop1Usable()
 {
     if (cop0.status.cu1) {
-        c.and_(GlobalVarPtr(fcr31), 0xFFFC'0FFF); // clear all exceptions
+        c.and_(JitPtr(fcr31), 0xFFFC'0FFF); // clear all exceptions
         c.vstmxcsr(dword_ptr(x86::rsp, -8));
         c.and_(dword_ptr(x86::rsp, -8), ~0x3D);
         c.vldmxcsr(dword_ptr(x86::rsp, -8));
@@ -65,7 +66,7 @@ template<bool cond, bool likely> void Cop1Branch(s16 imm)
 {
     if (!CheckCop1Usable()) return;
     Label l_branch = c.newLabel(), l_end = c.newLabel();
-    c.bt(GlobalVarPtr(fcr31), FCR31BitIndex::Condition);
+    c.bt(JitPtr(fcr31), FCR31BitIndex::Condition);
     cond ? c.jc(l_branch) : c.jnc(l_branch);
     likely ? DiscardBranchJit() : OnBranchNotTakenJit();
     c.jmp(l_end);
@@ -96,7 +97,7 @@ void OnCop1Unusable()
 void OnInvalidFormat()
 {
     if (!CheckCop1Usable()) return;
-    c.bts(GlobalVarPtr(fcr31), FCR31BitIndex::CauseUnimplemented);
+    c.bts(JitPtr(fcr31), FCR31BitIndex::CauseUnimplemented);
     block_cycles++;
     BlockEpilogWithPcFlushAndJmp(FloatingPointException);
     branched = true;
@@ -126,7 +127,7 @@ inline void cfc1(u32 fs, u32 rt)
 {
     if (!cop0.status.cu1) return OnCop1Unusable();
     Gpq ht = GetDirtyGpr(rt);
-    if (fs == 31) c.movsxd(ht, GlobalVarPtr(fcr31));
+    if (fs == 31) c.movsxd(ht, JitPtr(fcr31));
     else if (fs == 0) c.mov(ht.r32(), 0xA00);
     else c.xor_(ht.r32(), ht.r32());
 }
@@ -140,14 +141,14 @@ inline void ctc1(u32 fs, u32 rt)
     Gpd ht = GetGpr(rt).r32();
     c.mov(eax, ht);
     c.and_(eax, fcr31_write_mask);
-    c.and_(GlobalVarPtr(fcr31), ~fcr31_write_mask);
-    c.or_(GlobalVarPtr(fcr31), eax);
+    c.and_(JitPtr(fcr31), ~fcr31_write_mask);
+    c.or_(JitPtr(fcr31), eax);
     c.and_(eax, 3);
     c.shl(eax, 2);
-    c.mov(host_gpr_arg[0].r32(), GlobalArrPtrWithRegOffset(guest_to_host_rounding_mode, rax, 4));
+    c.mov(host_gpr_arg[0].r32(), JitPtrOffset(guest_to_host_rounding_mode, rax, 4));
     reg_alloc.Call(fesetround);
     reg_alloc.Call(TestExceptions<false>);
-    c.cmp(GlobalVarPtr(exception_occurred), 0);
+    c.cmp(JitPtr(exception_occurred), 0);
     c.je(l_no_exception);
     BlockEpilog();
     c.bind(l_no_exception);
@@ -157,7 +158,7 @@ inline void ctc1(u32 fs, u32 rt)
 inline void dcfc1()
 {
     if (!CheckCop1Usable()) return;
-    c.bts(GlobalVarPtr(fcr31), FCR31BitIndex::CauseUnimplemented);
+    c.bts(JitPtr(fcr31), FCR31BitIndex::CauseUnimplemented);
     block_cycles++;
     BlockEpilogWithPcFlushAndJmp(FloatingPointException);
     branched = true;
@@ -173,7 +174,7 @@ inline void dmfc1(u32 fs, u32 rt)
     if (!cop0.status.cu1) return OnCop1Unusable();
     if (!cop0.status.fr) fs &= ~1;
     Gpq hrt = GetDirtyGpr(rt);
-    c.mov(hrt, GlobalArrPtrWithImmOffset(fpr, fs * 8, 8));
+    c.mov(hrt, JitPtrOffset(fpr, fs * 8, 8));
     block_cycles++;
 }
 
@@ -182,7 +183,7 @@ inline void dmtc1(u32 fs, u32 rt)
     if (!cop0.status.cu1) return OnCop1Unusable();
     if (!cop0.status.fr) fs &= ~1;
     Gpq hrt = GetGpr(rt);
-    c.mov(GlobalArrPtrWithImmOffset(fpr, fs * 8, 8), hrt);
+    c.mov(JitPtrOffset(fpr, fs * 8, 8), hrt);
     block_cycles++;
 }
 
@@ -196,13 +197,13 @@ inline void ldc1(u32 base, u32 ft, s16 imm)
     Gpq hbase = GetGpr(base);
     c.lea(host_gpr_arg[0], ptr(hbase, imm));
     reg_alloc.Call(ReadVirtual<s64>);
-    c.cmp(GlobalVarPtr(exception_occurred), 0);
+    c.cmp(JitPtr(exception_occurred), 0);
     c.je(l_no_exception);
 
     BlockEpilog();
 
     c.bind(l_no_exception);
-    c.mov(GlobalArrPtrWithImmOffset(fpr, ft * 8, 8), rax);
+    c.mov(JitPtrOffset(fpr, ft * 8, 8), rax);
 
     block_cycles++;
     reg_alloc.FreeArgs(1);
@@ -217,16 +218,16 @@ inline void lwc1(u32 base, u32 ft, s16 imm)
     Gpq hbase = GetGpr(base);
     c.lea(host_gpr_arg[0], ptr(hbase, imm));
     reg_alloc.Call(ReadVirtual<s32>);
-    c.cmp(GlobalVarPtr(exception_occurred), 0);
+    c.cmp(JitPtr(exception_occurred), 0);
     c.je(l_no_exception);
 
     BlockEpilog();
 
     c.bind(l_no_exception);
     if (cop0.status.fr || !(ft & 1)) {
-        c.mov(GlobalArrPtrWithImmOffset(fpr, ft * 8, 4), eax);
+        c.mov(JitPtrOffset(fpr, ft * 8, 4), eax);
     } else {
-        c.mov(GlobalArrPtrWithImmOffset(fpr, (ft & ~1) * 8 + 4, 4), eax);
+        c.mov(JitPtrOffset(fpr, (ft & ~1) * 8 + 4, 4), eax);
     }
 
     block_cycles++;
@@ -238,9 +239,9 @@ inline void mfc1(u32 fs, u32 rt)
     if (!CheckCop1Usable()) return;
     Gpq hrt = GetDirtyGpr(rt);
     if (cop0.status.fr || !(fs & 1)) {
-        c.movsxd(hrt, GlobalArrPtrWithImmOffset(fpr, fs * 8, 4));
+        c.movsxd(hrt, JitPtrOffset(fpr, fs * 8, 4));
     } else {
-        c.movsxd(hrt, GlobalArrPtrWithImmOffset(fpr, (fs & ~1) * 8 + 4, 4));
+        c.movsxd(hrt, JitPtrOffset(fpr, (fs & ~1) * 8 + 4, 4));
     }
     block_cycles++;
 }
@@ -250,9 +251,9 @@ inline void mtc1(u32 fs, u32 rt)
     if (!CheckCop1Usable()) return;
     Gpd hrt = GetGpr(rt).r32();
     if (cop0.status.fr || !(fs & 1)) {
-        c.mov(GlobalArrPtrWithImmOffset(fpr, fs * 8, 4), hrt);
+        c.mov(JitPtrOffset(fpr, fs * 8, 4), hrt);
     } else {
-        c.mov(GlobalArrPtrWithImmOffset(fpr, (fs & ~1) * 8 + 4, 4), hrt);
+        c.mov(JitPtrOffset(fpr, (fs & ~1) * 8 + 4, 4), hrt);
     }
     block_cycles++;
 }
@@ -266,9 +267,9 @@ inline void sdc1(u32 base, u32 ft, s16 imm)
     reg_alloc.ReserveArgs(2);
     Gpq hbase = GetGpr(base);
     c.lea(host_gpr_arg[0], ptr(hbase, imm));
-    c.mov(host_gpr_arg[1], GlobalArrPtrWithImmOffset(fpr, ft * 8, 8));
+    c.mov(host_gpr_arg[1], JitPtrOffset(fpr, ft * 8, 8));
     reg_alloc.Call(WriteVirtual<8>);
-    c.cmp(GlobalVarPtr(exception_occurred), 0);
+    c.cmp(JitPtr(exception_occurred), 0);
     c.je(l_end);
 
     BlockEpilog();
@@ -287,12 +288,12 @@ inline void swc1(u32 base, u32 ft, s16 imm)
     Gpq hbase = GetGpr(base);
     c.lea(host_gpr_arg[0], ptr(hbase, imm));
     if (cop0.status.fr || !(ft & 1)) {
-        c.movsxd(host_gpr_arg[1], GlobalArrPtrWithImmOffset(fpr, ft * 8, 4));
+        c.movsxd(host_gpr_arg[1], JitPtrOffset(fpr, ft * 8, 4));
     } else {
-        c.movsxd(host_gpr_arg[1], GlobalArrPtrWithImmOffset(fpr, (ft & ~1) * 8 + 4, 4));
+        c.movsxd(host_gpr_arg[1], JitPtrOffset(fpr, (ft & ~1) * 8 + 4, 4));
     }
     reg_alloc.Call(WriteVirtual<4>);
-    c.cmp(GlobalVarPtr(exception_occurred), 0);
+    c.cmp(JitPtr(exception_occurred), 0);
     c.je(l_end);
 
     BlockEpilog();
@@ -304,7 +305,7 @@ inline void swc1(u32 base, u32 ft, s16 imm)
 
 template<Fmt fmt> inline void compare(u32 fs, u32 ft, u8 cond)
 {
-    if constexpr (!one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+    if constexpr (!OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
         return OnInvalidFormat();
     }
     if (!CheckCop1Usable()) return;
@@ -312,13 +313,13 @@ template<Fmt fmt> inline void compare(u32 fs, u32 ft, u8 cond)
     reg_alloc.Reserve<2>({ rcx, rdx });
     Label l_no_nans = c.newLabel(), l_exception = c.newLabel(), l_end = c.newLabel();
 
-    c.movq(xmm0, GlobalArrPtrWithImmOffset(fpr, 8 * fs, 8));
+    c.movq(xmm0, JitPtrOffset(fpr, 8 * fs, 8));
     if (cond & 8) {
-        fmt == Fmt::Float32 ? c.vcomiss(xmm0, GlobalArrPtrWithImmOffset(fpr, 8 * ft, 4))
-                            : c.vcomisd(xmm0, GlobalArrPtrWithImmOffset(fpr, 8 * ft, 8));
+        fmt == Fmt::Float32 ? c.vcomiss(xmm0, JitPtrOffset(fpr, 8 * ft, 4))
+                            : c.vcomisd(xmm0, JitPtrOffset(fpr, 8 * ft, 8));
     } else {
-        fmt == Fmt::Float32 ? c.vucomiss(xmm0, GlobalArrPtrWithImmOffset(fpr, 8 * ft, 4))
-                            : c.vucomisd(xmm0, GlobalArrPtrWithImmOffset(fpr, 8 * ft, 8));
+        fmt == Fmt::Float32 ? c.vucomiss(xmm0, JitPtrOffset(fpr, 8 * ft, 4))
+                            : c.vucomisd(xmm0, JitPtrOffset(fpr, 8 * ft, 8));
     }
     c.setp(al);
 
@@ -328,19 +329,19 @@ template<Fmt fmt> inline void compare(u32 fs, u32 ft, u8 cond)
     c.and_(eax, 1); // invalid exception
     c.mov(ecx, eax);
     c.shl(ecx, FCR31BitIndex::CauseInvalid);
-    c.or_(GlobalVarPtr(fcr31), ecx);
-    c.bt(GlobalVarPtr(fcr31), FCR31BitIndex::EnableInvalid);
+    c.or_(JitPtr(fcr31), ecx);
+    c.bt(JitPtr(fcr31), FCR31BitIndex::EnableInvalid);
     c.setc(cl);
     c.mov(edx, ecx);
     c.not_(edx);
     c.and_(edx, 1);
     c.shl(edx, FCR31BitIndex::FlagInvalid);
-    c.or_(GlobalVarPtr(fcr31), edx);
+    c.or_(JitPtr(fcr31), edx);
     c.and_(eax, ecx);
     c.and_(eax, 1);
     c.jnz(l_exception);
-    cond & 1 ? c.bts(GlobalVarPtr(fcr31), FCR31BitIndex::Condition)
-             : c.btr(GlobalVarPtr(fcr31), FCR31BitIndex::Condition);
+    cond & 1 ? c.bts(JitPtr(fcr31), FCR31BitIndex::Condition)
+             : c.btr(JitPtr(fcr31), FCR31BitIndex::Condition);
     c.jmp(l_end);
 
     c.bind(l_exception);
@@ -361,10 +362,10 @@ template<Fmt fmt> inline void compare(u32 fs, u32 ft, u8 cond)
         }
         c.and_(eax, 1);
         c.shl(eax, FCR31BitIndex::Condition);
-        c.btr(GlobalVarPtr(fcr31), FCR31BitIndex::Condition);
-        c.or_(GlobalVarPtr(fcr31), eax);
+        c.btr(JitPtr(fcr31), FCR31BitIndex::Condition);
+        c.or_(JitPtr(fcr31), eax);
     } else {
-        c.btr(GlobalVarPtr(fcr31), FCR31BitIndex::Condition);
+        c.btr(JitPtr(fcr31), FCR31BitIndex::Condition);
     }
 
     c.bind(l_end);
@@ -373,7 +374,7 @@ template<Fmt fmt> inline void compare(u32 fs, u32 ft, u8 cond)
 
 template<Fmt fmt> void ceil_l(u32 fs, u32 fd)
 {
-    if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
         Round<RoundInstr::CEIL, typename FmtToType<fmt>::type, s64>(fs, fd);
     } else {
         OnInvalidFormat();
@@ -382,7 +383,7 @@ template<Fmt fmt> void ceil_l(u32 fs, u32 fd)
 
 template<Fmt fmt> void ceil_w(u32 fs, u32 fd)
 {
-    if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
         Round<RoundInstr::CEIL, typename FmtToType<fmt>::type, s32>(fs, fd);
     } else {
         OnInvalidFormat();
@@ -411,7 +412,7 @@ template<Fmt fmt> inline void cvt_w(u32 fs, u32 fd)
 
 template<Fmt fmt> void floor_l(u32 fs, u32 fd)
 {
-    if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
         Round<RoundInstr::FLOOR, typename FmtToType<fmt>::type, s64>(fs, fd);
     } else {
         OnInvalidFormat();
@@ -420,7 +421,7 @@ template<Fmt fmt> void floor_l(u32 fs, u32 fd)
 
 template<Fmt fmt> void floor_w(u32 fs, u32 fd)
 {
-    if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
         Round<RoundInstr::FLOOR, typename FmtToType<fmt>::type, s32>(fs, fd);
     } else {
         OnInvalidFormat();
@@ -429,7 +430,7 @@ template<Fmt fmt> void floor_w(u32 fs, u32 fd)
 
 template<Fmt fmt> void round_l(u32 fs, u32 fd)
 {
-    if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
         Round<RoundInstr::ROUND, typename FmtToType<fmt>::type, s64>(fs, fd);
     } else {
         OnInvalidFormat();
@@ -438,7 +439,7 @@ template<Fmt fmt> void round_l(u32 fs, u32 fd)
 
 template<Fmt fmt> void round_w(u32 fs, u32 fd)
 {
-    if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
         Round<RoundInstr::ROUND, typename FmtToType<fmt>::type, s32>(fs, fd);
     } else {
         OnInvalidFormat();
@@ -447,7 +448,7 @@ template<Fmt fmt> void round_w(u32 fs, u32 fd)
 
 template<Fmt fmt> void trunc_l(u32 fs, u32 fd)
 {
-    if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
         Round<RoundInstr::TRUNC, typename FmtToType<fmt>::type, s64>(fs, fd);
     } else {
         OnInvalidFormat();
@@ -456,7 +457,7 @@ template<Fmt fmt> void trunc_l(u32 fs, u32 fd)
 
 template<Fmt fmt> void trunc_w(u32 fs, u32 fd)
 {
-    if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
         Round<RoundInstr::TRUNC, typename FmtToType<fmt>::type, s32>(fs, fd);
     } else {
         OnInvalidFormat();
@@ -465,7 +466,7 @@ template<Fmt fmt> void trunc_w(u32 fs, u32 fd)
 
 template<Fmt fmt> inline void abs(u32 fs, u32 fd)
 {
-    if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
         Compute<ComputeInstr1Op::ABS, typename FmtToType<fmt>::type>(fs, fd);
     } else {
         OnInvalidFormat();
@@ -474,7 +475,7 @@ template<Fmt fmt> inline void abs(u32 fs, u32 fd)
 
 template<Fmt fmt> inline void add(u32 fs, u32 ft, u32 fd)
 {
-    if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
         Compute<ComputeInstr2Op::ADD, typename FmtToType<fmt>::type>(fs, ft, fd);
     } else {
         OnInvalidFormat();
@@ -483,7 +484,7 @@ template<Fmt fmt> inline void add(u32 fs, u32 ft, u32 fd)
 
 template<Fmt fmt> inline void div(u32 fs, u32 ft, u32 fd)
 {
-    if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
         Compute<ComputeInstr2Op::DIV, typename FmtToType<fmt>::type>(fs, ft, fd);
     } else {
         OnInvalidFormat();
@@ -492,11 +493,11 @@ template<Fmt fmt> inline void div(u32 fs, u32 ft, u32 fd)
 
 template<Fmt fmt> inline void mov(u32 fs, u32 fd)
 {
-    if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
         if (cop0.status.cu1) {
             if (!cop0.status.fr) fs &= ~1;
-            c.mov(rax, GlobalArrPtrWithImmOffset(fpr, 8 * fs, 8));
-            c.mov(GlobalArrPtrWithImmOffset(fpr, 8 * fd, 8), rax);
+            c.mov(rax, JitPtrOffset(fpr, 8 * fs, 8));
+            c.mov(JitPtrOffset(fpr, 8 * fd, 8), rax);
         } else {
             reg_alloc.FlushAll();
             c.mov(host_gpr_arg[0].r32(), 1);
@@ -510,7 +511,7 @@ template<Fmt fmt> inline void mov(u32 fs, u32 fd)
 
 template<Fmt fmt> void mul(u32 fs, u32 ft, u32 fd)
 {
-    if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
         Compute<ComputeInstr2Op::MUL, typename FmtToType<fmt>::type>(fs, ft, fd);
     } else {
         OnInvalidFormat();
@@ -519,7 +520,7 @@ template<Fmt fmt> void mul(u32 fs, u32 ft, u32 fd)
 
 template<Fmt fmt> void neg(u32 fs, u32 fd)
 {
-    if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
         Compute<ComputeInstr1Op::NEG, typename FmtToType<fmt>::type>(fs, fd);
     } else {
         OnInvalidFormat();
@@ -528,7 +529,7 @@ template<Fmt fmt> void neg(u32 fs, u32 fd)
 
 template<Fmt fmt> void sqrt(u32 fs, u32 fd)
 {
-    if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
         Compute<ComputeInstr1Op::SQRT, typename FmtToType<fmt>::type>(fs, fd);
     } else {
         OnInvalidFormat();
@@ -537,7 +538,7 @@ template<Fmt fmt> void sqrt(u32 fs, u32 fd)
 
 template<Fmt fmt> void sub(u32 fs, u32 ft, u32 fd)
 {
-    if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
         Compute<ComputeInstr2Op::SUB, typename FmtToType<fmt>::type>(fs, ft, fd);
     } else {
         OnInvalidFormat();
@@ -553,7 +554,7 @@ template<ComputeInstr1Op instr, std::floating_point Float> void Compute(u32 fs, 
 
     FlushPc();
     c.sub(x86::rsp, 16);
-    c.vmovq(xmm0, GlobalArrPtrWithImmOffset(fpr, 8 * fs, 8));
+    c.vmovq(xmm0, JitPtrOffset(fpr, 8 * fs, 8));
     c.vmovq(qword_ptr(x86::rsp), xmm0);
     reg_alloc.Call(IsValidInput<Float>);
     c.test(al, al);
@@ -565,16 +566,16 @@ template<ComputeInstr1Op instr, std::floating_point Float> void Compute(u32 fs, 
     }
     if constexpr (instr == ABS) {
         if constexpr (sizeof(Float) == 4) {
-            c.vandps(xmm0, xmm0, GlobalVarPtr(abs_f32_mask));
+            c.vandps(xmm0, xmm0, JitPtr(abs_f32_mask));
         } else {
-            c.vandpd(xmm0, xmm0, GlobalVarPtr(abs_f64_mask));
+            c.vandpd(xmm0, xmm0, JitPtr(abs_f64_mask));
         }
     }
     if constexpr (instr == NEG) {
         if constexpr (sizeof(Float) == 4) {
-            c.vxorps(xmm0, xmm0, GlobalVarPtr(neg_f32_mask));
+            c.vxorps(xmm0, xmm0, JitPtr(neg_f32_mask));
         } else {
-            c.vxorpd(xmm0, xmm0, GlobalVarPtr(neg_f64_mask));
+            c.vxorpd(xmm0, xmm0, JitPtr(neg_f64_mask));
         }
     }
     if constexpr (instr == SQRT) {
@@ -599,7 +600,7 @@ template<ComputeInstr1Op instr, std::floating_point Float> void Compute(u32 fs, 
     } else {
         c.mov(rax, qword_ptr(x86::rsp));
     }
-    c.mov(GlobalArrPtrWithImmOffset(fpr, 8 * fd, 8), rax);
+    c.mov(JitPtrOffset(fpr, 8 * fd, 8), rax);
     c.add(x86::rsp, 16);
     c.jmp(l_end);
 
@@ -619,12 +620,12 @@ template<ComputeInstr2Op instr, std::floating_point Float> void Compute(u32 fs, 
 
     FlushPc();
     c.sub(x86::rsp, 16);
-    c.vmovq(xmm0, GlobalArrPtrWithImmOffset(fpr, 8 * fs, 8));
+    c.vmovq(xmm0, JitPtrOffset(fpr, 8 * fs, 8));
     c.vmovq(qword_ptr(x86::rsp), xmm0);
     reg_alloc.Call(IsValidInput<Float>);
     c.test(al, al);
     c.jz(l_epilog);
-    c.vmovq(xmm0, GlobalArrPtrWithImmOffset(fpr, 8 * ft, 8));
+    c.vmovq(xmm0, JitPtrOffset(fpr, 8 * ft, 8));
     c.vmovq(qword_ptr(x86::rsp, 8), xmm0);
     reg_alloc.Call(IsValidInput<Float>);
     c.test(al, al);
@@ -659,12 +660,12 @@ template<ComputeInstr2Op instr, std::floating_point Float> void Compute(u32 fs, 
         c.vmovq(xmm1, qword_ptr(x86::rsp, 8));
         if constexpr (sizeof(Float) == 4) {
             static constexpr std::array div_or_vec = { 0, 1, 1, 1 };
-            c.vpor(xmm1, xmm1, GlobalVarPtr(div_or_vec)); // avoid div by zero for "unused" lanes
+            c.vpor(xmm1, xmm1, JitPtr(div_or_vec)); // avoid div by zero for "unused" lanes
             c.vdivps(xmm0, xmm0, xmm1);
             block_cycles += 28;
         } else {
             static constexpr std::array div_or_vec = { 0_u64, 1_u64 };
-            c.vpor(xmm1, xmm1, GlobalVarPtr(div_or_vec));
+            c.vpor(xmm1, xmm1, JitPtr(div_or_vec));
             c.vdivpd(xmm0, xmm0, xmm1);
             block_cycles += 57;
         }
@@ -682,7 +683,7 @@ template<ComputeInstr2Op instr, std::floating_point Float> void Compute(u32 fs, 
     } else {
         c.mov(rax, qword_ptr(x86::rsp));
     }
-    c.mov(GlobalArrPtrWithImmOffset(fpr, 8 * fd, 8), rax);
+    c.mov(JitPtrOffset(fpr, 8 * fd, 8), rax);
     c.add(x86::rsp, 16);
     c.jmp(l_end);
 
@@ -701,7 +702,7 @@ template<ComputeInstr2Op instr, std::floating_point Float> void Compute(u32 fs, 
 
  FlushPc();
     c.sub(x86::rsp, 16);
-    c.vmovq(xmm0, GlobalArrPtrWithImmOffset(fpr, 8 * fs, 8));
+    c.vmovq(xmm0, JitPtrOffset(fpr, 8 * fs, 8));
     c.vmovq(qword_ptr(x86::rsp), xmm0);
     reg_alloc.Call(IsValidInputCvtRound<To>);
     c.test(al, al);
@@ -745,7 +746,7 @@ template<ComputeInstr2Op instr, std::floating_point Float> void Compute(u32 fs, 
     } else {
         c.mov(rax, qword_ptr(x86::rsp));
     }
-    c.mov(GlobalArrPtrWithImmOffset(fpr, 8 * fd, 8), rax);
+    c.mov(JitPtrOffset(fpr, 8 * fd, 8), rax);
     c.add(x86::rsp, 16);
     c.jmp(l_end);
 
@@ -766,7 +767,7 @@ template<RoundInstr instr, FpuNum From, FpuNum To> void Round(u32 fs, u32 fd)
 
     FlushPc();
     c.sub(x86::rsp, 16);
-    c.vmovq(xmm0, GlobalArrPtrWithImmOffset(fpr, 8 * fs, 8));
+    c.vmovq(xmm0, JitPtrOffset(fpr, 8 * fs, 8));
     c.vmovq(qword_ptr(x86::rsp), xmm0);
     reg_alloc.Call(IsValidInputCvtRound<To, From>);
     c.test(al, al);
@@ -811,7 +812,7 @@ template<RoundInstr instr, FpuNum From, FpuNum To> void Round(u32 fs, u32 fd)
     } else {
         c.mov(rax, qword_ptr(x86::rsp));
     }
-    c.mov(GlobalArrPtrWithImmOffset(fpr, 8 * fd, 8), rax);
+    c.mov(JitPtrOffset(fpr, 8 * fd, 8), rax);
     c.add(x86::rsp, 16);
     c.jmp(l_end);
 

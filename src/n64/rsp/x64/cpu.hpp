@@ -23,8 +23,8 @@ struct Recompiler : public mips::RecompilerX64<s32, u32, RegisterAllocator> {
     {
         reg_alloc.FlushAll();
         Label l_end = c.newLabel();
-        c.or_(GlobalVarPtr(sp.status), 3); // set halted, broke
-        c.bt(GlobalVarPtr(sp.status), 6); // test intbreak
+        c.or_(JitPtr(sp.status), 3); // set halted, broke
+        c.bt(JitPtr(sp.status), 6); // test intbreak
         c.jnc(l_end);
         c.mov(host_gpr_arg[0].r32(), std::to_underlying(mi::InterruptType::SP));
         BlockEpilogWithPcFlushAndJmp(mi::RaiseInterrupt);
@@ -53,9 +53,9 @@ struct Recompiler : public mips::RecompilerX64<s32, u32, RegisterAllocator> {
             Gpd hs = GetGpr(rs);
             c.lea(eax, ptr(hs, imm)); // addr
             c.and_(eax, 0xFFF);
-            c.movsx(ht, GlobalArrPtrWithRegOffset(dmem, rax, 1));
+            c.movsx(ht, JitPtrOffset(dmem, rax, 1));
         } else {
-            c.movsx(ht, GlobalArrPtrWithImmOffset(dmem, imm & 0xFFF, 1));
+            c.movsx(ht, JitPtrOffset(dmem, imm & 0xFFF, 1));
         }
     }
 
@@ -67,9 +67,9 @@ struct Recompiler : public mips::RecompilerX64<s32, u32, RegisterAllocator> {
             Gpd hs = GetGpr(rs);
             c.lea(eax, ptr(hs, imm)); // addr
             c.and_(eax, 0xFFF);
-            c.movzx(ht, GlobalArrPtrWithRegOffset(dmem, rax, 1));
+            c.movzx(ht, JitPtrOffset(dmem, rax, 1));
         } else {
-            c.movzx(ht, GlobalArrPtrWithImmOffset(dmem, imm & 0xFFF, 1));
+            c.movzx(ht, JitPtrOffset(dmem, imm & 0xFFF, 1));
         }
     }
 
@@ -89,7 +89,7 @@ struct Recompiler : public mips::RecompilerX64<s32, u32, RegisterAllocator> {
             c.mov(dl, byte_ptr(rcx, rax));
             c.movsx(ht, dx);
         } else {
-            c.movbe(ax, GlobalArrPtrWithImmOffset(dmem, imm, 2));
+            c.movbe(ax, JitPtrOffset(dmem, imm, 2));
             c.movsx(ht, ax);
         }
     }
@@ -110,7 +110,7 @@ struct Recompiler : public mips::RecompilerX64<s32, u32, RegisterAllocator> {
             c.mov(dl, byte_ptr(rcx, rax));
             c.movzx(ht, dx);
         } else {
-            c.movbe(ax, GlobalArrPtrWithImmOffset(dmem, imm, 2));
+            c.movbe(ax, JitPtrOffset(dmem, imm, 2));
             c.movzx(ht, ax);
         }
     }
@@ -148,7 +148,7 @@ struct Recompiler : public mips::RecompilerX64<s32, u32, RegisterAllocator> {
 
             c.bind(l_end);
         } else {
-            c.movbe(ht, GlobalArrPtrWithImmOffset(dmem, imm, 4));
+            c.movbe(ht, JitPtrOffset(dmem, imm, 4));
         }
     }
 
@@ -172,12 +172,12 @@ struct Recompiler : public mips::RecompilerX64<s32, u32, RegisterAllocator> {
         reg_alloc.FreeArgs(2);
         if ((rd & 7) == 4) { // SP_STATUS
             Label l_no_halt = c.newLabel(), l_no_sstep = c.newLabel();
-            c.bt(GlobalVarPtr(sp.status), 0); // halted
+            c.bt(JitPtr(sp.status), 0); // halted
             c.jnc(l_no_halt);
             BlockEpilogWithPcFlush(4);
 
             c.bind(l_no_halt);
-            c.bt(GlobalVarPtr(sp.status), 5); // sstep
+            c.bt(JitPtr(sp.status), 5); // sstep
             c.jnc(l_no_sstep);
             BlockEpilogWithPcFlush(4);
 
@@ -192,9 +192,9 @@ struct Recompiler : public mips::RecompilerX64<s32, u32, RegisterAllocator> {
             Gpd hs = GetGpr(rs);
             c.lea(eax, ptr(hs, imm)); // addr
             c.and_(eax, 0xFFF);
-            c.mov(GlobalArrPtrWithRegOffset(dmem, rax, 1), ht.r8());
+            c.mov(JitPtrOffset(dmem, rax, 1), ht.r8());
         } else {
-            c.mov(GlobalArrPtrWithImmOffset(dmem, imm & 0xFFF, 1), ht.r8());
+            c.mov(JitPtrOffset(dmem, imm & 0xFFF, 1), ht.r8());
         }
     }
 
@@ -213,7 +213,7 @@ struct Recompiler : public mips::RecompilerX64<s32, u32, RegisterAllocator> {
             c.and_(eax, 0xFFF);
             c.mov(byte_ptr(rcx, rax), dl);
         } else {
-            c.movbe(GlobalArrPtrWithImmOffset(dmem, imm, 2), ht.r16());
+            c.movbe(JitPtrOffset(dmem, imm, 2), ht.r16());
         }
     }
 
@@ -252,7 +252,7 @@ struct Recompiler : public mips::RecompilerX64<s32, u32, RegisterAllocator> {
 
             c.bind(l_end);
         } else {
-            c.movbe(GlobalArrPtrWithImmOffset(dmem, imm, 4), ht);
+            c.movbe(JitPtrOffset(dmem, imm, 4), ht);
         }
     }
 
@@ -262,8 +262,8 @@ struct Recompiler : public mips::RecompilerX64<s32, u32, RegisterAllocator> {
     jit_pc,
     branch_hit,
     branched,
-    [] { return GlobalVarPtr(lo_dummy); },
-    [] { return GlobalVarPtr(hi_dummy); },
+    [] { return JitPtr(lo_dummy); },
+    [] { return JitPtr(hi_dummy); },
     [](u32 target) { TakeBranchJit(target); },
     [](HostGpr32 target) { TakeBranchJit(target); },
     LinkJit,

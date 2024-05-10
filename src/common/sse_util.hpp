@@ -1,9 +1,9 @@
 #pragma once
 
-#include "host.hpp"
+#include "platform.hpp"
 
 #if X64
-#include "types.hpp"
+#include "numtypes.hpp"
 
 #include <immintrin.h>
 

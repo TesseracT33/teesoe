@@ -1,11 +1,12 @@
 #include "cop0.hpp"
+#include "always_false.hpp"
 #include "cop1.hpp"
 #include "exceptions.hpp"
 #include "memory/memory.hpp"
 #include "mmu.hpp"
 #include "n64_build_options.hpp"
 #include "scheduler.hpp"
-#include "util.hpp"
+
 #include "vr4300.hpp"
 #include "vr4300/interpreter.hpp"
 
@@ -22,7 +23,7 @@ u64 Cop0Registers::Get(size_t reg_index) const
     auto Read = [](auto reg) {
         if constexpr (sizeof(reg) == 4) return std::bit_cast<u32>(reg);
         else if constexpr (sizeof(reg) == 8) return std::bit_cast<u64>(reg);
-        else static_assert(always_false<sizeof(reg)>, "Register must be either 4 or 8 bytes.");
+        else static_assert(AlwaysFalse<sizeof(reg)>, "Register must be either 4 or 8 bytes.");
     };
 
     switch (reg_index & 31) {

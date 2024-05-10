@@ -2,7 +2,7 @@
 
 #include "n64.hpp"
 #include "rsp/rsp.hpp"
-#include "types.hpp"
+#include "numtypes.hpp"
 #include "vr4300/vr4300.hpp"
 
 #include <string>

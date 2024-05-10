@@ -5,7 +5,7 @@
 #include "log.hpp"
 #include "memory/memory.hpp"
 #include "n64_build_options.hpp"
-#include "util.hpp"
+
 #include "vr4300.hpp"
 
 #include <array>
@@ -380,11 +380,11 @@ template<size_t access_size, Alignment alignment> void WriteVirtual(u64 vaddr, s
         if constexpr (alignment == Alignment::UnalignedLeft) { /* Store (Double)Word Left */
             // (SWL) offset => mask; 0 => FFFF'FFFF; 1 => 00FF'FFFF; 2 => 0000'FFFF; 3 => 0000'00FF
             // (SDL) offset => mask; 0 => FFFF'FFFF'FFFF'FFFF; 1 => 00FF'FFFF'FFFF'FFFF; ...
-            return std::numeric_limits<typename SizeToUInt<access_size>::type>::max() >> (8 * offset);
+            return std::numeric_limits<typename UIntOfSize<access_size>::type>::max() >> (8 * offset);
         } else { /* UnalignedRight; Store (Double)Word Right */
             // (SWR) offset => mask; 0 => FF00'0000; 1 => FFFF'0000; 2 => FFFF'FF00; 3 => FFFF'FFFF
             // (SDR) offset => mask; 0 => FF00'0000'0000'0000; 1 => FFFF'0000'0000'0000; ...
-            return std::numeric_limits<typename SizeToUInt<access_size>::type>::max()
+            return std::numeric_limits<typename UIntOfSize<access_size>::type>::max()
                 << (8 * (access_size - offset - 1));
         }
     };

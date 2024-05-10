@@ -1,7 +1,7 @@
 #include "cart.hpp"
+#include "files.hpp"
 #include "frontend/message.hpp"
 #include "interface/pi.hpp"
-#include "util.hpp"
 
 #include <algorithm>
 #include <bit>
@@ -49,7 +49,7 @@ u8* GetPointerToSram(u32 addr)
 
 Status LoadRom(std::filesystem::path const& rom_path)
 {
-    std::expected<std::vector<u8>, std::string> expected_rom = read_file(rom_path);
+    std::expected<std::vector<u8>, std::string> expected_rom = OpenFile(rom_path);
     if (!expected_rom) {
         return FailureStatus(expected_rom.error());
     }
@@ -72,7 +72,7 @@ Status LoadRom(std::filesystem::path const& rom_path)
 
 Status LoadSram(std::filesystem::path const& sram_path)
 {
-    std::expected<std::vector<u8>, std::string> expected_sram = read_file(sram_path);
+    std::expected<std::vector<u8>, std::string> expected_sram = OpenFile(sram_path);
     if (!expected_sram) {
         return FailureStatus(expected_sram.error());
     }

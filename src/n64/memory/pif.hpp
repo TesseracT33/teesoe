@@ -2,7 +2,7 @@
 
 #include "control.hpp"
 #include "status.hpp"
-#include "types.hpp"
+#include "numtypes.hpp"
 
 #include <concepts>
 #include <filesystem>

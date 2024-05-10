@@ -1,11 +1,12 @@
 #pragma once
 
+#include "always_false.hpp"
 #include "asmjit/a64.h"
 #include "asmjit/x86.h"
-#include "common/types.hpp"
-#include "host.hpp"
 #include "jit_util.hpp"
 #include "mips/disassembler.hpp"
+#include "numtypes.hpp"
+#include "platform.hpp"
 
 #include <algorithm>
 #include <array>
@@ -29,7 +30,7 @@ struct RegisterAllocatorState {
         std::optional<u32> guest{};
         u64 access_index{};
         bool dirty{};
-        bool is_volatile{};
+        bool IsVolatile{};
         bool reserved{};
         bool Occupied() const { return guest.has_value(); }
     };
@@ -47,8 +48,8 @@ struct RegisterAllocatorState {
         nonvolatile_bindings_begin_it{ bindings.begin() + num_volatile_regs },
         nonvolatile_bindings_end_it{ bindings.begin() + num_volatile_regs + num_nonvolatile_regs }
     {
-        assert(std::ranges::all_of(volatile_regs, [](HostReg const& reg) { return is_volatile(reg); }));
-        assert(std::ranges::none_of(nonvolatile_regs, [](HostReg const& reg) { return is_volatile(reg); }));
+        assert(std::ranges::all_of(volatile_regs, [](HostReg const& reg) { return IsVolatile(reg); }));
+        assert(std::ranges::none_of(nonvolatile_regs, [](HostReg const& reg) { return IsVolatile(reg); }));
         if constexpr (std::same_as<HostReg, HostGpr>) {
             // assert(std::ranges::find(volatile_regs, [](HostReg const& reg) {
             //     return reg.id() == guest_reg_pointer_gpr.id();
@@ -61,10 +62,10 @@ struct RegisterAllocatorState {
             }
         }
         std::ranges::transform(volatile_regs, volatile_bindings_begin_it, [](HostReg const& reg) {
-            return Binding{ .host = reg, .is_volatile = true };
+            return Binding{ .host = reg, .IsVolatile = true };
         });
         std::ranges::transform(nonvolatile_regs, nonvolatile_bindings_begin_it, [](HostReg const& reg) {
-            return Binding{ .host = reg, .is_volatile = false };
+            return Binding{ .host = reg, .IsVolatile = false };
         });
     }
 
@@ -91,7 +92,7 @@ struct RegisterAllocatorState {
     {
         std::string used_str, free_str;
         for (Binding const& b : bindings) {
-            auto host_reg_str{ host_reg_to_string(b.host) };
+            auto host_reg_str{ JitRegToStr(b.host) };
             if (b.Occupied()) {
                 u32 guest = b.guest.value();
                 std::string guest_reg_str =
@@ -128,7 +129,7 @@ struct RegisterAllocatorState {
                 c.vmovaps(dst, src);
             }
         } else {
-            static_assert(always_false<sizeof(HostReg)>);
+            static_assert(AlwaysFalse<sizeof(HostReg)>);
         }
     }
 
@@ -169,7 +170,7 @@ struct RegisterAllocatorState {
             if (replacement) {
                 if (!found_free) {
                     flush_and_destroy_binding_func(*replacement, false, true);
-                } else if (!replacement->is_volatile) {
+                } else if (!replacement->IsVolatile) {
                     save_host_func(replacement->host);
                 }
                 replacement->guest = freed->guest;
@@ -181,7 +182,7 @@ struct RegisterAllocatorState {
                 freed->guest = {};
                 freed->dirty = false;
                 MoveHost(replacement->host, freed->host);
-                if (!freed->is_volatile) {
+                if (!freed->IsVolatile) {
                     restore_host_func(freed->host);
                 }
             } else {
@@ -234,7 +235,7 @@ public:
     void BlockEpilog()
     {
         FlushAndRestoreAll();
-        if (is_nonvolatile(guest_gprs_pointer_reg)) {
+        if (!IsVolatile(guest_gprs_pointer_reg)) {
             RestoreHost(guest_gprs_pointer_reg);
         }
         if constexpr (arch.a64) {
@@ -247,7 +248,7 @@ public:
     void BlockEpilogWithJmp(void* func)
     {
         FlushAndRestoreAll();
-        if (is_nonvolatile(guest_gprs_pointer_reg)) {
+        if (!IsVolatile(guest_gprs_pointer_reg)) {
             RestoreHost(guest_gprs_pointer_reg);
         }
         if constexpr (arch.a64) {
@@ -263,7 +264,7 @@ public:
         if constexpr (arch.a64) {
         } else {
             c.sub(x86::rsp, register_stack_space);
-            if (is_nonvolatile(guest_gprs_pointer_reg)) {
+            if (!IsVolatile(guest_gprs_pointer_reg)) {
                 SaveHost(guest_gprs_pointer_reg);
             }
             c.mov(guest_gprs_pointer_reg, guest_gprs.data());
@@ -280,7 +281,7 @@ public:
         } else {
             jit_x86_call_no_stack_alignment(c, func);
         }
-        if (is_volatile(guest_gprs_pointer_reg)) {
+        if (IsVolatile(guest_gprs_pointer_reg)) {
             c.mov(guest_gprs_pointer_reg, guest_gprs.data());
         }
     }
@@ -292,7 +293,7 @@ public:
         } else {
             jit_x64_call_with_stack_alignment(c, func);
         }
-        if (is_volatile(guest_gprs_pointer_reg)) {
+        if (IsVolatile(guest_gprs_pointer_reg)) {
             c.mov(guest_gprs_pointer_reg, guest_gprs.data());
         }
     }
@@ -419,7 +420,7 @@ protected:
                 }
             }
         }
-        if (!b.is_volatile && restore) {
+        if (!b.IsVolatile && restore) {
             RestoreHost(b.host);
         }
     }
@@ -427,7 +428,7 @@ protected:
     void FlushAndDestroyAllVolatile()
     {
         for (Binding& binding : state.bindings) {
-            if (binding.is_volatile) {
+            if (binding.IsVolatile) {
                 FlushAndDestroyBinding(binding, false, true);
             }
         }
@@ -506,7 +507,7 @@ protected:
 
     void Load(Binding& binding, bool save)
     {
-        if (!binding.is_volatile && save) {
+        if (!binding.IsVolatile && save) {
             SaveHost(binding.host);
         }
         u32 guest = binding.guest.value();

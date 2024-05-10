@@ -1,12 +1,12 @@
 #pragma once
 
 #include "exceptions.hpp"
-#include "host.hpp"
 #include "jit_util.hpp"
 #include "mips/recompiler.hpp"
 #include "mips/register_allocator.hpp"
+#include "numtypes.hpp"
+#include "platform.hpp"
 #include "status.hpp"
-#include "types.hpp"
 #include "vr4300.hpp"
 
 #include <concepts>
@@ -62,76 +62,36 @@ inline u64 jit_pc;
 inline u32 block_cycles;
 inline bool branch_hit, branched;
 
-template<typename T> auto GlobalVarPtr(T const& obj, u32 ptr_size = sizeof(T))
+template<typename T> asmjit::x86::Mem JitPtr(T const& obj, u32 ptr_size = sizeof(T))
 {
-    if constexpr (std::is_pointer_v<T>) {
-        return jit_mem_global_var(asmjit::x86::rbp, gpr.ptr(0), obj, ptr_size);
-    } else {
-        return jit_mem_global_var(asmjit::x86::rbp, gpr.ptr(0), &obj, ptr_size);
-    }
+    std::ptrdiff_t diff = reinterpret_cast<u8 const*>(&obj) - reinterpret_cast<u8 const*>(gpr.ptr(0));
+    return asmjit::x86::ptr(asmjit::x86::rbp, s32(diff), ptr_size);
 }
 
-template<typename T> auto GlobalArrPtrWithImmOffset(T const& obj, u32 index, size_t ptr_size)
+template<typename T> asmjit::x86::Mem JitPtrOffset(T const& obj, u32 index, size_t ptr_size = sizeof(T))
 {
-    if constexpr (std::is_pointer_v<T>) {
-        return jit_mem_global_arr_with_imm_index(asmjit::x86::rbp, index, gpr.ptr(0), obj, ptr_size);
-    } else {
-        return jit_mem_global_arr_with_imm_index(asmjit::x86::rbp, index, gpr.ptr(0), &obj, ptr_size);
-    }
+    std::ptrdiff_t diff = reinterpret_cast<u8 const*>(&obj) + index - reinterpret_cast<u8 const*>(gpr.ptr(0));
+    return asmjit::x86::ptr(asmjit::x86::rbp, s32(diff), ptr_size);
 }
 
-template<typename T> auto GlobalArrPtrWithRegOffset(T const& obj, asmjit::x86::Gp index, size_t ptr_size)
+template<typename T> asmjit::x86::Mem JitPtrOffset(T const& obj, asmjit::x86::Gp index, size_t ptr_size = sizeof(T))
 {
-    if constexpr (std::is_pointer_v<T>) {
-        return jit_mem_global_arr_with_reg_index(asmjit::x86::rbp, index.r64(), gpr.ptr(0), obj, ptr_size);
-    } else {
-        return jit_mem_global_arr_with_reg_index(asmjit::x86::rbp, index.r64(), gpr.ptr(0), &obj, ptr_size);
-    }
-}
-
-inline void JitCallInterpreterImpl(auto impl)
-{
-    reg_alloc.Call(impl);
-}
-
-template<typename Arg, typename... Args>
-inline void JitCallInterpreterImpl(auto impl, Arg first_arg, Args... remaining_args)
-{
-    static_assert(1 + sizeof...(remaining_args) <= host_gpr_arg.size(),
-      "This function does not support passing arguments by the stack");
-    static int r_idx{};
-    if (r_idx == 0) {
-        reg_alloc.FlushAll();
-    }
-    if (first_arg == 0) {
-        compiler.xor_(host_gpr_arg[r_idx].r32(), host_gpr_arg[r_idx].r32());
-    } else if constexpr (sizeof(first_arg) <= 4) {
-        compiler.mov(host_gpr_arg[r_idx].r32(), first_arg);
-    } else if constexpr (sizeof(first_arg) <= 8) {
-        compiler.mov(host_gpr_arg[r_idx].r64(), first_arg);
-    } else {
-        always_false<sizeof(first_arg)>;
-    }
-    if constexpr (sizeof...(remaining_args)) {
-        r_idx++;
-    } else {
-        r_idx = 0;
-    }
-    JitCallInterpreterImpl(impl, remaining_args...);
+    std::ptrdiff_t diff = reinterpret_cast<u8 const*>(&obj) - reinterpret_cast<u8 const*>(gpr.ptr(0));
+    return asmjit::x86::ptr(asmjit::x86::rbp, index.r64(), 0u, s32(diff), ptr_size);
 }
 
 inline void TakeBranchJit(auto target)
 {
     using namespace asmjit::x86;
     auto& c = compiler;
-    c.mov(GlobalVarPtr(in_branch_delay_slot_taken), 1);
-    c.mov(GlobalVarPtr(in_branch_delay_slot_not_taken), 0);
-    c.mov(GlobalVarPtr(branch_state), std::to_underlying(mips::BranchState::Perform));
+    c.mov(JitPtr(in_branch_delay_slot_taken), 1);
+    c.mov(JitPtr(in_branch_delay_slot_not_taken), 0);
+    c.mov(JitPtr(branch_state), std::to_underlying(mips::BranchState::Perform));
     if constexpr (std::integral<decltype(target)>) {
         c.mov(rax, target);
-        c.mov(GlobalVarPtr(jump_addr), rax);
+        c.mov(JitPtr(jump_addr), rax);
     } else {
-        c.mov(GlobalVarPtr(jump_addr), target.r64());
+        c.mov(JitPtr(jump_addr), target.r64());
     }
 }
 

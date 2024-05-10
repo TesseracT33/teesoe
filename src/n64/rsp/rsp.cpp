@@ -7,7 +7,7 @@
 #include "rdp/rdp.hpp"
 #include "rsp/recompiler.hpp"
 #include "scheduler.hpp"
-#include "util.hpp"
+
 #include "vr4300/recompiler.hpp"
 
 #include <algorithm>
@@ -55,7 +55,7 @@ void AdvancePipeline(u64 cycles)
 
 u32 FetchInstruction(u32 addr)
 {
-    ASSUME(addr < 0x1000 && !(addr & 3));
+    [[assume(addr < 0x1000 && !(addr & 3))]];
     u32 instr;
     std::memcpy(&instr, &imem[addr], 4);
     instr = std::byteswap(instr);

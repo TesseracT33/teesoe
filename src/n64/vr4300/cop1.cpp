@@ -1,10 +1,10 @@
 #pragma fenv_access(on)
 
 #include "cop1.hpp"
+#include "algorithm.hpp"
 #include "cop0.hpp"
 #include "exceptions.hpp"
 #include "mmu.hpp"
-#include "util.hpp"
 #include "vr4300.hpp"
 #include "vr4300/interpreter.hpp"
 
@@ -177,7 +177,7 @@ bool IsValidInput(std::floating_point auto f)
 
 template<std::signed_integral Int> bool IsValidInputCvtRound(std::floating_point auto f)
 {
-    if (one_of(std::fpclassify(f), FP_INFINITE, FP_NAN, FP_SUBNORMAL)) {
+    if (OneOf(std::fpclassify(f), FP_INFINITE, FP_NAN, FP_SUBNORMAL)) {
         SignalUnimplementedOp();
         FloatingPointException();
         return false;
@@ -431,7 +431,7 @@ void bc1tl(s16 imm)
 
 template<Fmt fmt> void compare(u32 fs, u32 ft, u8 cond)
 {
-    if constexpr (!one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+    if constexpr (!OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
         OnInvalidFormat();
     } else {
         if (!FpuUsable()) return;
@@ -578,7 +578,7 @@ void swc1(u32 base, u32 ft, s16 imm)
 
 template<Fmt fmt> void ceil_l(u32 fs, u32 fd)
 {
-    if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
         Round<RoundInstr::CEIL, typename FmtToType<fmt>::type, s64>(fs, fd);
     } else {
         OnInvalidFormat();
@@ -587,7 +587,7 @@ template<Fmt fmt> void ceil_l(u32 fs, u32 fd)
 
 template<Fmt fmt> void ceil_w(u32 fs, u32 fd)
 {
-    if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
         Round<RoundInstr::CEIL, typename FmtToType<fmt>::type, s32>(fs, fd);
     } else {
         OnInvalidFormat();
@@ -605,7 +605,7 @@ template<Fmt fmt> void cvt_d(u32 fs, u32 fd)
 
 template<Fmt fmt> void cvt_l(u32 fs, u32 fd)
 {
-    if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
         Convert<typename FmtToType<fmt>::type, s64>(fs, fd);
     } else {
         OnInvalidFormat();
@@ -623,7 +623,7 @@ template<Fmt fmt> void cvt_s(u32 fs, u32 fd)
 
 template<Fmt fmt> void cvt_w(u32 fs, u32 fd)
 {
-    if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
         Convert<typename FmtToType<fmt>::type, s32>(fs, fd);
     } else {
         OnInvalidFormat();
@@ -632,7 +632,7 @@ template<Fmt fmt> void cvt_w(u32 fs, u32 fd)
 
 template<Fmt fmt> void floor_l(u32 fs, u32 fd)
 {
-    if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
         Round<RoundInstr::FLOOR, typename FmtToType<fmt>::type, s64>(fs, fd);
     } else {
         OnInvalidFormat();
@@ -641,7 +641,7 @@ template<Fmt fmt> void floor_l(u32 fs, u32 fd)
 
 template<Fmt fmt> void floor_w(u32 fs, u32 fd)
 {
-    if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
         Round<RoundInstr::FLOOR, typename FmtToType<fmt>::type, s32>(fs, fd);
     } else {
         OnInvalidFormat();
@@ -650,7 +650,7 @@ template<Fmt fmt> void floor_w(u32 fs, u32 fd)
 
 template<Fmt fmt> void round_l(u32 fs, u32 fd)
 {
-    if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
         Round<RoundInstr::ROUND, typename FmtToType<fmt>::type, s64>(fs, fd);
     } else {
         OnInvalidFormat();
@@ -659,7 +659,7 @@ template<Fmt fmt> void round_l(u32 fs, u32 fd)
 
 template<Fmt fmt> void round_w(u32 fs, u32 fd)
 {
-    if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
         Round<RoundInstr::ROUND, typename FmtToType<fmt>::type, s32>(fs, fd);
     } else {
         OnInvalidFormat();
@@ -668,7 +668,7 @@ template<Fmt fmt> void round_w(u32 fs, u32 fd)
 
 template<Fmt fmt> void trunc_l(u32 fs, u32 fd)
 {
-    if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
         Round<RoundInstr::TRUNC, typename FmtToType<fmt>::type, s64>(fs, fd);
     } else {
         OnInvalidFormat();
@@ -677,7 +677,7 @@ template<Fmt fmt> void trunc_l(u32 fs, u32 fd)
 
 template<Fmt fmt> void trunc_w(u32 fs, u32 fd)
 {
-    if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
         Round<RoundInstr::TRUNC, typename FmtToType<fmt>::type, s32>(fs, fd);
     } else {
         OnInvalidFormat();
@@ -686,7 +686,7 @@ template<Fmt fmt> void trunc_w(u32 fs, u32 fd)
 
 template<Fmt fmt> void abs(u32 fs, u32 fd)
 {
-    if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
         Compute<ComputeInstr1Op::ABS, typename FmtToType<fmt>::type>(fs, fd);
     } else {
         OnInvalidFormat();
@@ -695,7 +695,7 @@ template<Fmt fmt> void abs(u32 fs, u32 fd)
 
 template<Fmt fmt> void add(u32 fs, u32 ft, u32 fd)
 {
-    if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
         Compute<ComputeInstr2Op::ADD, typename FmtToType<fmt>::type>(fs, ft, fd);
     } else {
         OnInvalidFormat();
@@ -704,7 +704,7 @@ template<Fmt fmt> void add(u32 fs, u32 ft, u32 fd)
 
 template<Fmt fmt> void div(u32 fs, u32 ft, u32 fd)
 {
-    if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
         Compute<ComputeInstr2Op::DIV, typename FmtToType<fmt>::type>(fs, ft, fd);
     } else {
         OnInvalidFormat();
@@ -713,7 +713,7 @@ template<Fmt fmt> void div(u32 fs, u32 ft, u32 fd)
 
 template<Fmt fmt> void mov(u32 fs, u32 fd)
 {
-    if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
         if (cop0.status.cu1) {
             fpr.Set<f64>(fd, fpr.GetFs<f64>(fs));
         } else {
@@ -726,7 +726,7 @@ template<Fmt fmt> void mov(u32 fs, u32 fd)
 
 template<Fmt fmt> void mul(u32 fs, u32 ft, u32 fd)
 {
-    if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
         Compute<ComputeInstr2Op::MUL, typename FmtToType<fmt>::type>(fs, ft, fd);
     } else {
         OnInvalidFormat();
@@ -735,7 +735,7 @@ template<Fmt fmt> void mul(u32 fs, u32 ft, u32 fd)
 
 template<Fmt fmt> void neg(u32 fs, u32 fd)
 {
-    if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
         Compute<ComputeInstr1Op::NEG, typename FmtToType<fmt>::type>(fs, fd);
     } else {
         OnInvalidFormat();
@@ -744,7 +744,7 @@ template<Fmt fmt> void neg(u32 fs, u32 fd)
 
 template<Fmt fmt> void sqrt(u32 fs, u32 fd)
 {
-    if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
         Compute<ComputeInstr1Op::SQRT, typename FmtToType<fmt>::type>(fs, fd);
     } else {
         OnInvalidFormat();
@@ -753,7 +753,7 @@ template<Fmt fmt> void sqrt(u32 fs, u32 fd)
 
 template<Fmt fmt> void sub(u32 fs, u32 ft, u32 fd)
 {
-    if constexpr (one_of(fmt, Fmt::Float32, Fmt::Float64)) {
+    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
         Compute<ComputeInstr2Op::SUB, typename FmtToType<fmt>::type>(fs, ft, fd);
     } else {
         OnInvalidFormat();

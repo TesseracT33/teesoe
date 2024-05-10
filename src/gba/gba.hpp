@@ -1,7 +1,7 @@
 #pragma once
 
 #include "core.hpp"
-#include "types.hpp"
+#include "numtypes.hpp"
 
 #include <stop_token>
 

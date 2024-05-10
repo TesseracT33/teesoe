@@ -11,7 +11,7 @@
 #include "jit_util.hpp"
 #include "mmu.hpp"
 #include "n64_build_options.hpp"
-#include "util.hpp"
+
 #include "vr4300.hpp"
 
 #include <algorithm>
@@ -116,11 +116,11 @@ void BlockRecordCycles()
 {
     assert(block_cycles > 0);
     if (block_cycles == 1) {
-        c.inc(GlobalVarPtr(cycle_counter));
-        c.inc(GlobalVarPtr(cop0.count));
+        c.inc(JitPtr(cycle_counter));
+        c.inc(JitPtr(cop0.count));
     } else {
-        c.add(GlobalVarPtr(cycle_counter), block_cycles);
-        c.add(GlobalVarPtr(cop0.count), block_cycles);
+        c.add(JitPtr(cycle_counter), block_cycles);
+        c.add(JitPtr(cop0.count), block_cycles);
     }
 }
 
@@ -137,9 +137,9 @@ bool CheckDwordOpCondJit()
 
 void DiscardBranchJit()
 {
-    c.mov(GlobalVarPtr(in_branch_delay_slot_taken), 0);
-    c.mov(GlobalVarPtr(in_branch_delay_slot_not_taken), 0);
-    c.mov(GlobalVarPtr(branch_state), std::to_underlying(BranchState::NoBranch));
+    c.mov(JitPtr(in_branch_delay_slot_taken), 0);
+    c.mov(JitPtr(in_branch_delay_slot_not_taken), 0);
+    c.mov(JitPtr(branch_state), std::to_underlying(BranchState::NoBranch));
     BlockEpilogWithPcFlush(8);
 }
 
@@ -186,7 +186,7 @@ void FinalizeAndExecuteBlock(Block*& block)
 void FlushPc(int pc_offset)
 {
     c.mov(rax, jit_pc + pc_offset);
-    c.mov(GlobalVarPtr(pc), rax);
+    c.mov(JitPtr(pc), rax);
 }
 
 std::pair<Block*, bool> GetBlock(u32 pc)
@@ -235,7 +235,6 @@ void Invalidate(u32 addr)
 void InvalidateRange(u32 addr_lo, u32 addr_hi)
 {
     if (cpu_impl == CpuImpl::Recompiler) {
-        ASSUME(addr_lo <= addr_hi);
         assert(addr_hi <= pool_max_addr_excl);
         addr_lo = std::min(addr_lo, pool_max_addr_excl - 1);
         addr_hi = std::min(addr_hi, pool_max_addr_excl - 1);
@@ -252,9 +251,9 @@ void LinkJit(u32 reg)
 
 void OnBranchNotTakenJit()
 {
-    c.mov(GlobalVarPtr(in_branch_delay_slot_taken), 0);
-    c.mov(GlobalVarPtr(in_branch_delay_slot_not_taken), 1);
-    c.mov(GlobalVarPtr(branch_state), std::to_underlying(BranchState::NoBranch));
+    c.mov(JitPtr(in_branch_delay_slot_taken), 0);
+    c.mov(JitPtr(in_branch_delay_slot_not_taken), 1);
+    c.mov(JitPtr(branch_state), std::to_underlying(BranchState::NoBranch));
 }
 
 void ResetPool(Pool*& pool)
@@ -335,11 +334,11 @@ void TearDownRecompiler()
 void UpdateBranchStateJit()
 {
     Label l_nobranch = c.newLabel();
-    c.cmp(GlobalVarPtr(branch_state), std::to_underlying(BranchState::Perform));
+    c.cmp(JitPtr(branch_state), std::to_underlying(BranchState::Perform));
     c.jne(l_nobranch);
     BlockEpilogWithJmp(PerformBranch);
     c.bind(l_nobranch);
-    c.mov(GlobalVarPtr(in_branch_delay_slot_not_taken), 0);
+    c.mov(JitPtr(in_branch_delay_slot_not_taken), 0);
 }
 
 } // namespace n64::vr4300

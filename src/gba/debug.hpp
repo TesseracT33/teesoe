@@ -1,7 +1,7 @@
 #pragma once
 
 #include "bus.hpp"
-#include "types.hpp"
+#include "numtypes.hpp"
 
 #include <array>
 #include <concepts>

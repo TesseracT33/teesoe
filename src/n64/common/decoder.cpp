@@ -1,11 +1,11 @@
 #include "decoder.hpp"
 #include "n64_build_options.hpp"
+#include "numeric.hpp"
 #include "rsp/disassembler.hpp"
 #include "rsp/interpreter.hpp"
 #include "rsp/vu.hpp"
 #include "rsp/x64/cpu.hpp"
 #include "rsp/x64/vu.hpp"
-#include "util.hpp"
 #include "vr4300/cache.hpp"
 #include "vr4300/cop0.hpp"
 #include "vr4300/cop1.hpp"
@@ -20,7 +20,7 @@
 
 #include <utility>
 
-#define IMM7    (sign_extend<s32, 7>(instr & 127))
+#define IMM7    (SignExtend<s32, 7>(instr & 127))
 #define IMM16   (instr & 0xFFFF)
 #define COND    (instr & 15)
 #define FMT     (instr & 63)
@@ -350,7 +350,7 @@ template<Cpu cpu, CpuImpl cpu_impl, bool make_string> void cop3(u32 instr)
                 auto& c = compiler;
                 asmjit::Label l0 = c.newLabel();
                 reg_alloc.ReserveArgs(1);
-                c.bt(GlobalVarPtr(vr4300::cop0.status), 31); // cu3
+                c.bt(JitPtr(vr4300::cop0.status), 31); // cu3
                 c.jc(l0);
                 c.mov(host_gpr_arg[0].r32(), 3);
                 BlockEpilogWithPcFlushAndJmp(CoprocessorUnusableException);

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "ps1.hpp"
-#include "types.hpp"
+#include "numtypes.hpp"
 
 namespace ps1::scheduler {
 

@@ -1,7 +1,7 @@
 #include "keypad.hpp"
+#include "bit.hpp"
 #include "bus.hpp"
 #include "irq.hpp"
-#include "util.hpp"
 
 namespace gba::keypad {
 
@@ -30,10 +30,10 @@ template<std::integral Int> Int ReadReg(u32 addr)
 {
     if constexpr (sizeof(Int) == 1) {
         switch (addr) {
-        case bus::ADDR_KEYINPUT: return get_bit(keyinput, 0);
-        case bus::ADDR_KEYINPUT + 1: return get_bit(keyinput, 1);
-        case bus::ADDR_KEYCNT: return get_bit(keycnt, 0);
-        case bus::ADDR_KEYCNT + 1: return get_bit(keycnt, 1);
+        case bus::ADDR_KEYINPUT: return GetBit(keyinput, 0);
+        case bus::ADDR_KEYINPUT + 1: return GetBit(keyinput, 1);
+        case bus::ADDR_KEYCNT: return GetBit(keycnt, 0);
+        case bus::ADDR_KEYCNT + 1: return GetBit(keycnt, 1);
         default: std::unreachable();
         }
     }
@@ -74,8 +74,8 @@ template<std::integral Int> void WriteReg(u32 addr, Int data)
 {
     if constexpr (sizeof(Int) == 1) {
         switch (addr) {
-        case bus::ADDR_KEYCNT: set_byte(keycnt, 0, data); break;
-        case bus::ADDR_KEYCNT + 1: set_byte(keycnt, 1, data); break;
+        case bus::ADDR_KEYCNT: SetByte(keycnt, 0, data); break;
+        case bus::ADDR_KEYCNT + 1: SetByte(keycnt, 1, data); break;
         default: break;
         }
     }

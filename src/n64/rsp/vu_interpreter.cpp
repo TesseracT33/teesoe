@@ -1,6 +1,6 @@
-#include "host.hpp"
+#include "platform.hpp"
 #include "rsp.hpp"
-#include "util.hpp"
+
 #include "vu.hpp"
 
 #include <algorithm>
@@ -410,7 +410,7 @@ void spv(u32 base, u32 vt, u32 e, s32 offset)
 
 void sqv(u32 base, u32 vt, u32 e, s32 offset)
 {
-    ASSUME(e < 16);
+    [[assume(e < 16)]];
     u8 const* vpr_src = (u8*)(&vpr[vt]);
     auto addr = gpr[base] + offset * 16;
     u32 addr_offset = addr & 15;
@@ -421,7 +421,7 @@ void sqv(u32 base, u32 vt, u32 e, s32 offset)
 
 void srv(u32 base, u32 vt, u32 e, s32 offset)
 {
-    ASSUME(e < 16);
+    [[assume(e < 16)]];
     u8 const* vpr_src = (u8*)(&vpr[vt]);
     auto addr = gpr[base] + offset * 16;
     u32 addr_offset = addr & 15;
@@ -453,7 +453,7 @@ void stv(u32 base, u32 vt, u32 e, s32 offset)
 
 void suv(u32 base, u32 vt, u32 e, s32 offset)
 {
-    ASSUME(e < 16);
+    [[assume(e < 16)]];
     u8* vpr_src = (u8*)(&vpr[vt]);
     auto addr = gpr[base] + offset * 8;
     for (auto elem = e; elem < e + 8; ++elem) {
@@ -469,7 +469,7 @@ void suv(u32 base, u32 vt, u32 e, s32 offset)
 
 void swv(u32 base, u32 vt, u32 e, s32 offset)
 {
-    ASSUME(e < 16);
+    [[assume(e < 16)]];
     u8* vpr_src = (u8*)(&vpr[vt]);
     auto addr = gpr[base] + offset * 16;
     base = addr & 7;

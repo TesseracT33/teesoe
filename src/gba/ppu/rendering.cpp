@@ -1,5 +1,5 @@
+#include "bit.hpp"
 #include "ppu.hpp"
-#include "util.hpp"
 
 #include <algorithm>
 #include <bit>
@@ -31,20 +31,20 @@ void BlendLayers()
     auto GetNextTopmostOpaqueBgLayer = [&](uint dot) -> int {
         auto it = std::find_if(bg_by_prio.begin() + bg_skip, bg_by_prio.end(), [&](int bg) {
             ++bg_skip;
-            if (!get_bit(dispcnt.screen_display_bg, bg) || bg_render[bg][dot].transparent) {
+            if (!GetBit(dispcnt.screen_display_bg, bg) || bg_render[bg][dot].transparent) {
                 return false;
             }
             if (win0_active) {
-                return get_bit(winin.window0_bg_enable, bg);
+                return GetBit(winin.window0_bg_enable, bg);
             }
             if (win1_active) {
-                return get_bit(winin.window1_bg_enable, bg);
+                return GetBit(winin.window1_bg_enable, bg);
             }
             if (obj_win_active) {
-                return get_bit(winout.obj_window_bg_enable, bg);
+                return GetBit(winout.obj_window_bg_enable, bg);
             }
             if (win0_enable || win1_enable || obj_win_enable) {
-                return get_bit(winout.outside_bg_enable, bg);
+                return GetBit(winout.outside_bg_enable, bg);
             }
             return true;
         });
@@ -82,7 +82,7 @@ void BlendLayers()
                 return bool(winout.obj_window_color_special_effect);
             }();
             if (special_effect_enable) {
-                const u16 bldcnt_u16 = std::bit_cast<u16>(bldcnt);
+                u16 const bldcnt_u16 = std::bit_cast<u16>(bldcnt);
                 switch (bldcnt.color_special_effect) {
                 case fx_alpha_blending_mask: { /* 1st+2nd Target mixed */
                     int second_topmost_opaque_bg = GetNextTopmostOpaqueBgLayer(dot);
@@ -95,20 +95,20 @@ void BlendLayers()
                         fx_2nd_target_index = fx_backdrop_index;
                         rgb_2nd_layer = GetBackdropColor().ToRGB();
                     }
-                    if (get_bit(bldcnt_u16, fx_1st_target_index) && get_bit(bldcnt_u16, fx_2nd_target_index + 8)) {
+                    if (GetBit(bldcnt_u16, fx_1st_target_index) && GetBit(bldcnt_u16, fx_2nd_target_index + 8)) {
                         rgb_1st_layer = AlphaBlend(rgb_1st_layer, rgb_2nd_layer);
                     }
                     break;
                 }
 
                 case fx_brightness_increase_mask: /* 1st Target becomes whiter */
-                    if (get_bit(bldcnt_u16, fx_1st_target_index)) {
+                    if (GetBit(bldcnt_u16, fx_1st_target_index)) {
                         rgb_1st_layer = BrightnessIncrease(rgb_1st_layer);
                     }
                     break;
 
                 case fx_brightness_decrease_mask: /* 1st Target becomes blacker */
-                    if (get_bit(bldcnt_u16, fx_1st_target_index)) {
+                    if (GetBit(bldcnt_u16, fx_1st_target_index)) {
                         rgb_1st_layer = BrightnessDecrease(rgb_1st_layer);
                     }
                     break;
@@ -156,7 +156,7 @@ void BlendLayers()
                         fx_2nd_target_index = fx_backdrop_index;
                         rgb_2nd_layer = GetBackdropColor().ToRGB();
                     }
-                    if (get_bit(std::bit_cast<u16>(bldcnt), fx_2nd_target_index)) {
+                    if (GetBit(std::bit_cast<u16>(bldcnt), fx_2nd_target_index)) {
                         rgb_1st_layer = AlphaBlend(rgb_1st_layer, rgb_2nd_layer);
                     }
                 } else {
@@ -166,7 +166,7 @@ void BlendLayers()
                       rgb_2nd_layer,
                       fx_2nd_target_index);
                     if (second_layer_is_obj) {
-                        if (get_bit(std::bit_cast<u16>(bldcnt), fx_1st_target_index + 8)) {
+                        if (GetBit(std::bit_cast<u16>(bldcnt), fx_1st_target_index + 8)) {
                             rgb_2nd_layer = AlphaBlend(rgb_2nd_layer, rgb_1st_layer);
                         }
                     }
@@ -180,7 +180,7 @@ void BlendLayers()
                     return true;
                 }();
                 if (special_effect_enable) {
-                    const u16 bldcnt_u16 = std::bit_cast<u16>(bldcnt);
+                    u16 const bldcnt_u16 = std::bit_cast<u16>(bldcnt);
                     switch (bldcnt.color_special_effect) {
                     case fx_alpha_blending_mask: { /* 1st+2nd Target mixed */
                         int fx_2nd_target_index;
@@ -199,20 +199,20 @@ void BlendLayers()
                               rgb_2nd_layer,
                               fx_2nd_target_index);
                         }
-                        if (get_bit(bldcnt_u16, fx_1st_target_index) && get_bit(bldcnt_u16, fx_2nd_target_index + 8)) {
+                        if (GetBit(bldcnt_u16, fx_1st_target_index) && GetBit(bldcnt_u16, fx_2nd_target_index + 8)) {
                             rgb_1st_layer = AlphaBlend(rgb_1st_layer, rgb_2nd_layer);
                         }
                         break;
                     }
 
                     case fx_brightness_increase_mask: /* 1st Target becomes whiter */
-                        if (get_bit(bldcnt_u16, fx_1st_target_index)) {
+                        if (GetBit(bldcnt_u16, fx_1st_target_index)) {
                             rgb_1st_layer = BrightnessIncrease(rgb_1st_layer);
                         }
                         break;
 
                     case fx_brightness_decrease_mask: /* 1st Target becomes blacker */
-                        if (get_bit(bldcnt_u16, fx_1st_target_index)) {
+                        if (GetBit(bldcnt_u16, fx_1st_target_index)) {
                             rgb_1st_layer = BrightnessDecrease(rgb_1st_layer);
                         }
                         break;
@@ -276,7 +276,7 @@ void PushPixel(u8 r, u8 g, u8 b)
 
 template<void (*RenderFun)(), bool vertical_mosaic> void RenderBackground(uint bg)
 {
-    if (get_bit(dispcnt.screen_display_bg, bg)) {
+    if (GetBit(dispcnt.screen_display_bg, bg)) {
         if (!vertical_mosaic || !bgcnt[bg].mosaic_enable) {
             RenderFun();
         }
@@ -287,7 +287,7 @@ template<void (*RenderFun)(), bool vertical_mosaic> void RenderBackground(uint b
 
 template<void (*RenderFun)(uint), bool vertical_mosaic> void RenderBackground(uint bg)
 {
-    if (get_bit(dispcnt.screen_display_bg, bg)) {
+    if (GetBit(dispcnt.screen_display_bg, bg)) {
         if (!vertical_mosaic || !bgcnt[bg].mosaic_enable) {
             RenderFun(bg);
         }
@@ -396,12 +396,12 @@ void ScanlineBackgroundTextMode(uint bg)
 {
     static constexpr uint tile_size = 8;
     static constexpr uint map_entry_size = 2;
-    const uint bg_width = 256 << (bgcnt[bg].screen_size & 1); /* 0 => 256; 1 => 512; 2 => 256; 3 = 512 */
-    const uint base_tile_map_addr =
+    uint const bg_width = 256 << (bgcnt[bg].screen_size & 1); /* 0 => 256; 1 => 512; 2 => 256; 3 = 512 */
+    uint const base_tile_map_addr =
       [&] { /* already takes into account which vertical tile we're on (it's constant), but not horizontal */
-          constexpr static uint bytes_per_bg_map_area_row = 256 / tile_size * map_entry_size;
-          const uint bg_height = 256 << (bgcnt[bg].screen_size >> 1); /* 0 => 256; 1 => 256; 2 => 512; 3 => 512 */
-          const uint bg_tile_index_y = ((bgvofs[bg] + v_counter) & 255) / tile_size;
+          static constexpr uint bytes_per_bg_map_area_row = 256 / tile_size * map_entry_size;
+          uint const bg_height = 256 << (bgcnt[bg].screen_size >> 1); /* 0 => 256; 1 => 256; 2 => 512; 3 => 512 */
+          uint const bg_tile_index_y = ((bgvofs[bg] + v_counter) & 255) / tile_size;
           uint base_tile_map_addr = bgcnt[bg].screen_base_block;
           if (bg_height == 512 && ((bgvofs[bg] + v_counter) & 511) > 255) {
               base_tile_map_addr +=
@@ -410,7 +410,7 @@ void ScanlineBackgroundTextMode(uint bg)
           base_tile_map_addr *= 0x800;
           return base_tile_map_addr + bg_tile_index_y * bytes_per_bg_map_area_row;
       }();
-    const uint mosaic_incr = bgcnt[bg].mosaic_enable ? mosaic.bg_h_size + 1 : 1; /* TODO */
+    uint const mosaic_incr = bgcnt[bg].mosaic_enable ? mosaic.bg_h_size + 1 : 1; /* TODO */
     uint bg_tile_index_x = (bghofs[bg] & (bg_width - 1)) / tile_size; /* note: 0-63, but masked to 0-31 when needed */
     uint base_tile_data_addr = bgcnt[bg].char_base_block * 0x4000;
     uint dot = 0;
@@ -424,10 +424,10 @@ void ScanlineBackgroundTextMode(uint bg)
             0-9   Tile Number     (0-1023) (a bit less in 256 color mode, because there'd be otherwise no room for the
            bg map) 10    Horizontal Flip (0=Normal, 1=Mirrored) 11    Vertical Flip   (0=Normal, 1=Mirrored) 12-15
            Palette Number  (0-15)    (Not used in 256 color/1 palette mode) */
-        constexpr static uint col_size = 2;
+        static constexpr uint col_size = 2;
         uint tile_num = vram[tile_map_addr] | vram[tile_map_addr + 1] << 8 & 0x300;
-        const bool flip_x = vram[tile_map_addr + 1] & 4;
-        const bool flip_y = vram[tile_map_addr + 1] & 8;
+        bool const flip_x = vram[tile_map_addr + 1] & 4;
+        bool const flip_y = vram[tile_map_addr + 1] & 8;
         uint tile_pixel_offset_y = (v_counter + bgvofs[bg]) % 8;
         if (flip_y) {
             tile_pixel_offset_y = 7 - tile_pixel_offset_y;
@@ -452,7 +452,7 @@ void ScanlineBackgroundTextMode(uint bg)
         auto FetchPushPixel = [&](uint pixel_index) {
             BgColorData col;
             u8 col_id;
-            const u8* palette_start_ptr;
+            u8 const* palette_start_ptr;
             if constexpr (palette_mode == 0) {
                 col_id = vram[tile_data_addr + pixel_index / 2] >> col_shift & 0xF;
                 u8 palette_num = vram[tile_map_addr + 1] >> 4;
@@ -508,7 +508,7 @@ void ScanlineBackgroundBitmapMode3()
 {
     static constexpr uint col_size = 2;
     static constexpr uint bytes_per_scanline = dots_per_line * col_size;
-    const uint mosaic_incr = bgcnt[2].mosaic_enable ? mosaic.bg_h_size + 1 : 1;
+    uint const mosaic_incr = bgcnt[2].mosaic_enable ? mosaic.bg_h_size + 1 : 1;
     for (uint dot = 0; dot < dots_per_line;) {
         BgColorData col;
         std::memcpy(&col, vram.data() + v_counter * bytes_per_scanline + dot * col_size, col_size);
@@ -524,8 +524,8 @@ void ScanlineBackgroundBitmapMode4()
 {
     static constexpr uint col_size = 2;
     static constexpr uint bytes_per_scanline = dots_per_line;
-    const uint mosaic_incr = bgcnt[2].mosaic_enable ? mosaic.bg_h_size + 1 : 1;
-    const uint vram_frame_offset = dispcnt.display_frame_select ? 0xA000 : 0;
+    uint const mosaic_incr = bgcnt[2].mosaic_enable ? mosaic.bg_h_size + 1 : 1;
+    uint const vram_frame_offset = dispcnt.display_frame_select ? 0xA000 : 0;
     for (uint dot = 0; dot < dots_per_line;) {
         u8 palette_index = vram[vram_frame_offset + v_counter * bytes_per_scanline + dot];
         BgColorData col;
@@ -541,8 +541,8 @@ void ScanlineBackgroundBitmapMode5()
 {
     static constexpr uint col_size = 2;
     static constexpr uint bytes_per_scanline = dots_per_line * col_size;
-    const uint mosaic_incr = bgcnt[2].mosaic_enable ? mosaic.bg_h_size + 1 : 1;
-    const uint vram_frame_offset = dispcnt.display_frame_select ? 0xA000 : 0;
+    uint const mosaic_incr = bgcnt[2].mosaic_enable ? mosaic.bg_h_size + 1 : 1;
+    uint const vram_frame_offset = dispcnt.display_frame_select ? 0xA000 : 0;
     uint dot = 0;
     while (dot < 40) {
         bg_render[2][dot++] = transparent_bg_pixel;
@@ -568,8 +568,8 @@ void ScanlineObjects()
         return;
     }
     bool const char_vram_mapping = dispcnt.obj_char_vram_mapping;
-    const uint vram_base_addr = dispcnt.bg_mode < 3 ? 0x10000 : 0x14000;
-    const uint vram_addr_mask = 0x17FFF - vram_base_addr;
+    uint const vram_base_addr = dispcnt.bg_mode < 3 ? 0x10000 : 0x14000;
+    uint const vram_addr_mask = 0x17FFF - vram_base_addr;
 
     auto RenderObject = [&](ObjData const& obj) {
         if (!obj.rotate_scale) {
@@ -587,9 +587,9 @@ void ScanlineObjects()
                 } else {
                     return;
                 }
-                const bool flip_x = obj.rot_scale_param & 8;
-                const bool flip_y = obj.rot_scale_param & 16;
-                const auto tile_offset_y = (v_counter - obj.y_coord) / 8;
+                bool const flip_x = obj.rot_scale_param & 8;
+                bool const flip_y = obj.rot_scale_param & 16;
+                auto const tile_offset_y = (v_counter - obj.y_coord) / 8;
                 auto tile_pixel_offset_y = (v_counter - obj.y_coord) % 8;
                 if (flip_y) {
                     tile_pixel_offset_y = 7 - tile_pixel_offset_y;
@@ -620,7 +620,7 @@ void ScanlineObjects()
                             static constexpr uint obj_palette_offset = 0x200;
                             ObjColorData col;
                             u8 col_id;
-                            const u8* palette_start_ptr = palette_ram.data() + obj_palette_offset;
+                            u8 const* palette_start_ptr = palette_ram.data() + obj_palette_offset;
                             if constexpr (palette_mode == 0) {
                                 col_id = vram[tile_data_addr + pixel_index / 2] >> col_shift & 0xF;
                                 palette_start_ptr += 16 * col_size * obj.palette_num;
@@ -656,7 +656,7 @@ void ScanlineObjects()
                    (In 256 color mode: 04h and 06h, 24h and 26h.) Char VRAM Mapping = 1: Tiles are mapped each after
                    each other from 00h-3FFh. Using the same example as above, the upper row of the OBJ will consist of
                    tile 04h and 05h, the next row of tile 06h and 07h. (In 256 color mode: 04h and 06h, 08h and 0Ah.)*/
-                const auto base_rel_tile_num =
+                auto const base_rel_tile_num =
                   tile_offset_x + tile_offset_y * (char_vram_mapping == 0 ? 32 : obj.size_x / 8);
                 tile_data_addr_offset = 32 * (base_tile_num + base_rel_tile_num) + tile_row_size * tile_pixel_offset_y;
                 auto pixels_to_ignore_left = tile_pixel_offset_x;
