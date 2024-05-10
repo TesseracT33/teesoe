@@ -350,7 +350,7 @@ template<Cpu cpu, CpuImpl cpu_impl, bool make_string> void cop3(u32 instr)
                 auto& c = compiler;
                 asmjit::Label l0 = c.newLabel();
                 reg_alloc.ReserveArgs(1);
-                c.bt(GlobalVarPtr(vr4300::cop0.status), 31); // cu3
+                c.bt(JitPtr(vr4300::cop0.status), 31); // cu3
                 c.jc(l0);
                 c.mov(host_gpr_arg[0].r32(), 3);
                 BlockEpilogWithPcFlushAndJmp(CoprocessorUnusableException);

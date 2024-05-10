@@ -81,7 +81,7 @@ static Xmm GetVte(uint vt /* 0-31 */, uint e /* 0-15 */)
         return ht;
     } else {
         Xmm vte = reg_alloc.GetVte();
-        c.vpshufb(vte, ht, GlobalArrPtrWithImmOffset(broadcast_mask, 16 * e, 16));
+        c.vpshufb(vte, ht, JitPtrOffset(broadcast_mask, 16 * e, 16));
         return vte;
     }
 }
@@ -91,10 +91,10 @@ void cfc2(u32 rt, u32 vs)
     Gpd hrt = GetDirtyGpr(rt);
     vs = std::min(vs & 3, 2u);
     c.vpxor(xmm0, xmm0, xmm0);
-    c.vmovaps(xmm1, GlobalVarPtr(ctrl_reg[vs].lo));
+    c.vmovaps(xmm1, JitPtr(ctrl_reg[vs].lo));
     c.vpacksswb(xmm1, xmm1, xmm0);
     c.vpmovmskb(eax, xmm1);
-    c.vmovaps(xmm1, GlobalVarPtr(ctrl_reg[vs].hi));
+    c.vmovaps(xmm1, JitPtr(ctrl_reg[vs].hi));
     c.vpacksswb(xmm1, xmm1, xmm0);
     c.vpmovmskb(hrt, xmm1);
     c.shl(hrt, 8);
@@ -114,7 +114,7 @@ void ctc2(u32 rt, u32 vs)
     c.shr(eax, 4);
     c.and_(eax, 15);
     c.vpinsrq(xmm0, xmm0, qword_ptr(rcx, rax, 3u), 1);
-    c.vmovaps(GlobalVarPtr(ctrl_reg[vs].lo), xmm0);
+    c.vmovaps(JitPtr(ctrl_reg[vs].lo), xmm0);
     if (vs < 2) {
         c.mov(eax, ht);
         c.mov(al, ah);
@@ -124,7 +124,7 @@ void ctc2(u32 rt, u32 vs)
         c.shr(eax, 12);
         c.and_(eax, 15);
         c.vpinsrq(xmm0, xmm0, qword_ptr(rcx, rax, 3u), 1);
-        c.vmovaps(GlobalVarPtr(ctrl_reg[vs].hi), xmm0);
+        c.vmovaps(JitPtr(ctrl_reg[vs].hi), xmm0);
     }
 }
 
@@ -200,7 +200,7 @@ void lbv(u32 base, u32 vt, u32 e, s32 offset)
     Xmm ht = GetDirtyVpr(vt);
     c.lea(eax, ptr(hbase, offset));
     c.and_(eax, 0xFFF);
-    c.vpinsrb(ht, ht, GlobalArrPtrWithRegOffset(dmem, rax, 1), e ^ 1);
+    c.vpinsrb(ht, ht, JitPtrOffset(dmem, rax, 1), e ^ 1);
 }
 
 void ldv(u32 base, u32 vt, u32 e, s32 offset)
@@ -224,7 +224,7 @@ void lfv(u32 base, u32 vt, u32 e, s32 offset)
         c.and_(ecx, 15); // todo: only needed for i==0 if underflow from (addr & 7) - e is possible
         c.lea(edx, ptr(eax, ecx));
         c.and_(edx, 0xFFF);
-        c.mov(dl, GlobalArrPtrWithRegOffset(dmem, rdx, 1));
+        c.mov(dl, JitPtrOffset(dmem, rdx, 1));
         c.shl(edx, 7);
         c.and_(edx, 0x7FFF);
         c.mov(word_ptr(x86::rsp, 2 * lfv_table[2 * i] - 16), dx);
@@ -269,7 +269,7 @@ void lhv(u32 base, u32 vt, u32 e, s32 offset)
         c.and_(ecx, 15); // todo: only needed for i==0 if underflow from (addr & 7) - e is possible
         c.lea(edx, ptr(eax, ecx));
         c.and_(edx, 0xFFF);
-        c.mov(dl, GlobalArrPtrWithRegOffset(dmem, rdx, 1));
+        c.mov(dl, JitPtrOffset(dmem, rdx, 1));
         c.shl(edx, 7);
         c.and_(edx, 0x7FFF);
         c.mov(word_ptr(x86::rsp, 2 * i - 16), dx);
@@ -300,7 +300,7 @@ void lpv(u32 base, u32 vt, u32 e, s32 offset)
         c.and_(ecx, 15); // todo: only needed for i==0 if underflow from (addr & 7) - e is possible
         c.lea(edx, ptr(eax, ecx));
         c.and_(edx, 0xFFF);
-        c.mov(dl, GlobalArrPtrWithRegOffset(dmem, rdx, 1));
+        c.mov(dl, JitPtrOffset(dmem, rdx, 1));
         c.shl(edx, 8);
         c.mov(word_ptr(x86::rsp, 2 * i - 16), dx);
     }
@@ -345,7 +345,7 @@ void lqv(u32 base, u32 vt, u32 e, s32 offset)
 
         c.bind(l_simple);
         c.vmovaps(ht, xmmword_ptr(rcx, rax));
-        c.vpshufb(ht, ht, GlobalVarPtr(byteswap16_mask));
+        c.vpshufb(ht, ht, JitPtr(byteswap16_mask));
 
         c.bind(l_end);
     } else {
@@ -391,7 +391,7 @@ void lrv(u32 base, u32 vt, u32 e, s32 offset)
     c.vmovaps(xmmword_ptr(x86::rsp, -16), ht);
 
     c.bind(l_start);
-    c.mov(dl, GlobalArrPtrWithRegOffset(dmem, rax, 1));
+    c.mov(dl, JitPtrOffset(dmem, rax, 1));
     c.inc(eax);
     c.xor_(ecx, 1);
     c.mov(byte_ptr(x86::rsp, rcx, 0, -16), dl);
@@ -439,7 +439,7 @@ void ltv(u32 base, u32 vt, u32 e, s32 offset)
                 c.cmove(eax, ecx);
             }
             c.and_(eax, 0xFFF);
-            c.mov(r8b, GlobalArrPtrWithRegOffset(dmem, rax, 1));
+            c.mov(r8b, JitPtrOffset(dmem, rax, 1));
             c.mov(byte_ptr(x86::rsp, 2 * i + j - 16), r8b);
         }
         c.vmovaps(hreg, xmmword_ptr(x86::rsp, -16));
@@ -466,7 +466,7 @@ void luv(u32 base, u32 vt, u32 e, s32 offset)
         c.and_(ecx, 15); // todo: only needed for i==0 if underflow from (addr & 7) - e is possible
         c.lea(edx, ptr(eax, ecx));
         c.and_(edx, 0xFFF);
-        c.mov(dl, GlobalArrPtrWithRegOffset(dmem, rdx, 1));
+        c.mov(dl, JitPtrOffset(dmem, rdx, 1));
         c.shl(edx, 7);
         c.and_(edx, 0x7FFF);
         c.mov(word_ptr(x86::rsp, 2 * i - 16), dx);
@@ -481,7 +481,7 @@ void sbv(u32 base, u32 vt, u32 e, s32 offset)
     Xmm ht = GetVpr(vt);
     c.lea(eax, ptr(hbase, offset));
     c.and_(eax, 0xFFF);
-    c.vpextrb(GlobalArrPtrWithRegOffset(dmem, rax, 1), ht, e ^ 1);
+    c.vpextrb(JitPtrOffset(dmem, rax, 1), ht, e ^ 1);
 }
 
 void sdv(u32 base, u32 vt, u32 e, s32 offset)
@@ -511,7 +511,7 @@ void sfv(u32 base, u32 vt, u32 e, s32 offset)
             c.lea(edx, ptr(eax, ecx));
             c.and_(edx, 0xFFF);
             c.mov(r8b, byte_ptr(x86::rsp, 2 * elems[i] - 16));
-            c.mov(GlobalArrPtrWithRegOffset(dmem, rdx, 1), r8b);
+            c.mov(JitPtrOffset(dmem, rdx, 1), r8b);
         }
     };
 
@@ -532,7 +532,7 @@ void sfv(u32 base, u32 vt, u32 e, s32 offset)
             }
             c.lea(edx, ptr(eax, ecx));
             c.and_(edx, 0xFFF);
-            c.mov(GlobalArrPtrWithRegOffset(dmem, rdx, 1), 0);
+            c.mov(JitPtrOffset(dmem, rdx, 1), 0);
         }
         break;
     }
@@ -562,7 +562,7 @@ void shv(u32 base, u32 vt, u32 e, s32 offset)
         }
         c.lea(r8d, ptr(eax, ecx));
         c.and_(r8d, 0xFFF);
-        c.mov(GlobalArrPtrWithRegOffset(dmem, r8d, 1), dl);
+        c.mov(JitPtrOffset(dmem, r8d, 1), dl);
     }
     reg_alloc.Free(r8);
 }
@@ -614,7 +614,7 @@ void sqv(u32 base, u32 vt, u32 e, s32 offset)
 
     c.xor_(edx, 1);
     c.mov(r8b, byte_ptr(x86::rsp, rdx, 0, -16));
-    c.mov(GlobalArrPtrWithRegOffset(dmem, rax, 1), r8b);
+    c.mov(JitPtrOffset(dmem, rax, 1), r8b);
     c.xor_(edx, 1);
     c.inc(edx);
 
@@ -630,7 +630,7 @@ void sqv(u32 base, u32 vt, u32 e, s32 offset)
     c.and_(r8d, 15);
     c.xor_(r8d, 1);
     c.mov(r8b, byte_ptr(x86::rsp, r8, 0, -16));
-    c.mov(GlobalArrPtrWithRegOffset(dmem, rax, 1), r8b);
+    c.mov(JitPtrOffset(dmem, rax, 1), r8b);
     c.inc(edx);
     c.cmp(edx, ecx);
     c.jne(l_start);
@@ -638,8 +638,8 @@ void sqv(u32 base, u32 vt, u32 e, s32 offset)
 
     c.bind(l_simple);
     if (e == 0) {
-        c.vpshufb(xmm0, ht, GlobalVarPtr(byteswap16_mask));
-        c.vmovaps(GlobalArrPtrWithRegOffset(dmem, rax, 16), xmm0);
+        c.vpshufb(xmm0, ht, JitPtr(byteswap16_mask));
+        c.vmovaps(JitPtrOffset(dmem, rax, 16), xmm0);
     }
 
     c.bind(l_end);
@@ -670,7 +670,7 @@ void srv(u32 base, u32 vt, u32 e, s32 offset)
     c.and_(r9d, 15);
     c.xor_(r9d, 1);
     c.mov(r9b, byte_ptr(x86::rsp, r9, 0, -16));
-    c.mov(GlobalArrPtrWithRegOffset(dmem, rax, 1), r9b);
+    c.mov(JitPtrOffset(dmem, rax, 1), r9b);
     c.inc(eax);
     c.inc(r8d);
     c.cmp(eax, ecx);
@@ -707,7 +707,7 @@ void stv(u32 base, u32 vt, u32 e, s32 offset)
             c.and_(ecx, 15);
             c.lea(r8d, ptr(eax, ecx));
             c.and_(r8d, 0xFFF);
-            c.mov(GlobalArrPtrWithRegOffset(dmem, r8, 1), dl);
+            c.mov(JitPtrOffset(dmem, r8, 1), dl);
         }
     }
     reg_alloc.Free(r8);
@@ -751,7 +751,7 @@ void swv(u32 base, u32 vt, u32 e, s32 offset)
         }
         c.lea(r8d, ptr(eax, ecx));
         c.and_(r8d, 0xFFF);
-        c.mov(GlobalArrPtrWithRegOffset(dmem, r8, 1), dl);
+        c.mov(JitPtrOffset(dmem, r8, 1), dl);
     }
     reg_alloc.Free(r8);
 }
@@ -771,7 +771,7 @@ void vabs(u32 vs, u32 vt, u32 vd, u32 e)
 void vadd(u32 vs, u32 vt, u32 vd, u32 e)
 {
     Xmm hd = GetDirtyVpr(vd), hs = GetVpr(vs), ht = GetVte(vt, e), haccl = GetDirtyAccLow();
-    c.vmovaps(xmm0, GlobalVarPtr(vco.lo));
+    c.vmovaps(xmm0, JitPtr(vco.lo));
     c.vpsubw(xmm1, ht, xmm0);
     c.vpaddw(haccl, hs, xmm1);
     c.vpminsw(xmm1, hs, ht);
@@ -779,7 +779,7 @@ void vadd(u32 vs, u32 vt, u32 vd, u32 e)
     c.vpmaxsw(xmm1, hs, ht);
     c.vpaddsw(hd, xmm0, xmm1);
     c.vpxor(xmm0, xmm0, xmm0);
-    c.vmovaps(GlobalVarPtr(vco), ymm0);
+    c.vmovaps(JitPtr(vco), ymm0);
 }
 
 void vaddc(u32 vs, u32 vt, u32 vd, u32 e)
@@ -803,9 +803,9 @@ void vaddc(u32 vs, u32 vt, u32 vd, u32 e)
         c.vpaddw(xmm0, ht, xmm0);
         c.vpcmpgtw(xmm0, xmm0, xmm1);
     }
-    c.vmovaps(GlobalVarPtr(vco.lo), xmm0);
+    c.vmovaps(JitPtr(vco.lo), xmm0);
     c.vpxor(xmm0, xmm0, xmm0);
-    c.vmovaps(GlobalVarPtr(vco.hi), xmm0);
+    c.vmovaps(JitPtr(vco.hi), xmm0);
 }
 
 void vand(u32 vs, u32 vt, u32 vd, u32 e)
@@ -829,21 +829,21 @@ void vch(u32 vs, u32 vt, u32 vd, u32 e)
     c.vpcmpgtw(xmm5, xmm3, xmm0); // dlez
     c.vpcmpeqw(xmm3, xmm3, xmm1); // vce
     c.vpand(xmm3, xmm3, xmm1);
-    c.vmovaps(GlobalVarPtr(vce), xmm3);
+    c.vmovaps(JitPtr(vce), xmm3);
     c.vpor(xmm3, xmm5, xmm4); // dgez
-    c.vpor(xmm4, xmm4, GlobalVarPtr(vce)); // vco.hi
+    c.vpor(xmm4, xmm4, JitPtr(vce)); // vco.hi
     c.vpcmpeqw(xmm4, xmm4, xmm0);
-    c.vmovaps(GlobalVarPtr(vco.hi), xmm4);
+    c.vmovaps(JitPtr(vco.hi), xmm4);
     c.vpcmpeqw(xmm5, xmm5, xmm0);
     c.vpcmpgtw(xmm4, xmm0, ht); // vtn
     c.vpblendvb(xmm3, xmm3, xmm4, xmm1); // vcc.hi
     c.vpblendvb(xmm4, xmm4, xmm5, xmm1); // vcc.lo
-    c.vmovaps(GlobalVarPtr(vcc.hi), xmm3);
-    c.vmovaps(GlobalVarPtr(vcc.lo), xmm4);
+    c.vmovaps(JitPtr(vcc.hi), xmm3);
+    c.vmovaps(JitPtr(vcc.lo), xmm4);
     c.vpblendvb(xmm0, xmm3, xmm4, xmm1); // mask
     c.vpblendvb(hd, hs, xmm2, xmm0);
     c.vmovaps(haccl, hd);
-    c.vmovaps(GlobalVarPtr(vco.lo), xmm1);
+    c.vmovaps(JitPtr(vco.lo), xmm1);
     reg_alloc.Free<3>({ xmm3, xmm4, xmm5 });
 }
 
@@ -852,36 +852,36 @@ void vcl(u32 vs, u32 vt, u32 vd, u32 e)
     reg_alloc.Reserve<3>({ xmm3, xmm4, xmm5 });
     Xmm hd = GetDirtyVpr(vd), hs = GetVpr(vs), ht = GetVte(vt, e), haccl = GetDirtyAccLow();
     c.vpxor(xmm0, xmm0, xmm0);
-    c.vmovaps(xmm1, GlobalVarPtr(vco.lo)); // vco.lo
+    c.vmovaps(xmm1, JitPtr(vco.lo)); // vco.lo
     c.vpxor(xmm2, ht, xmm1); // nvt
     c.vpsubw(xmm2, xmm2, xmm1);
     c.vpsubw(xmm3, hs, xmm2); // diff
     c.vpaddusw(xmm4, hs, ht); // ncarry
     c.vpcmpeqw(xmm4, xmm4, xmm3);
-    c.vpcmpeqw(xmm5, xmm0, GlobalVarPtr(vce)); // nvce
+    c.vpcmpeqw(xmm5, xmm0, JitPtr(vce)); // nvce
     c.vpcmpeqw(xmm3, xmm3, xmm0); // diff0
     c.vpand(xmm0, xmm3, xmm4); // lec1
     c.vpand(xmm0, xmm0, xmm5);
     c.vpor(xmm3, xmm3, xmm4); // lec2
-    c.vpand(xmm3, xmm3, GlobalVarPtr(vce));
+    c.vpand(xmm3, xmm3, JitPtr(vce));
     c.vpor(xmm0, xmm0, xmm3); // leeq
     c.vpsubusw(xmm3, ht, hs); // geeq
     c.vpxor(xmm4, xmm4, xmm4);
     c.vpcmpeqw(xmm3, xmm3, xmm4);
-    c.vmovaps(xmm4, GlobalVarPtr(vco.hi)); // vco.hi
+    c.vmovaps(xmm4, JitPtr(vco.hi)); // vco.hi
     c.vpor(xmm5, xmm1, xmm4); // ge
-    c.vpblendvb(xmm5, xmm3, GlobalVarPtr(vcc.hi), xmm5);
+    c.vpblendvb(xmm5, xmm3, JitPtr(vcc.hi), xmm5);
     c.vpandn(xmm3, xmm4, xmm1); // le
-    c.vmovaps(xmm4, GlobalVarPtr(vcc.lo)); // vcc.lo
+    c.vmovaps(xmm4, JitPtr(vcc.lo)); // vcc.lo
     c.vpblendvb(xmm3, xmm4, xmm0, xmm3);
     c.vpblendvb(xmm0, xmm5, xmm3, xmm1); // mask
     c.vpblendvb(hd, hs, xmm2, xmm0);
     c.vmovaps(haccl, hd);
-    c.vmovaps(GlobalVarPtr(vcc.lo), xmm3);
-    c.vmovaps(GlobalVarPtr(vcc.hi), xmm5);
+    c.vmovaps(JitPtr(vcc.lo), xmm3);
+    c.vmovaps(JitPtr(vcc.hi), xmm5);
     c.vpxor(xmm0, xmm0, xmm0);
-    c.vmovaps(GlobalVarPtr(vce), xmm0);
-    c.vmovaps(GlobalVarPtr(vco), ymm0);
+    c.vmovaps(JitPtr(vce), xmm0);
+    c.vmovaps(JitPtr(vco), ymm0);
     reg_alloc.Free<3>({ xmm3, xmm4, xmm5 });
 }
 
@@ -893,66 +893,66 @@ void vcr(u32 vs, u32 vt, u32 vd, u32 e)
     c.vpand(xmm1, hs, xmm0);
     c.vpaddw(xmm1, xmm1, ht); // dlez
     c.vpsraw(xmm1, xmm1, 15); // vcc.lo
-    c.vmovaps(GlobalVarPtr(vcc.lo), xmm1);
+    c.vmovaps(JitPtr(vcc.lo), xmm1);
     c.vpor(xmm2, hs, xmm0);
     c.vpminsw(xmm2, xmm2, ht); // dgez
     c.vpcmpeqw(xmm2, xmm2, ht); // vcc.hi
-    c.vmovaps(GlobalVarPtr(vcc.hi), xmm2);
+    c.vmovaps(JitPtr(vcc.hi), xmm2);
     c.vpblendvb(xmm1, xmm2, xmm1, xmm0); // mask
     c.vpxor(xmm0, ht, xmm0); // nvt
     c.vpblendvb(hd, hs, xmm0, xmm1);
     c.vmovaps(haccl, hd);
     c.vpxor(xmm0, xmm0, xmm0);
-    c.vmovaps(GlobalVarPtr(vce), xmm0);
-    c.vmovaps(GlobalVarPtr(vco), ymm0);
+    c.vmovaps(JitPtr(vce), xmm0);
+    c.vmovaps(JitPtr(vco), ymm0);
 }
 
 void veq(u32 vs, u32 vt, u32 vd, u32 e)
 {
     Xmm hd = GetDirtyVpr(vd), hs = GetVpr(vs), ht = GetVte(vt, e), haccl = GetDirtyAccLow();
     c.vpcmpeqw(xmm0, hs, ht);
-    c.vmovaps(xmm1, GlobalVarPtr(vco.hi));
+    c.vmovaps(xmm1, JitPtr(vco.hi));
     c.vpandn(xmm0, xmm1, xmm0);
-    c.vmovaps(GlobalVarPtr(vcc.lo), xmm0);
+    c.vmovaps(JitPtr(vcc.lo), xmm0);
     c.vpblendvb(hd, ht, hs, xmm0);
     c.vmovaps(haccl, hd);
     c.vpxor(xmm0, xmm0, xmm0);
-    c.vmovaps(GlobalVarPtr(vcc.hi), xmm0);
-    c.vmovaps(GlobalVarPtr(vco), ymm0);
+    c.vmovaps(JitPtr(vcc.hi), xmm0);
+    c.vmovaps(JitPtr(vco), ymm0);
 }
 
 void vge(u32 vs, u32 vt, u32 vd, u32 e)
 {
     Xmm hd = GetDirtyVpr(vd), hs = GetVpr(vs), ht = GetVte(vt, e), haccl = GetDirtyAccLow();
     c.vpcmpeqw(xmm0, hs, ht);
-    c.vmovaps(xmm1, GlobalVarPtr(vco.lo));
-    c.vpand(xmm1, xmm1, GlobalVarPtr(vco.hi));
+    c.vmovaps(xmm1, JitPtr(vco.lo));
+    c.vpand(xmm1, xmm1, JitPtr(vco.hi));
     c.vpandn(xmm0, xmm1, xmm0);
     c.vpcmpgtw(xmm1, hs, ht);
     c.vpor(xmm0, xmm0, xmm1);
-    c.vmovaps(GlobalVarPtr(vcc.lo), xmm0);
+    c.vmovaps(JitPtr(vcc.lo), xmm0);
     c.vpblendvb(hd, ht, hs, xmm0);
     c.vmovaps(haccl, hd);
     c.vpxor(xmm0, xmm0, xmm0);
-    c.vmovaps(GlobalVarPtr(vcc.hi), xmm0);
-    c.vmovaps(GlobalVarPtr(vco), ymm0);
+    c.vmovaps(JitPtr(vcc.hi), xmm0);
+    c.vmovaps(JitPtr(vco), ymm0);
 }
 
 void vlt(u32 vs, u32 vt, u32 vd, u32 e)
 {
     Xmm hd = GetDirtyVpr(vd), hs = GetVpr(vs), ht = GetVte(vt, e), haccl = GetDirtyAccLow();
     c.vpcmpeqw(xmm0, hs, ht);
-    c.vmovaps(xmm1, GlobalVarPtr(vco.lo));
-    c.vpand(xmm1, xmm1, GlobalVarPtr(vco.hi));
+    c.vmovaps(xmm1, JitPtr(vco.lo));
+    c.vpand(xmm1, xmm1, JitPtr(vco.hi));
     c.vpand(xmm0, xmm1, xmm0);
     c.vpcmpgtw(xmm1, ht, hs);
     c.vpor(xmm0, xmm0, xmm1);
-    c.vmovaps(GlobalVarPtr(vcc.lo), xmm0);
+    c.vmovaps(JitPtr(vcc.lo), xmm0);
     c.vpblendvb(hd, ht, hs, xmm0);
     c.vmovaps(haccl, hd);
     c.vpxor(xmm0, xmm0, xmm0);
-    c.vmovaps(GlobalVarPtr(vcc.hi), xmm0);
-    c.vmovaps(GlobalVarPtr(vco), ymm0);
+    c.vmovaps(JitPtr(vcc.hi), xmm0);
+    c.vmovaps(JitPtr(vco), ymm0);
 }
 
 template<bool vmacf> void vmacfu(u32 vs, u32 vt, u32 vd, u32 e)
@@ -1005,7 +1005,7 @@ void vmacq(u32 vd)
     reg_alloc.Reserve(xmm3);
     Xmm hd = GetDirtyVpr(vd);
     auto [haccl, haccm, hacch] = GetDirtyAccs();
-    c.vpandn(xmm0, haccm, GlobalVarPtr(mask32x8)); // 0 or 32
+    c.vpandn(xmm0, haccm, JitPtr(mask32x8)); // 0 or 32
     c.vpxor(xmm1, xmm1, xmm1);
     c.vpcmpeqw(xmm2, hacch, xmm1); // acch eqz
     c.vpsrlw(xmm3, haccm, 5);
@@ -1160,11 +1160,11 @@ void vmov(u32 vt, u32 vt_e, u32 vd, u32 vd_e)
 void vmrg(u32 vs, u32 vt, u32 vd, u32 e)
 {
     Xmm hd = GetDirtyVpr(vd), hs = GetVpr(vs), ht = GetVte(vt, e), haccl = GetDirtyAccLow();
-    c.vmovaps(xmm0, GlobalVarPtr(vcc.lo));
+    c.vmovaps(xmm0, JitPtr(vcc.lo));
     c.vpblendvb(hd, ht, hs, xmm0);
     c.vmovaps(haccl, hd);
     c.vpxor(xmm0, xmm0, xmm0);
-    c.vmovaps(GlobalVarPtr(vco), ymm0);
+    c.vmovaps(JitPtr(vco), ymm0);
 }
 
 void vmudh(u32 vs, u32 vt, u32 vd, u32 e)
@@ -1307,13 +1307,13 @@ void vne(u32 vs, u32 vt, u32 vd, u32 e)
     c.vpcmpeqw(xmm0, hs, ht); // eq
     c.vpcmpeqw(xmm1, xmm1, xmm1);
     c.vpxor(xmm0, xmm0, xmm1);
-    c.vpor(xmm0, xmm0, GlobalVarPtr(vco.hi)); // vcc.lo
-    c.vmovaps(GlobalVarPtr(vcc.lo), xmm0);
+    c.vpor(xmm0, xmm0, JitPtr(vco.hi)); // vcc.lo
+    c.vmovaps(JitPtr(vcc.lo), xmm0);
     c.vpblendvb(hd, ht, hs, xmm0);
     c.vmovaps(haccl, hd);
     c.vpxor(xmm0, xmm0, xmm0);
-    c.vmovaps(GlobalVarPtr(vcc.hi), xmm0);
-    c.vmovaps(GlobalVarPtr(vco), ymm0);
+    c.vmovaps(JitPtr(vcc.hi), xmm0);
+    c.vmovaps(JitPtr(vco), ymm0);
 }
 
 void vnop()
@@ -1356,8 +1356,8 @@ void vrcpq(u32 vt, u32 vt_e, u32 vd, u32 vd_e, void* impl)
     Xmm hd = GetDirtyVpr(vd);
     c.vpinsrw(hd, hd, eax, vd_e & 7);
     c.shr(eax, 16);
-    c.mov(GlobalVarPtr(div_out), ax);
-    c.mov(GlobalVarPtr(div_dp), 0);
+    c.mov(JitPtr(div_out), ax);
+    c.mov(JitPtr(div_dp), 0);
     reg_alloc.FreeArgs(1);
 }
 
@@ -1367,20 +1367,20 @@ void vrcpql(u32 vt, u32 vt_e, u32 vd, u32 vd_e, void* impl)
     Xmm ht = GetVpr(vt), hte = GetVte(vt, vt_e), haccl = GetDirtyAccLow();
     c.vmovaps(haccl, hte);
     c.vpextrw(host_gpr_arg[0].r32(), ht, vt_e & 7);
-    c.mov(ax, GlobalVarPtr(div_in));
+    c.mov(ax, JitPtr(div_in));
     c.shl(eax, 16);
     c.or_(eax, host_gpr_arg[0].r32());
     c.movsx(host_gpr_arg[0].r32(), host_gpr_arg[0].r16());
-    c.cmp(GlobalVarPtr(div_dp), 1);
+    c.cmp(JitPtr(div_dp), 1);
     c.cmove(host_gpr_arg[0].r32(), eax);
     reg_alloc.Call(impl);
     Xmm hd = GetDirtyVpr(vd);
     c.vpinsrw(hd, hd, eax, vd_e & 7);
     c.shr(eax, 16);
-    c.mov(GlobalVarPtr(div_out), ax);
+    c.mov(JitPtr(div_out), ax);
     c.xor_(eax, eax);
-    c.mov(GlobalVarPtr(div_in), ax);
-    c.mov(GlobalVarPtr(div_dp), al);
+    c.mov(JitPtr(div_in), ax);
+    c.mov(JitPtr(div_dp), al);
     reg_alloc.FreeArgs(1);
 }
 
@@ -1393,9 +1393,9 @@ void vrcph(u32 vt, u32 vt_e, u32 vd, u32 vd_e)
 {
     Xmm hd = GetDirtyVpr(vd), ht = GetVpr(vt), hte = GetVte(vt, vt_e), haccl = GetDirtyAccLow();
     c.vmovaps(haccl, hte);
-    c.vpinsrw(hd, hd, GlobalVarPtr(div_out), vd_e & 7);
-    c.vpextrw(GlobalVarPtr(div_in), ht, vt_e & 7);
-    c.mov(GlobalVarPtr(div_dp), 1);
+    c.vpinsrw(hd, hd, JitPtr(div_out), vd_e & 7);
+    c.vpextrw(JitPtr(div_in), ht, vt_e & 7);
+    c.mov(JitPtr(div_dp), 1);
 }
 
 void vrcpl(u32 vt, u32 vt_e, u32 vd, u32 vd_e)
@@ -1498,7 +1498,7 @@ void vsar(u32 vd, u32 e)
 void vsub(u32 vs, u32 vt, u32 vd, u32 e)
 {
     Xmm hd = GetDirtyVpr(vd), hs = GetVpr(vs), ht = GetVte(vt, e), haccl = GetDirtyAccLow();
-    c.vmovaps(xmm0, GlobalVarPtr(vco.lo));
+    c.vmovaps(xmm0, JitPtr(vco.lo));
     c.vpsubw(xmm1, ht, xmm0); // diff
     c.vpsubw(haccl, hs, xmm1);
     c.vpsubsw(xmm0, ht, xmm0); // clamped diff
@@ -1506,7 +1506,7 @@ void vsub(u32 vs, u32 vt, u32 vd, u32 e)
     c.vpcmpgtw(xmm0, xmm0, xmm1); // overflow
     c.vpaddsw(hd, hd, xmm0);
     c.vpxor(xmm0, xmm0, xmm0);
-    c.vmovaps(GlobalVarPtr(vco), ymm0);
+    c.vmovaps(JitPtr(vco), ymm0);
 }
 
 void vsubc(u32 vs, u32 vt, u32 vd, u32 e)
@@ -1517,7 +1517,7 @@ void vsubc(u32 vs, u32 vt, u32 vd, u32 e)
     c.vpaddw(xmm1, hs, xmm0);
     c.vpaddw(xmm2, ht, xmm0);
     c.vpcmpgtw(xmm0, xmm2, xmm1); // vco.lo
-    c.vmovaps(GlobalVarPtr(vco.lo), xmm0);
+    c.vmovaps(JitPtr(vco.lo), xmm0);
     c.vpsubw(hd, hs, ht);
     c.vmovaps(haccl, hd);
     c.vpxor(xmm1, xmm1, xmm1);
@@ -1525,7 +1525,7 @@ void vsubc(u32 vs, u32 vt, u32 vd, u32 e)
     c.vpcmpeqw(xmm2, xmm2, xmm2);
     c.vpxor(xmm1, xmm1, xmm2);
     c.vpor(xmm0, xmm0, xmm1);
-    c.vmovaps(GlobalVarPtr(vco.hi), xmm0);
+    c.vmovaps(JitPtr(vco.hi), xmm0);
 }
 
 void vxor(u32 vs, u32 vt, u32 vd, u32 e)

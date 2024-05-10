@@ -24,8 +24,8 @@ struct Recompiler : public mips::RecompilerX64<s64, u64, RegAllocator> {
         Label l_branch = c.newLabel(), l_link = c.newLabel(), l_no_delay_slot = c.newLabel(), l_end = c.newLabel();
         reg_alloc.Reserve(rcx);
         Gpq hs = GetGpr(rs), h31 = GetDirtyGpr(31);
-        c.mov(cl, GlobalVarPtr(in_branch_delay_slot_taken));
-        c.or_(cl, GlobalVarPtr(in_branch_delay_slot_not_taken));
+        c.mov(cl, JitPtr(in_branch_delay_slot_taken));
+        c.or_(cl, JitPtr(in_branch_delay_slot_not_taken));
         c.test(hs, hs);
         c.jns(l_branch);
         OnBranchNotTakenJit();
@@ -39,7 +39,7 @@ struct Recompiler : public mips::RecompilerX64<s64, u64, RegAllocator> {
         c.test(cl, cl);
         c.je(l_no_delay_slot);
         c.mov(h31.r32(), 4);
-        c.add(h31, GlobalVarPtr(jump_addr));
+        c.add(h31, JitPtr(jump_addr));
         c.jmp(l_end);
 
         c.bind(l_no_delay_slot);
@@ -96,25 +96,25 @@ struct Recompiler : public mips::RecompilerX64<s64, u64, RegAllocator> {
         c.not_(rdx);
         c.or_(rax, rdx);
         c.jne(l_div);
-        c.mov(GlobalVarPtr(lo), hs);
-        c.mov(GlobalVarPtr(hi), 0);
+        c.mov(JitPtr(lo), hs);
+        c.mov(JitPtr(hi), 0);
         c.jmp(l_end);
 
         c.bind(l_divzero);
         c.mov(rax, hs);
-        c.mov(GlobalVarPtr(hi), rax);
+        c.mov(JitPtr(hi), rax);
         c.sar(rax, 63);
         c.and_(eax, 2);
         c.dec(rax);
-        c.mov(GlobalVarPtr(lo), rax);
+        c.mov(JitPtr(lo), rax);
         c.jmp(l_end);
 
         c.bind(l_div);
         c.mov(rax, hs);
         c.cqo(rdx, rax);
         c.idiv(rdx, rax, ht);
-        c.mov(GlobalVarPtr(lo), rax);
-        c.mov(GlobalVarPtr(hi), rdx);
+        c.mov(JitPtr(lo), rax);
+        c.mov(JitPtr(hi), rdx);
 
         c.bind(l_end);
         block_cycles += 68;
@@ -130,16 +130,16 @@ struct Recompiler : public mips::RecompilerX64<s64, u64, RegAllocator> {
         Gpq hs = GetGpr(rs), ht = GetGpr(rt);
         c.test(ht, ht);
         c.jne(l_div);
-        c.mov(GlobalVarPtr(lo), -1);
-        c.mov(GlobalVarPtr(hi), hs);
+        c.mov(JitPtr(lo), -1);
+        c.mov(JitPtr(hi), hs);
         c.jmp(l_end);
 
         c.bind(l_div);
         c.mov(rax, hs);
         c.xor_(edx, edx);
         c.div(rdx, rax, ht);
-        c.mov(GlobalVarPtr(lo), rax);
-        c.mov(GlobalVarPtr(hi), rdx);
+        c.mov(JitPtr(lo), rax);
+        c.mov(JitPtr(hi), rdx);
 
         c.bind(l_end);
         block_cycles += 68;
@@ -160,17 +160,17 @@ struct Recompiler : public mips::RecompilerX64<s64, u64, RegAllocator> {
         c.or_(eax, edx);
         c.jne(l_div);
         c.movsxd(rax, hs);
-        c.mov(GlobalVarPtr(lo), rax);
-        c.mov(GlobalVarPtr(hi), 0);
+        c.mov(JitPtr(lo), rax);
+        c.mov(JitPtr(hi), 0);
         c.jmp(l_end);
 
         c.bind(l_divzero);
         c.movsxd(rax, hs);
-        c.mov(GlobalVarPtr(hi), rax);
+        c.mov(JitPtr(hi), rax);
         c.sar(eax, 31);
         c.and_(eax, 2);
         c.dec(rax);
-        c.mov(GlobalVarPtr(lo), rax);
+        c.mov(JitPtr(lo), rax);
         c.jmp(l_end);
 
         c.bind(l_div);
@@ -178,9 +178,9 @@ struct Recompiler : public mips::RecompilerX64<s64, u64, RegAllocator> {
         c.cdq(edx, eax);
         c.idiv(edx, eax, ht);
         c.cdqe(rax);
-        c.mov(GlobalVarPtr(lo), rax);
+        c.mov(JitPtr(lo), rax);
         c.movsxd(rax, edx);
-        c.mov(GlobalVarPtr(hi), rax);
+        c.mov(JitPtr(hi), rax);
 
         c.bind(l_end);
         block_cycles += 36;
@@ -194,9 +194,9 @@ struct Recompiler : public mips::RecompilerX64<s64, u64, RegAllocator> {
         Gpd hs = GetGpr32(rs), ht = GetGpr32(rt);
         c.test(ht, ht);
         c.jne(l_div);
-        c.mov(GlobalVarPtr(lo), -1);
+        c.mov(JitPtr(lo), -1);
         c.movsxd(rax, hs);
-        c.mov(GlobalVarPtr(hi), rax);
+        c.mov(JitPtr(hi), rax);
         c.jmp(l_end);
 
         c.bind(l_div);
@@ -204,9 +204,9 @@ struct Recompiler : public mips::RecompilerX64<s64, u64, RegAllocator> {
         c.xor_(edx, edx);
         c.div(edx, eax, ht);
         c.cdqe(rax);
-        c.mov(GlobalVarPtr(lo), rax);
+        c.mov(JitPtr(lo), rax);
         c.movsxd(rax, edx);
-        c.mov(GlobalVarPtr(hi), rax);
+        c.mov(JitPtr(hi), rax);
 
         c.bind(l_end);
         block_cycles += 36;
@@ -230,7 +230,7 @@ struct Recompiler : public mips::RecompilerX64<s64, u64, RegAllocator> {
     void j(u32 instr) const
     {
         Label l_end = c.newLabel();
-        c.cmp(GlobalVarPtr(in_branch_delay_slot_taken), 1);
+        c.cmp(JitPtr(in_branch_delay_slot_taken), 1);
         c.je(l_end);
         TakeBranchJit((jit_pc + 4) & 0xFFFF'FFFF'F000'0000 | instr << 2 & 0xFFF'FFFF);
 
@@ -242,10 +242,10 @@ struct Recompiler : public mips::RecompilerX64<s64, u64, RegAllocator> {
     {
         Label l_jump = c.newLabel(), l_end = c.newLabel();
         Gpq h31 = GetDirtyGpr(31);
-        c.cmp(GlobalVarPtr(in_branch_delay_slot_taken), 0);
+        c.cmp(JitPtr(in_branch_delay_slot_taken), 0);
         c.je(l_jump);
         c.mov(h31.r32(), 4);
-        c.add(h31, GlobalVarPtr(jump_addr));
+        c.add(h31, JitPtr(jump_addr));
         c.jmp(l_end);
 
         c.bind(l_jump);
@@ -260,10 +260,10 @@ struct Recompiler : public mips::RecompilerX64<s64, u64, RegAllocator> {
     {
         Label l_jump = c.newLabel(), l_end = c.newLabel();
         Gpq hd = GetDirtyGpr(rd), hs = GetGpr(rs);
-        c.cmp(GlobalVarPtr(in_branch_delay_slot_taken), 0);
+        c.cmp(JitPtr(in_branch_delay_slot_taken), 0);
         c.je(l_jump);
         c.mov(hd.r32(), 4);
-        c.add(hd, GlobalVarPtr(jump_addr));
+        c.add(hd, JitPtr(jump_addr));
         c.jmp(l_end);
 
         c.bind(l_jump);
@@ -284,7 +284,7 @@ struct Recompiler : public mips::RecompilerX64<s64, u64, RegAllocator> {
     {
         Label l_end = c.newLabel();
         Gpq hs = GetGpr(rs);
-        c.cmp(GlobalVarPtr(in_branch_delay_slot_taken), 1);
+        c.cmp(JitPtr(in_branch_delay_slot_taken), 1);
         c.je(l_end);
         TakeBranchJit(hs);
 
@@ -316,7 +316,7 @@ struct Recompiler : public mips::RecompilerX64<s64, u64, RegAllocator> {
         reg_alloc.CallWithStackAlignment(ReadVirtual<s64, Alignment::UnalignedLeft>);
         reg_alloc.FreeArgs(1);
         c.pop(rcx);
-        c.cmp(GlobalVarPtr(exception_occurred), 0);
+        c.cmp(JitPtr(exception_occurred), 0);
         c.je(l_noexception);
 
         BlockEpilog();
@@ -347,7 +347,7 @@ struct Recompiler : public mips::RecompilerX64<s64, u64, RegAllocator> {
         reg_alloc.CallWithStackAlignment(ReadVirtual<s64, Alignment::UnalignedRight>);
         reg_alloc.FreeArgs(1);
         c.pop(rcx);
-        c.cmp(GlobalVarPtr(exception_occurred), 0);
+        c.cmp(JitPtr(exception_occurred), 0);
         c.je(l_noexception);
 
         BlockEpilog();
@@ -392,7 +392,7 @@ struct Recompiler : public mips::RecompilerX64<s64, u64, RegAllocator> {
         reg_alloc.CallWithStackAlignment(ReadVirtual<s32, Alignment::UnalignedLeft>);
         reg_alloc.FreeArgs(1);
         c.pop(rcx);
-        c.cmp(GlobalVarPtr(exception_occurred), 0);
+        c.cmp(JitPtr(exception_occurred), 0);
         c.je(l_noexception);
 
         BlockEpilog();
@@ -423,7 +423,7 @@ struct Recompiler : public mips::RecompilerX64<s64, u64, RegAllocator> {
         reg_alloc.CallWithStackAlignment(ReadVirtual<s32, Alignment::UnalignedRight>);
         reg_alloc.FreeArgs(1);
         c.pop(rcx);
-        c.cmp(GlobalVarPtr(exception_occurred), 0);
+        c.cmp(JitPtr(exception_occurred), 0);
         c.je(l_noexception);
 
         BlockEpilog();
@@ -451,9 +451,9 @@ struct Recompiler : public mips::RecompilerX64<s64, u64, RegAllocator> {
         c.movsxd(rax, ht.r32());
         c.imul(t, rax);
         c.movsxd(rax, t.r32());
-        c.mov(GlobalVarPtr(lo), rax);
+        c.mov(JitPtr(lo), rax);
         c.sar(t, 32);
-        c.mov(GlobalVarPtr(hi), t);
+        c.mov(JitPtr(hi), t);
         block_cycles += 4;
     }
 
@@ -489,7 +489,7 @@ struct Recompiler : public mips::RecompilerX64<s64, u64, RegAllocator> {
         c.sarx(host_gpr_arg[1], ht, rax);
         reg_alloc.Call(WriteVirtual<8, Alignment::UnalignedLeft>);
         reg_alloc.FreeArgs(2);
-        c.cmp(GlobalVarPtr(exception_occurred), 0);
+        c.cmp(JitPtr(exception_occurred), 0);
         c.je(l_end);
 
         BlockEpilog();
@@ -510,7 +510,7 @@ struct Recompiler : public mips::RecompilerX64<s64, u64, RegAllocator> {
         c.shlx(host_gpr_arg[1], ht, rax);
         reg_alloc.Call(WriteVirtual<8, Alignment::UnalignedRight>);
         reg_alloc.FreeArgs(2);
-        c.cmp(GlobalVarPtr(exception_occurred), 0);
+        c.cmp(JitPtr(exception_occurred), 0);
         c.je(l_end);
 
         BlockEpilog();
@@ -546,7 +546,7 @@ struct Recompiler : public mips::RecompilerX64<s64, u64, RegAllocator> {
         c.shrx(host_gpr_arg[1], ht, rax);
         reg_alloc.Call(WriteVirtual<4, Alignment::UnalignedLeft>);
         reg_alloc.FreeArgs(2);
-        c.cmp(GlobalVarPtr(exception_occurred), 0);
+        c.cmp(JitPtr(exception_occurred), 0);
         c.je(l_end);
 
         BlockEpilog();
@@ -566,7 +566,7 @@ struct Recompiler : public mips::RecompilerX64<s64, u64, RegAllocator> {
         c.shlx(host_gpr_arg[1], ht, rax);
         reg_alloc.Call(WriteVirtual<4, Alignment::UnalignedRight>);
         reg_alloc.FreeArgs(2);
-        c.cmp(GlobalVarPtr(exception_occurred), 0);
+        c.cmp(JitPtr(exception_occurred), 0);
         c.je(l_end);
 
         BlockEpilog();
@@ -638,13 +638,13 @@ private:
         reg_alloc.FreeArgs(2);
 
         if constexpr (linked) {
-            c.mov(ecx, GlobalVarPtr(last_paddr_on_load));
+            c.mov(ecx, JitPtr(last_paddr_on_load));
             c.shr(ecx, 4);
-            c.mov(GlobalVarPtr(cop0.ll_addr), ecx);
-            c.mov(GlobalVarPtr(ll_bit), 1);
+            c.mov(JitPtr(cop0.ll_addr), ecx);
+            c.mov(JitPtr(ll_bit), 1);
         }
 
-        c.cmp(GlobalVarPtr(exception_occurred), 0);
+        c.cmp(JitPtr(exception_occurred), 0);
         c.je(l_noexception);
 
         BlockEpilog();
@@ -673,8 +673,8 @@ private:
         } else {
             c.imul(rdx, rax, ht);
         }
-        c.mov(GlobalVarPtr(lo), rax);
-        c.mov(GlobalVarPtr(hi), rdx);
+        c.mov(JitPtr(lo), rax);
+        c.mov(JitPtr(hi), rdx);
         block_cycles += 7;
         reg_alloc.Free(rdx);
     }
@@ -689,7 +689,7 @@ private:
         c.mov(host_gpr_arg[1], ht);
         reg_alloc.Call(WriteVirtual<sizeof(Int)>);
         reg_alloc.FreeArgs(2);
-        c.cmp(GlobalVarPtr(exception_occurred), 0);
+        c.cmp(JitPtr(exception_occurred), 0);
         c.je(l_end);
 
         BlockEpilog();
@@ -700,7 +700,7 @@ private:
     template<std::integral Int> void store_conditional(u32 rs, u32 rt, s16 imm) const
     {
         Label l_store = c.newLabel(), l_end = c.newLabel();
-        c.cmp(GlobalVarPtr(ll_bit), 1);
+        c.cmp(JitPtr(ll_bit), 1);
         c.je(l_store);
 
         if (rt) {
@@ -718,7 +718,7 @@ private:
         reg_alloc.Call(WriteVirtual<sizeof(Int)>);
         reg_alloc.FreeArgs(2);
         if (rt) c.mov(GetDirtyGpr32(rt), 1);
-        c.cmp(GlobalVarPtr(exception_occurred), 0);
+        c.cmp(JitPtr(exception_occurred), 0);
         c.je(l_end);
 
         BlockEpilog();
@@ -731,8 +731,8 @@ private:
     jit_pc,
     branch_hit,
     branched,
-    [] { return GlobalVarPtr(lo); },
-    [] { return GlobalVarPtr(hi); },
+    [] { return JitPtr(lo); },
+    [] { return JitPtr(hi); },
     [](u64 target) { TakeBranchJit(target); },
     [](HostGpr target) { TakeBranchJit(target); },
     LinkJit,

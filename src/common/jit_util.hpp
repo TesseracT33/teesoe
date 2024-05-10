@@ -55,36 +55,6 @@ inline constexpr std::array host_gpr_arg = [] {
     }
 }();
 
-inline asmjit::x86::Mem
-  jit_mem_global_var(asmjit::x86::Gpq base_ptr_reg, auto const* base_ptr, auto const* obj_ptr, u32 ptr_size)
-{
-    std::ptrdiff_t diff = reinterpret_cast<u8 const*>(obj_ptr) - reinterpret_cast<u8 const*>(base_ptr);
-    assert(diff >= std::numeric_limits<s32>::min() && diff <= std::numeric_limits<s32>::max());
-    return asmjit::x86::ptr(base_ptr_reg, s32(diff), ptr_size);
-}
-
-inline asmjit::x86::Mem jit_mem_global_arr_with_imm_index(asmjit::x86::Gpq base_ptr_reg,
-  u32 index,
-  auto const* base_ptr,
-  auto const* arr_ptr,
-  u32 ptr_size)
-{
-    std::ptrdiff_t diff = reinterpret_cast<u8 const*>(arr_ptr) + index - reinterpret_cast<u8 const*>(base_ptr);
-    assert(diff >= std::numeric_limits<s32>::min() && diff <= std::numeric_limits<s32>::max());
-    return asmjit::x86::ptr(base_ptr_reg, s32(diff), ptr_size);
-}
-
-inline asmjit::x86::Mem jit_mem_global_arr_with_reg_index(asmjit::x86::Gpq base_ptr_reg,
-  asmjit::x86::Gpq index,
-  auto const* base_ptr,
-  auto const* arr_ptr,
-  u32 ptr_size)
-{
-    std::ptrdiff_t diff = reinterpret_cast<u8 const*>(arr_ptr) - reinterpret_cast<u8 const*>(base_ptr);
-    assert(diff >= std::numeric_limits<s32>::min() && diff <= std::numeric_limits<s32>::max());
-    return asmjit::x86::ptr(base_ptr_reg, index, 0u, s32(diff), ptr_size);
-}
-
 inline void jit_x64_call_with_stack_alignment(asmjit::x86::Compiler& c, auto func)
 {
     using namespace asmjit::x86;
@@ -111,7 +81,7 @@ inline void jit_x86_call_no_stack_alignment(asmjit::x86::Compiler& c, auto func)
     }
 }
 
-constexpr std::string_view host_reg_to_string(asmjit::x86::Gp gp)
+constexpr std::string_view JitRegToStr(asmjit::x86::Gp gp)
 {
     using namespace asmjit::x86;
     switch (gp.id()) {
@@ -135,27 +105,27 @@ constexpr std::string_view host_reg_to_string(asmjit::x86::Gp gp)
     }
 }
 
-inline std::string host_reg_to_string(asmjit::x86::Xmm xmm)
+inline std::string JitRegToStr(asmjit::x86::Xmm xmm)
 {
     return std::format("xmm{}", xmm.id());
 }
 
-inline std::string host_reg_to_string(asmjit::x86::Ymm ymm)
+inline std::string JitRegToStr(asmjit::x86::Ymm ymm)
 {
     return std::format("ymm{}", ymm.id());
 }
 
-inline std::string host_reg_to_string(asmjit::x86::Zmm zmm)
+inline std::string JitRegToStr(asmjit::x86::Zmm zmm)
 {
     return std::format("zmm{}", zmm.id());
 }
 
-inline std::string host_reg_to_string(asmjit::arm::Vec vec)
+inline std::string JitRegToStr(asmjit::arm::Vec vec)
 {
     return std::format("v{}", vec.id());
 }
 
-constexpr bool is_volatile(HostGpr gpr)
+constexpr bool IsVolatile(HostGpr gpr)
 {
     if constexpr (arch.a64) {
         return gpr.id() < 16;
@@ -169,7 +139,7 @@ constexpr bool is_volatile(HostGpr gpr)
     }
 }
 
-constexpr bool is_volatile(HostVpr128 vpr)
+constexpr bool IsVolatile(HostVpr128 vpr)
 {
     u32 id = vpr.id();
     if constexpr (arch.a64) {
@@ -181,9 +151,4 @@ constexpr bool is_volatile(HostVpr128 vpr)
             return true;
         }
     }
-}
-
-constexpr bool is_nonvolatile(auto gpr)
-{
-    return !is_volatile(gpr);
 }

@@ -64,13 +64,13 @@ void BlockEpilogWithJmp(void* func)
 
 void BlockEpilogWithPcFlushAndJmp(void* func, int pc_offset)
 {
-    c.mov(GlobalVarPtr(pc), jit_pc + pc_offset);
+    c.mov(JitPtr(pc), jit_pc + pc_offset);
     BlockEpilogWithJmp(func);
 }
 
 void BlockEpilogWithPcFlush(int pc_offset)
 {
-    c.mov(GlobalVarPtr(pc), jit_pc + pc_offset);
+    c.mov(JitPtr(pc), jit_pc + pc_offset);
     BlockEpilog();
 }
 
@@ -110,9 +110,9 @@ void BlockRecordCycles()
 {
     assert(block_cycles > 0);
     if (block_cycles == 1) {
-        c.inc(GlobalVarPtr(cycle_counter));
+        c.inc(JitPtr(cycle_counter));
     } else {
-        c.add(GlobalVarPtr(cycle_counter), block_cycles);
+        c.add(JitPtr(cycle_counter), block_cycles);
     }
 }
 
@@ -274,7 +274,7 @@ void TearDownRecompiler()
 void UpdateBranchStateJit()
 {
     Label l_nobranch = c.newLabel();
-    c.cmp(GlobalVarPtr(jump_is_pending), 0);
+    c.cmp(JitPtr(jump_is_pending), 0);
     c.je(l_nobranch);
     BlockEpilogWithJmp(PerformBranch);
     c.bind(l_nobranch);
