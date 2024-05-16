@@ -1,20 +1,19 @@
 #pragma once
 
+#include "numtypes.hpp"
 #include "rdp_implementation.hpp"
 #include "status.hpp"
-#include "numtypes.hpp"
 
 #include <memory>
 
-class VulkanRenderContext;
+struct SDL_Window;
 
 namespace n64::rdp {
 
 void Initialize();
-Status MakeParallelRdp(std::shared_ptr<VulkanRenderContext> render_context);
 u32 ReadReg(u32 addr);
 void WriteReg(u32 addr, u32 data);
 
-inline std::unique_ptr<RDPImplementation> implementation;
+inline RdpImplementation* implementation;
 
 } // namespace n64::rdp

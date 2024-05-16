@@ -45,15 +45,13 @@ Status GBA::Init()
     scheduler::Initialize();
     serial::Initialize();
     timers::Initialize();
-    if constexpr (LoggingIsEnabled()) {
-        SetLogPath("F:\\gba.log");
-    }
     return OkStatus();
 }
 
-Status GBA::InitGraphics()
+Status GBA::InitGraphics(std::shared_ptr<RenderContext> render_context)
 {
-    return UnimplementedStatus();
+    gba::ppu::InitRenderContext(render_context);
+    return OkStatus();
 }
 
 Status GBA::LoadBios(std::filesystem::path const& path)

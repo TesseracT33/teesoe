@@ -1,16 +1,19 @@
 #pragma once
 
-#include "serializer.hpp"
+#include "frontend/render_context.hpp"
 #include "numtypes.hpp"
+#include "serializer.hpp"
 
 #include <array>
 #include <concepts>
+#include <memory>
 #include <vector>
 
 namespace gba::ppu {
 
 void AddInitialEvents();
 void Initialize();
+void InitRenderContext(std::shared_ptr<RenderContext> render_context);
 template<std::integral Int> Int ReadOam(u32 addr);
 template<std::integral Int> Int ReadPaletteRam(u32 addr);
 template<std::integral Int> Int ReadReg(u32 addr);
@@ -239,8 +242,10 @@ inline std::array<uint, 4> bg_by_prio = {
 }; // i:th element holds the index of the background with the i:th priority
 inline std::array<u8, 0x400> oam;
 inline std::array<u8, 0x400> palette_ram;
-inline std::array<u8, 0x18000> vram;
+inline std::vector<u8> vram;
 inline std::vector<u8> framebuffer;
 inline std::vector<ObjData> objects;
+
+inline std::shared_ptr<RenderContext> render_context;
 
 } // namespace gba::ppu

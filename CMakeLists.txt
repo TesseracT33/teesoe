@@ -137,13 +137,15 @@ endif()
 list(APPEND CLANG_FLAGS ${GNU_FLAGS})
 list(APPEND GCC_FLAGS ${GNU_FLAGS})
 
+
 if (CLANG)
-	target_compile_options(${CMAKE_PROJECT_NAME} PUBLIC ${CLANG_FLAGS})
+	target_compile_options(${CMAKE_PROJECT_NAME} PRIVATE ${CLANG_FLAGS})
 elseif (GCC)
-	target_compile_options(${CMAKE_PROJECT_NAME} PUBLIC ${GCC_FLAGS})
+	target_compile_options(${CMAKE_PROJECT_NAME} PRIVATE ${GCC_FLAGS})
 elseif (MSVC)
 	string(REGEX REPLACE "/W3" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")	
-	target_compile_options(${CMAKE_PROJECT_NAME} PUBLIC ${MSVC_FLAGS})
+	target_compile_options(${CMAKE_PROJECT_NAME} PRIVATE ${MSVC_FLAGS})
+	#target_compile_definitions(_CRT_SECURE_NO_WARNINGS)
 endif()
 
 add_subdirectory(ext)

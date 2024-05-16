@@ -43,14 +43,14 @@
 
 #define LOG_RSP(instr, ...)                                         \
     if constexpr (cpu == Cpu::RSP && log_rsp_instructions) {        \
-        log(std::format("${:03X}  {}",                              \
+        Log(std::format("${:03X}  {}",                              \
           cpu_impl == CpuImpl::Interpreter ? rsp::pc : rsp::jit_pc, \
           rsp::disassembler.instr(__VA_ARGS__)));                   \
     }
 
 #define LOG_VR4300(instr, ...)                                            \
     if constexpr (cpu == Cpu::VR4300 && log_cpu_instructions) {           \
-        log(std::format("${:016X}  {}",                                   \
+        Log(std::format("${:016X}  {}",                                   \
           cpu_impl == CpuImpl::Interpreter ? vr4300::pc : vr4300::jit_pc, \
           vr4300::disassembler.instr(__VA_ARGS__)));                      \
     }

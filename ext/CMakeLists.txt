@@ -19,6 +19,7 @@ if(MSVC AND CLANG)
 	# prevent clang-cl "argument unused during compilation: /Zc:throwingNew, /Zc:referenceBinding" errors
 	target_compile_options(bit7z64 PRIVATE -Wno-error=unused-command-line-argument)
 endif()
+target_compile_definitions(bit7z64 PRIVATE _SILENCE_CXX20_U8PATH_DEPRECATION_WARNING)
 target_link_libraries(${CMAKE_PROJECT_NAME} bit7z64)
 set_property(TARGET bit7z64 PROPERTY SYSTEM TRUE)
 

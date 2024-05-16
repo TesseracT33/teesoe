@@ -13,9 +13,6 @@ namespace frontend {
 
 static std::optional<fs::path> ExtractArchive(fs::path const& path);
 
-static std::unique_ptr<Core> core;
-static System system;
-
 static std::array<fs::path, 4> const rom_archive_exts = { ".7z", ".7Z", ".zip", ".ZIP" };
 
 bool CoreIsLoaded()

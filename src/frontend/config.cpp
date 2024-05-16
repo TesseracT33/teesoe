@@ -7,6 +7,8 @@
 #include <fstream>
 #include <string_view>
 
+namespace fs = std::filesystem;
+
 namespace frontend::config {
 
 static void EmitN64(YAML::Emitter& emitter);

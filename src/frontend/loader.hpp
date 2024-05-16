@@ -63,6 +63,9 @@ inline std::map<fs::path, System> const rom_ext_to_system = [] {
     return ext_to_system;
 }();
 
+inline std::unique_ptr<Core> core;
+inline System system;
+
 bool CoreIsLoaded();
 std::unique_ptr<Core> const& GetCore();
 System GetSystem();

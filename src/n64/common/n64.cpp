@@ -63,11 +63,8 @@ Status N64::Init()
 
 Status N64::InitGraphics(std::shared_ptr<RenderContext> render_context)
 {
-    auto vulkan_render_context = std::dynamic_pointer_cast<VulkanRenderContext>(render_context);
-    if (!vulkan_render_context) {
-        throw std::invalid_argument("Invalid RenderContext provided to N64, not of type VulkanRenderContext");
-    }
-    return rdp::MakeParallelRdp(std::move(vulkan_render_context));
+    (void)render_context;
+    return OkStatus();
 }
 
 Status N64::LoadBios(std::filesystem::path const& path)
@@ -108,7 +105,7 @@ void N64::Resume()
 
 void N64::Run(std::stop_token stop_token)
 {
-    if (std::exchange(running, true)) {
+    if (!std::exchange(running, true)) {
         Reset();
         bool hle_pif = !bios_loaded || skip_boot_rom;
         vr4300::InitRun(hle_pif);

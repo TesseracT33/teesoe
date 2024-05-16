@@ -1,91 +1,187 @@
 #include "parallel_rdp_wrapper.hpp"
 #include "frontend/gui.hpp"
+#include "frontend/message.hpp"
 #include "interface/vi.hpp"
 #include "log.hpp"
 #include "memory/rdram.hpp"
-#include "parallel-rdp-standalone/parallel-rdp/rdp_device.hpp"
+#include "n64/rdp/rdp.hpp"
 #include "parallel-rdp-standalone/volk/volk.h"
-#include "parallel-rdp-standalone/vulkan/wsi.hpp"
 #include "rdp.hpp"
+#include "SDL.h"
+#include "SDL_vulkan.h"
+#include "status.hpp"
 
 #include <algorithm>
 #include <array>
 #include <cassert>
 #include <cstring>
 #include <format>
-#include <iostream>
 #include <memory>
 #include <optional>
+#include <print>
 #include <vector>
 
 namespace n64::rdp {
 
-ParallelRDPWrapper::~ParallelRDPWrapper()
+// clang-format off
+
+constexpr u32 vertex_spirv[] = {
+	0x07230203, 0x00010000, 0x000d000a, 0x00000034,
+	0x00000000, 0x00020011, 0x00000001, 0x0006000b,
+	0x00000001, 0x4c534c47, 0x6474732e, 0x3035342e,
+	0x00000000, 0x0003000e, 0x00000000, 0x00000001,
+	0x0008000f, 0x00000000, 0x00000004, 0x6e69616d,
+	0x00000000, 0x00000008, 0x00000016, 0x0000002b,
+	0x00040047, 0x00000008, 0x0000000b, 0x0000002a,
+	0x00050048, 0x00000014, 0x00000000, 0x0000000b,
+	0x00000000, 0x00050048, 0x00000014, 0x00000001,
+	0x0000000b, 0x00000001, 0x00050048, 0x00000014,
+	0x00000002, 0x0000000b, 0x00000003, 0x00050048,
+	0x00000014, 0x00000003, 0x0000000b, 0x00000004,
+	0x00030047, 0x00000014, 0x00000002, 0x00040047,
+	0x0000002b, 0x0000001e, 0x00000000, 0x00020013,
+	0x00000002, 0x00030021, 0x00000003, 0x00000002,
+	0x00040015, 0x00000006, 0x00000020, 0x00000001,
+	0x00040020, 0x00000007, 0x00000001, 0x00000006,
+	0x0004003b, 0x00000007, 0x00000008, 0x00000001,
+	0x0004002b, 0x00000006, 0x0000000a, 0x00000000,
+	0x00020014, 0x0000000b, 0x00030016, 0x0000000f,
+	0x00000020, 0x00040017, 0x00000010, 0x0000000f,
+	0x00000004, 0x00040015, 0x00000011, 0x00000020,
+	0x00000000, 0x0004002b, 0x00000011, 0x00000012,
+	0x00000001, 0x0004001c, 0x00000013, 0x0000000f,
+	0x00000012, 0x0006001e, 0x00000014, 0x00000010,
+	0x0000000f, 0x00000013, 0x00000013, 0x00040020,
+	0x00000015, 0x00000003, 0x00000014, 0x0004003b,
+	0x00000015, 0x00000016, 0x00000003, 0x0004002b,
+	0x0000000f, 0x00000017, 0xbf800000, 0x0004002b,
+	0x0000000f, 0x00000018, 0x00000000, 0x0004002b,
+	0x0000000f, 0x00000019, 0x3f800000, 0x0007002c,
+	0x00000010, 0x0000001a, 0x00000017, 0x00000017,
+	0x00000018, 0x00000019, 0x00040020, 0x0000001b,
+	0x00000003, 0x00000010, 0x0004002b, 0x00000006,
+	0x0000001f, 0x00000001, 0x0004002b, 0x0000000f,
+	0x00000023, 0x40400000, 0x0007002c, 0x00000010,
+	0x00000024, 0x00000017, 0x00000023, 0x00000018,
+	0x00000019, 0x0007002c, 0x00000010, 0x00000027,
+	0x00000023, 0x00000017, 0x00000018, 0x00000019,
+	0x00040017, 0x00000029, 0x0000000f, 0x00000002,
+	0x00040020, 0x0000002a, 0x00000003, 0x00000029,
+	0x0004003b, 0x0000002a, 0x0000002b, 0x00000003,
+	0x0004002b, 0x0000000f, 0x0000002f, 0x3f000000,
+	0x0005002c, 0x00000029, 0x00000033, 0x0000002f,
+	0x0000002f, 0x00050036, 0x00000002, 0x00000004,
+	0x00000000, 0x00000003, 0x000200f8, 0x00000005,
+	0x0004003d, 0x00000006, 0x00000009, 0x00000008,
+	0x000500aa, 0x0000000b, 0x0000000c, 0x00000009,
+	0x0000000a, 0x000300f7, 0x0000000e, 0x00000000,
+	0x000400fa, 0x0000000c, 0x0000000d, 0x0000001d,
+	0x000200f8, 0x0000000d, 0x00050041, 0x0000001b,
+	0x0000001c, 0x00000016, 0x0000000a, 0x0003003e,
+	0x0000001c, 0x0000001a, 0x000200f9, 0x0000000e,
+	0x000200f8, 0x0000001d, 0x000500aa, 0x0000000b,
+	0x00000020, 0x00000009, 0x0000001f, 0x000300f7,
+	0x00000022, 0x00000000, 0x000400fa, 0x00000020,
+	0x00000021, 0x00000026, 0x000200f8, 0x00000021,
+	0x00050041, 0x0000001b, 0x00000025, 0x00000016,
+	0x0000000a, 0x0003003e, 0x00000025, 0x00000024,
+	0x000200f9, 0x00000022, 0x000200f8, 0x00000026,
+	0x00050041, 0x0000001b, 0x00000028, 0x00000016,
+	0x0000000a, 0x0003003e, 0x00000028, 0x00000027,
+	0x000200f9, 0x00000022, 0x000200f8, 0x00000022,
+	0x000200f9, 0x0000000e, 0x000200f8, 0x0000000e,
+	0x00050041, 0x0000001b, 0x0000002c, 0x00000016,
+	0x0000000a, 0x0004003d, 0x00000010, 0x0000002d,
+	0x0000002c, 0x0007004f, 0x00000029, 0x0000002e,
+	0x0000002d, 0x0000002d, 0x00000000, 0x00000001,
+	0x0005008e, 0x00000029, 0x00000030, 0x0000002e,
+	0x0000002f, 0x00050081, 0x00000029, 0x00000032,
+	0x00000030, 0x00000033, 0x0003003e, 0x0000002b,
+	0x00000032, 0x000100fd, 0x00010038
+};
+
+constexpr u32 fragment_spirv[] = {
+	0x07230203, 0x00010000, 0x000d000a, 0x00000015,
+	0x00000000, 0x00020011, 0x00000001, 0x0006000b,
+	0x00000001, 0x4c534c47, 0x6474732e, 0x3035342e,
+	0x00000000, 0x0003000e, 0x00000000, 0x00000001,
+	0x0007000f, 0x00000004, 0x00000004, 0x6e69616d,
+	0x00000000, 0x00000009, 0x00000011, 0x00030010,
+	0x00000004, 0x00000007, 0x00040047, 0x00000009,
+	0x0000001e, 0x00000000, 0x00040047, 0x0000000d,
+	0x00000022, 0x00000000, 0x00040047, 0x0000000d,
+	0x00000021, 0x00000000, 0x00040047, 0x00000011,
+	0x0000001e, 0x00000000, 0x00020013, 0x00000002,
+	0x00030021, 0x00000003, 0x00000002, 0x00030016,
+	0x00000006, 0x00000020, 0x00040017, 0x00000007,
+	0x00000006, 0x00000004, 0x00040020, 0x00000008,
+	0x00000003, 0x00000007, 0x0004003b, 0x00000008,
+	0x00000009, 0x00000003, 0x00090019, 0x0000000a,
+	0x00000006, 0x00000001, 0x00000000, 0x00000000,
+	0x00000000, 0x00000001, 0x00000000, 0x0003001b,
+	0x0000000b, 0x0000000a, 0x00040020, 0x0000000c,
+	0x00000000, 0x0000000b, 0x0004003b, 0x0000000c,
+	0x0000000d, 0x00000000, 0x00040017, 0x0000000f,
+	0x00000006, 0x00000002, 0x00040020, 0x00000010,
+	0x00000001, 0x0000000f, 0x0004003b, 0x00000010,
+	0x00000011, 0x00000001, 0x0004002b, 0x00000006,
+	0x00000013, 0x00000000, 0x00050036, 0x00000002,
+	0x00000004, 0x00000000, 0x00000003, 0x000200f8,
+	0x00000005, 0x0004003d, 0x0000000b, 0x0000000e,
+	0x0000000d, 0x0004003d, 0x0000000f, 0x00000012,
+	0x00000011, 0x00070058, 0x00000007, 0x00000014,
+	0x0000000e, 0x00000012, 0x00000002, 0x00000013,
+	0x0003003e, 0x00000009, 0x00000014, 0x000100fd,
+	0x00010038
+};
+
+// clang-format on
+
+static VkInstance vk_instance;
+
+ParallelRdpWrapper::ParallelRdpWrapper(std::unique_ptr<SDLWSIPlatform> sdl_wsi_platform,
+  std::unique_ptr<Vulkan::WSI> wsi,
+  std::unique_ptr<::RDP::CommandProcessor> cmd_processor)
+  : sdl_wsi_platform_(std::move(sdl_wsi_platform)),
+    wsi_(std::move(wsi)),
+    cmd_processor_(std::move(cmd_processor)),
+    requested_command_buffer_()
 {
+    implementation = this;
+    ReloadViRegisters();
 }
 
-void ParallelRDPWrapper::EnqueueCommand(int cmd_len, u32* cmd_ptr)
+ParallelRdpWrapper::~ParallelRdpWrapper()
 {
-    cmd_processor->enqueue_command(cmd_len, cmd_ptr);
+    implementation = nullptr;
 }
 
-VkCommandBuffer ParallelRDPWrapper::GetVkCommandBuffer()
+std::unique_ptr<ParallelRdpWrapper> ParallelRdpWrapper::Create(SDL_Window* sdl_window)
 {
-    requested_command_buffer = wsi.get_device().request_command_buffer();
-    return requested_command_buffer->get_command_buffer();
-}
+    if (!sdl_window) {
+        std::println("null SDL_Window provided to ParallelRdpWrapper");
+        return {};
+    }
 
-VkDevice ParallelRDPWrapper::GetVkDevice()
-{
-    return wsi.get_device().get_device();
-}
-
-VkFormat ParallelRDPWrapper::GetVkFormat()
-{
-    return wsi.get_device().get_swapchain_view().get_format();
-}
-
-u32 ParallelRDPWrapper::GetVkQueueFamily()
-{
-    return wsi.get_context().get_queue_info().family_indices[Vulkan::QueueIndices::QUEUE_INDEX_GRAPHICS];
-}
-
-VkInstance ParallelRDPWrapper::GetVkInstance()
-{
-    return wsi.get_context().get_instance();
-}
-
-VkPhysicalDevice ParallelRDPWrapper::GetVkPhysicalDevice()
-{
-    return wsi.get_device().get_physical_device();
-}
-
-VkQueue ParallelRDPWrapper::GetVkQueue()
-{
-    return wsi.get_context().get_queue_info().queues[Vulkan::QueueIndices::QUEUE_INDEX_GRAPHICS];
-}
-
-Status ParallelRDPWrapper::Init(std::shared_ptr<VulkanRenderContext> render_context)
-{
-    if (!render_context) {
-        throw std::invalid_argument("Nullptr VulkanRenderContext provided to ParallelRDP");
+    if (!(SDL_GetWindowFlags(sdl_window) & SDL_WINDOW_VULKAN)) {
+        std::println("SDL_Window provided to ParallelRdpWrapper not created with SDL_WINDOW_VULKAN window flag!");
+        return {};
     }
 
     if (volkInitialize() != VK_SUCCESS) {
-        return FailureStatus("[parallel-rdp] Failed to initialize volk.");
+        std::println("Failed to initialize volk.");
+        return {};
     }
 
-    SDL_Window* sdl_window = frontend::gui::GetSdlWindow();
-    assert(sdl_window);
-    assert(SDL_GetWindowFlags(sdl_window) & SDL_WINDOW_VULKAN);
-
-    sdl_wsi_platform = std::make_unique<SDLWSIPlatform>(sdl_window);
-    wsi.set_platform(sdl_wsi_platform.get());
-    wsi.set_backbuffer_srgb(false);
-    wsi.set_present_mode(Vulkan::PresentMode::UnlockedMaybeTear);
+    auto sdl_wsi_platform = std::make_unique<SDLWSIPlatform>(sdl_window);
+    auto wsi = std::make_unique<Vulkan::WSI>();
+    wsi->set_platform(sdl_wsi_platform.get());
+    wsi->set_backbuffer_srgb(false);
+    wsi->set_present_mode(Vulkan::PresentMode::UnlockedMaybeTear);
     Vulkan::Context::SystemHandles handles{};
-    if (!wsi.init_simple(1, handles)) {
-        return FailureStatus("Failed to init wsi.");
+    if (!wsi->init_simple(1, handles)) {
+        std::println("Failed to init ParallelRDP wsi");
+        return {};
     }
 
     /* Construct command processor, which we later supply with RDP commands */
@@ -94,59 +190,108 @@ Status ParallelRDPWrapper::Init(std::shared_ptr<VulkanRenderContext> render_cont
     size_t rdram_size = rdram::GetSize();
     size_t hidden_rdram_size = rdram_size / 8;
     ::RDP::CommandProcessorFlags flags{};
-    cmd_processor = std::make_unique<::RDP::CommandProcessor>(wsi.get_device(),
+    auto cmd_processor = std::make_unique<::RDP::CommandProcessor>(wsi->get_device(),
       rdram_ptr,
       rdram_offset,
       rdram_size,
       hidden_rdram_size,
       flags);
     if (!cmd_processor->device_is_supported()) {
-        return FailureStatus("Vulkan device not supported.");
+        std::println("Vulkan device not supported.");
+        return {};
     }
 
-    ReloadViRegisters();
-
-    return OkStatus();
+    return std::unique_ptr<ParallelRdpWrapper>(
+      new ParallelRdpWrapper(std::move(sdl_wsi_platform), std::move(wsi), std::move(cmd_processor)));
 }
 
-void ParallelRDPWrapper::OnFullSync()
+void ParallelRdpWrapper::EnqueueCommand(int cmd_len, u32* cmd_ptr)
 {
-    cmd_processor->wait_for_timeline(cmd_processor->signal_timeline());
+    cmd_processor_->enqueue_command(cmd_len, cmd_ptr);
 }
 
-void ParallelRDPWrapper::ReloadViRegisters()
+void ParallelRdpWrapper::OnFullSync()
+{
+    cmd_processor_->wait_for_timeline(cmd_processor_->signal_timeline());
+}
+
+VkCommandBuffer ParallelRdpWrapper::GetVkCommandBuffer()
+{
+    requested_command_buffer_ = wsi_->get_device().request_command_buffer();
+    return requested_command_buffer_->get_command_buffer();
+}
+
+VkDevice ParallelRdpWrapper::GetVkDevice()
+{
+    return wsi_->get_device().get_device();
+}
+
+VkFormat ParallelRdpWrapper::GetVkFormat()
+{
+    return wsi_->get_device().get_swapchain_view().get_format();
+}
+
+u32 ParallelRdpWrapper::GetVkQueueFamily()
+{
+    return wsi_->get_context().get_queue_info().family_indices[Vulkan::QueueIndices::QUEUE_INDEX_GRAPHICS];
+}
+
+VkInstance ParallelRdpWrapper::GetVkInstance()
+{
+    return wsi_->get_context().get_instance();
+}
+
+VkPhysicalDevice ParallelRdpWrapper::GetVkPhysicalDevice()
+{
+    return wsi_->get_device().get_physical_device();
+}
+
+VkQueue ParallelRdpWrapper::GetVkQueue()
+{
+    return wsi_->get_context().get_queue_info().queues[Vulkan::QueueIndices::QUEUE_INDEX_GRAPHICS];
+}
+
+void ParallelRdpWrapper::SetRenderCallback(RenderCallback render)
+{
+    if (!render) {
+        std::println("null render callback provided to ParallelRdpWrapper");
+    }
+    render_ = render;
+}
+
+void ParallelRdpWrapper::ReloadViRegisters()
 {
     /* TODO: only call set_vi_register when a VI register is actually written to, if that does not lead to race
      * conditions */
     vi::Registers const& vi = vi::ReadAllRegisters();
-    cmd_processor->set_vi_register(::RDP::VIRegister::Control, vi.ctrl);
-    cmd_processor->set_vi_register(::RDP::VIRegister::Origin, vi.origin);
-    cmd_processor->set_vi_register(::RDP::VIRegister::Width, vi.width);
-    cmd_processor->set_vi_register(::RDP::VIRegister::Intr, vi.v_intr);
-    cmd_processor->set_vi_register(::RDP::VIRegister::VCurrentLine, vi.v_current);
-    cmd_processor->set_vi_register(::RDP::VIRegister::Timing, vi.burst);
-    cmd_processor->set_vi_register(::RDP::VIRegister::VSync, vi.v_sync);
-    cmd_processor->set_vi_register(::RDP::VIRegister::HSync, vi.h_sync);
-    cmd_processor->set_vi_register(::RDP::VIRegister::Leap, vi.h_sync_leap);
-    cmd_processor->set_vi_register(::RDP::VIRegister::HStart, vi.h_video);
-    cmd_processor->set_vi_register(::RDP::VIRegister::VStart, vi.v_video);
-    cmd_processor->set_vi_register(::RDP::VIRegister::VBurst, vi.v_burst);
-    cmd_processor->set_vi_register(::RDP::VIRegister::XScale, vi.x_scale);
-    cmd_processor->set_vi_register(::RDP::VIRegister::YScale, vi.y_scale);
+    cmd_processor_->set_vi_register(::RDP::VIRegister::Control, vi.ctrl);
+    cmd_processor_->set_vi_register(::RDP::VIRegister::Origin, vi.origin);
+    cmd_processor_->set_vi_register(::RDP::VIRegister::Width, vi.width);
+    cmd_processor_->set_vi_register(::RDP::VIRegister::Intr, vi.v_intr);
+    cmd_processor_->set_vi_register(::RDP::VIRegister::VCurrentLine, vi.v_current);
+    cmd_processor_->set_vi_register(::RDP::VIRegister::Timing, vi.burst);
+    cmd_processor_->set_vi_register(::RDP::VIRegister::VSync, vi.v_sync);
+    cmd_processor_->set_vi_register(::RDP::VIRegister::HSync, vi.h_sync);
+    cmd_processor_->set_vi_register(::RDP::VIRegister::Leap, vi.h_sync_leap);
+    cmd_processor_->set_vi_register(::RDP::VIRegister::HStart, vi.h_video);
+    cmd_processor_->set_vi_register(::RDP::VIRegister::VStart, vi.v_video);
+    cmd_processor_->set_vi_register(::RDP::VIRegister::VBurst, vi.v_burst);
+    cmd_processor_->set_vi_register(::RDP::VIRegister::XScale, vi.x_scale);
+    cmd_processor_->set_vi_register(::RDP::VIRegister::YScale, vi.y_scale);
 }
 
-void ParallelRDPWrapper::SubmitRequestedVkCommandBuffer()
+void ParallelRdpWrapper::SubmitRequestedVkCommandBuffer()
 {
-    wsi.get_device().submit(requested_command_buffer);
+    wsi_->get_device().submit(requested_command_buffer_);
 }
 
-void ParallelRDPWrapper::UpdateScreen()
+void ParallelRdpWrapper::UpdateScreen()
 {
     ReloadViRegisters();
 
-    Vulkan::Device& device = wsi.get_device();
+    Vulkan::Device& device = wsi_->get_device();
 
-    wsi.begin_frame();
+    wsi_->begin_frame();
 
     static constexpr ::RDP::ScanoutOptions scanout_opts = [] {
         ::RDP::ScanoutOptions opts;
@@ -162,7 +307,7 @@ void ParallelRDPWrapper::UpdateScreen()
         return opts;
     }();
 
-    Vulkan::ImageHandle image = cmd_processor->scanout(scanout_opts);
+    Vulkan::ImageHandle image = cmd_processor_->scanout(scanout_opts);
 
     // Normally reflection is automated.
     Vulkan::ResourceLayout vertex_layout = {};
@@ -199,24 +344,24 @@ void ParallelRDPWrapper::UpdateScreen()
             cmd->draw(3);
         }
 
-        render_context->Render(cmd->get_command_buffer());
+        render_(cmd->get_command_buffer());
 
         cmd->end_render_pass();
     }
     device.submit(cmd);
-    wsi.end_frame();
+    wsi_->end_frame();
 }
 
-ParallelRDPWrapper::SDLWSIPlatform::SDLWSIPlatform(SDL_Window* sdl_window) : sdl_window(sdl_window)
+ParallelRdpWrapper::SDLWSIPlatform::SDLWSIPlatform(SDL_Window* sdl_window) : sdl_window(sdl_window)
 {
 }
 
-bool ParallelRDPWrapper::SDLWSIPlatform::alive([[maybe_unused]] Vulkan::WSI& wsi)
+bool ParallelRdpWrapper::SDLWSIPlatform::alive([[maybe_unused]] Vulkan::WSI& wsi)
 {
     return true;
 }
 
-VkSurfaceKHR ParallelRDPWrapper::SDLWSIPlatform::create_surface(VkInstance instance,
+VkSurfaceKHR ParallelRdpWrapper::SDLWSIPlatform::create_surface(VkInstance instance,
   [[maybe_unused]] VkPhysicalDevice gpu)
 {
     VkSurfaceKHR vk_surface = VK_NULL_HANDLE;
@@ -227,39 +372,39 @@ VkSurfaceKHR ParallelRDPWrapper::SDLWSIPlatform::create_surface(VkInstance insta
     return vk_surface;
 }
 
-void ParallelRDPWrapper::SDLWSIPlatform::event_frame_tick([[maybe_unused]] double frame,
+void ParallelRdpWrapper::SDLWSIPlatform::event_frame_tick([[maybe_unused]] double frame,
   [[maybe_unused]] double elapsed)
 {
 }
 
-VkApplicationInfo const* ParallelRDPWrapper::SDLWSIPlatform::get_application_info()
+VkApplicationInfo const* ParallelRdpWrapper::SDLWSIPlatform::get_application_info()
 {
     static constexpr VkApplicationInfo app_info = {
         .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
-        .pApplicationName = "tessoe",
+        .pApplicationName = "teesoe",
         .apiVersion = VK_API_VERSION_1_1,
     };
     return &app_info;
 }
 
-std::vector<char const*> ParallelRDPWrapper::SDLWSIPlatform::get_instance_extensions()
+std::vector<char const*> ParallelRdpWrapper::SDLWSIPlatform::get_instance_extensions()
 {
     uint num_extensions;
     char const* const* extensions = SDL_Vulkan_GetInstanceExtensions(&num_extensions);
     return std::vector<char const*>{ extensions, extensions + num_extensions };
 }
 
-u32 ParallelRDPWrapper::SDLWSIPlatform::get_surface_width()
+u32 ParallelRdpWrapper::SDLWSIPlatform::get_surface_width()
 {
     return 640;
 }
 
-u32 ParallelRDPWrapper::SDLWSIPlatform::get_surface_height()
+u32 ParallelRdpWrapper::SDLWSIPlatform::get_surface_height()
 {
     return 480;
 }
 
-void ParallelRDPWrapper::SDLWSIPlatform::poll_input()
+void ParallelRdpWrapper::SDLWSIPlatform::poll_input()
 {
     frontend::gui::PollEvents();
 }

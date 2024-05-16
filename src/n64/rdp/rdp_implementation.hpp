@@ -1,16 +1,18 @@
 #pragma once
 
-#include "status.hpp"
+#include "frontend/render_context.hpp"
 #include "numtypes.hpp"
+#include "status.hpp"
+
+struct SDL_Window;
 
 namespace n64 {
 
-class RDPImplementation {
+class RdpImplementation {
 public:
-    virtual ~RDPImplementation() = default;
+    virtual ~RdpImplementation() = default;
 
     virtual void EnqueueCommand(int cmd_len, u32* cmd_ptr) = 0;
-    virtual Status Initialize() = 0;
     virtual void OnFullSync() = 0;
     virtual void UpdateScreen() = 0;
 };

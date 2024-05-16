@@ -4,7 +4,6 @@
 #include "log.hpp"
 #include "memory/rdram.hpp"
 #include "n64_build_options.hpp"
-#include "parallel_rdp_wrapper.hpp"
 #include "rsp/rsp.hpp"
 
 #include <array>
@@ -117,12 +116,6 @@ void LoadExecuteCommands()
 
     queue_word_offset = num_queued_words = 0;
     dp.current = dp.end;
-}
-
-Status MakeParallelRdp(std::shared_ptr<VulkanRenderContext> render_context)
-{
-    implementation = std::make_unique<ParallelRDPWrapper>(std::move(render_context));
-    return implementation->Initialize();
 }
 
 u32 ReadReg(u32 addr)

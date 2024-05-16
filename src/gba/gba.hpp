@@ -10,7 +10,7 @@ struct GBA : public Core {
     Status EnableAudio(bool enable) override;
     std::span<std::string_view const> GetInputNames() const override;
     Status Init() override;
-    Status InitGraphics() override;
+    Status InitGraphics(std::shared_ptr<RenderContext> render_context) override;
     Status LoadBios(std::filesystem::path const& path) override;
     Status LoadRom(std::filesystem::path const& path) override;
     void NotifyAxisState(size_t player, size_t action_index, s32 axis_value) override;

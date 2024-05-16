@@ -4,7 +4,6 @@
 
 #include <cassert>
 #include <format>
-#include <iostream>
 #include <limits>
 #include <unordered_map>
 

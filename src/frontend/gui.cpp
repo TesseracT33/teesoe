@@ -22,6 +22,7 @@
 #include <chrono>
 #include <filesystem>
 #include <format>
+#include <functional>
 #include <optional>
 #include <stop_token>
 #include <string>
@@ -50,7 +51,6 @@ struct GameList {
     bool apply_filter;
 };
 
-static void Draw();
 static void DrawCoreSettingsWindow();
 static void DrawGameSelectionWindow();
 static void DrawInputBindingsWindow();
@@ -59,9 +59,8 @@ static Status EnableFullscreen(bool enable);
 static std::optional<fs::path> FileDialog();
 static std::optional<fs::path> FolderDialog();
 static Status InitGraphics();
-static Status InitImgui();
 static Status InitSdl();
-static bool NeedsDraw();
+static void LoadSelectedBios();
 static void OnExit();
 static void OnGameSelected(System system, size_t list_index);
 static void OnInputBindingsWindowResetAll();
@@ -89,6 +88,7 @@ static Status ReadConfig();
 static void RefreshGameList(System system);
 static void StartGame();
 static void StopGame();
+static void Update();
 static void UpdateWindowTitle(float fps = 0.f);
 static void UseDefaultConfig();
 
@@ -107,7 +107,10 @@ static bool start_game;
 
 static int window_height, window_width;
 
+static std::function<void()> pending_gui_action;
+
 static fs::path exe_path;
+static fs::path bios_path;
 
 static std::string current_game_title;
 
@@ -120,22 +123,6 @@ static CoreConfiguration n64_configuration;
 static std::shared_ptr<RenderContext> render_context;
 
 static std::jthread emulator_thread;
-
-void Draw()
-{
-    if (show_menu) {
-        DrawMenu();
-    }
-    if (show_game_selection_window) {
-        DrawGameSelectionWindow();
-    }
-    if (show_input_bindings_window) {
-        DrawInputBindingsWindow();
-    }
-    if (show_core_settings_window) {
-        DrawCoreSettingsWindow();
-    }
-}
 
 void DrawCoreSettingsWindow()
 {
@@ -175,8 +162,8 @@ void DrawCoreSettingsWindow()
         }
 
         if (ImGui::Button("Apply and save")) {
-            if (game_is_running && GetSystem() == System::N64) {
-                GetCore()->ApplyConfig(n64_configuration);
+            if (game_is_running && system == System::N64) {
+                core->ApplyConfig(n64_configuration);
                 // TODO: save to file
                 n64_configuration = {};
             }
@@ -279,13 +266,12 @@ void DrawInputBindingsWindow()
     };
 
     if (ImGui::Begin("Input configuration", &show_input_bindings_window)) {
-        if (!CoreIsLoaded()) {
+        if (!core) {
             ImGui::Text("Load a core before configuring inputs.");
             return;
         }
 
         // TODO: buffer this somewhere so it doesn't have to be computed on every draw
-        std::unique_ptr<Core> const& core = GetCore();
         std::span<std::string_view const> control_button_labels = core->GetInputNames();
 
         static std::vector<Button> control_buttons;
@@ -478,29 +464,25 @@ Status Init(fs::path work_path)
 
     show_game_selection_window = !game_is_running;
 
-    Status status{ Status::Code::Ok };
     config::Open(work_path);
-    if (status = ReadConfig(); !status.Ok()) {
+    if (Status status = ReadConfig(); !status.Ok()) {
         LogError(status.Message());
         LogInfo("Using default configuration.");
         UseDefaultConfig();
     }
-    if (status = InitSdl(); !status.Ok()) {
+    if (Status status = InitSdl(); !status.Ok()) {
         return status;
     }
-    if (status = InitImgui(); !status.Ok()) {
+    if (Status status = InitGraphics(); !status.Ok()) {
         return status;
     }
-    if (status = InitGraphics(); !status.Ok()) {
-        return status;
-    }
-    if (status = message::Init(GetSdlWindow()); !status.Ok()) {
+    if (Status status = message::Init(GetSdlWindow()); !status.Ok()) {
         LogError(std::format("Failed to initialize user message system; {}", status.Message()));
     }
-    if (status = audio::Init(); !status.Ok()) {
+    if (Status status = audio::Init(); !status.Ok()) {
         message::Error(std::format("Failed to init audio system; {}", status.Message()));
     }
-    if (status = input::Init(); !status.Ok()) {
+    if (Status status = input::Init(); !status.Ok()) {
         message::Error("Failed to init input system!");
     }
     if (nfdresult_t result = NFD_Init(); result != NFD_OKAY) {
@@ -514,14 +496,16 @@ Status Init(fs::path work_path)
 
 Status InitGraphics()
 {
-    System system = GetSystem();
+    render_context = {};
+
+    auto update_gui_callback{ Update };
     switch (system) {
     case System::None:
     case System::CHIP8:
     case System::GB:
     case System::GBA:
-    case System::NES: render_context = SdlRenderContext::Create(Draw);
-    case System::N64: render_context = VulkanRenderContext::Create(Draw);
+    case System::NES: render_context = SdlRenderContext::Create(update_gui_callback); break;
+    case System::N64: render_context = VulkanRenderContext::Create(update_gui_callback); break;
     default: throw std::exception("Unknown system loaded; failed to create render context");
     }
     if (render_context) {
@@ -529,22 +513,12 @@ Status InitGraphics()
             render_context->EnableRendering(false);
             return OkStatus();
         } else {
-            return GetCore()->InitGraphics(render_context);
+            render_context->EnableRendering(true);
+            return core->InitGraphics(render_context);
         }
     } else {
         return FailureStatus("Failed to initialize render context!");
     }
-}
-
-Status InitImgui()
-{
-    IMGUI_CHECKVERSION();
-    ImGui::CreateContext();
-    ImGuiIO& io = ImGui::GetIO();
-    (void)io;
-    ImGui::StyleColorsDark();
-
-    return OkStatus();
 }
 
 Status InitSdl()
@@ -557,14 +531,13 @@ Status InitSdl()
 
 Status LoadGame(fs::path const& path)
 {
-    std::unique_ptr<Core> const& core = GetCore();
     assert(core);
-    System system = GetSystem();
     switch (system) {
     case System::N64: core->ApplyConfig(n64_configuration); break;
-    default: assert(false);
+    default:; // TODO
     }
-    Status status = GetCore()->LoadRom(path);
+    InitGraphics();
+    Status status = core->LoadRom(path);
     if (status.Ok()) {
         if (game_is_running) {
             StopGame();
@@ -578,11 +551,6 @@ Status LoadGame(fs::path const& path)
         }
     }
     return status;
-}
-
-bool NeedsDraw()
-{
-    return show_menu || show_input_bindings_window || show_game_selection_window;
 }
 
 void OnCtrlKeyPress(SDL_Keycode keycode)
@@ -619,6 +587,19 @@ void OnCtrlKeyPress(SDL_Keycode keycode)
     }
 }
 
+void LoadSelectedBios()
+{
+    assert(core);
+    if (!bios_path.empty()) {
+        Status status = core->LoadBios(bios_path);
+        if (status.Ok()) {
+            bios_path.clear();
+        } else {
+            message::Error(status.Message());
+        }
+    }
+}
+
 void OnExit()
 {
     StopGame();
@@ -630,16 +611,22 @@ void OnExit()
 void OnGameSelected(System system, size_t list_index)
 {
     GameListEntry const& entry = game_lists[system].games[list_index];
-    if (CoreIsLoaded()) {
+    if (core) {
         StopGame();
     }
-    Status status = LoadCoreAndGame(entry.path);
-    if (status.Ok()) {
-        current_game_title = entry.name;
-        start_game = true;
-    } else {
-        message::Error(status.Message());
-    }
+    pending_gui_action = std::bind(
+      [](fs::path path, std::string name) {
+          Status status = LoadCoreAndGame(path);
+          if (status.Ok()) {
+              LoadSelectedBios();
+              current_game_title = name;
+              start_game = true;
+          } else {
+              message::Error(status.Message());
+          }
+      },
+      entry.path,
+      entry.name);
 }
 
 void OnInputBindingsWindowResetAll()
@@ -697,10 +684,16 @@ void OnMenuOpen()
 {
     std::optional<fs::path> path = FileDialog();
     if (path) {
-        Status status = LoadCoreAndGame(path.value());
-        if (!status.Ok()) {
-            message::Error(status.Message());
-        }
+        pending_gui_action = std::bind(
+          [](fs::path path) {
+              Status status = LoadCoreAndGame(path);
+              if (status.Ok()) {
+                  LoadSelectedBios();
+              } else {
+                  message::Error(status.Message());
+              }
+          },
+          path.value());
     }
 }
 
@@ -708,10 +701,10 @@ void OnMenuOpenBios()
 {
     std::optional<fs::path> path = FileDialog();
     if (path) {
-        fs::path path_val = std::move(path.value());
-        // if (!N64::LoadBios(path_val)) {
-        //     message::Error(std::format("Could not load bios at path \"{}\"", path_val.string()));
-        // }
+        bios_path = std::move(path.value());
+        if (core) {
+            LoadSelectedBios();
+        }
     }
 }
 
@@ -722,8 +715,8 @@ void OnMenuOpenRecent()
 
 void OnMenuPause()
 {
-    if (CoreIsLoaded()) {
-        menu_pause_emulation ? GetCore()->Pause() : GetCore()->Resume();
+    if (core) {
+        menu_pause_emulation ? core->Pause() : core->Resume();
     }
 }
 
@@ -734,8 +727,8 @@ void OnMenuQuit()
 
 void OnMenuReset()
 {
-    if (CoreIsLoaded()) {
-        GetCore()->Reset();
+    if (core) {
+        core->Reset();
     }
 }
 
@@ -761,7 +754,7 @@ void OnMenuWindowScale()
 void OnSdlQuit()
 {
     quit = true;
-    if (CoreIsLoaded()) {
+    if (core) {
         emulator_thread = {};
     }
 }
@@ -838,12 +831,24 @@ void Run(bool boot_game_immediately)
         start_game = true;
     }
     while (!quit) {
+        if (pending_gui_action) {
+            pending_gui_action();
+            pending_gui_action = {};
+        }
         if (start_game) {
             StartGame();
+        } else {
+            PollEvents();
+            render_context->Render();
         }
-        Draw();
-        PollEvents();
-        std::this_thread::sleep_for(gui_update_period);
+        // if (start_game) {
+        //     StartGame();
+        // }
+        // if (!game_is_running) {
+        //     render_context->Render();
+        // }
+        // PollEvents();
+        // std::this_thread::sleep_for(gui_update_period);
     }
     OnExit();
 }
@@ -854,8 +859,12 @@ void StartGame()
     start_game = false;
     show_game_selection_window = false;
     UpdateWindowTitle();
-    GetCore()->Reset();
-    emulator_thread = std::jthread([](std::stop_token token) { GetCore()->Run(token); });
+    core->Reset();
+    core->Init();
+    core->InitGraphics(render_context);
+    // emulator_thread = std::jthread([](std::stop_token token) { core->Run(token); });
+    // emulator_thread.detach();
+    core->Run({});
 }
 
 void StopGame()
@@ -868,11 +877,27 @@ void StopGame()
     // TODO: show nice n64 background on window
 }
 
+void Update()
+{
+    if (show_menu) {
+        DrawMenu();
+    }
+    if (show_game_selection_window) {
+        DrawGameSelectionWindow();
+    }
+    if (show_input_bindings_window) {
+        DrawInputBindingsWindow();
+    }
+    if (show_core_settings_window) {
+        DrawCoreSettingsWindow();
+    }
+    PollEvents();
+}
+
 void UpdateWindowTitle(float fps)
 {
     if (game_is_running) {
-        std::string title =
-          std::format("teesoe | {} | {} | FPS: {}", SystemToString(GetSystem()), current_game_title, fps);
+        std::string title = std::format("teesoe | {} | {} | FPS: {}", SystemToString(system), current_game_title, fps);
         SDL_SetWindowTitle(sdl_window, title.c_str());
     } else {
         SDL_SetWindowTitle(sdl_window, "teesoe");

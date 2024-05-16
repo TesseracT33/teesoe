@@ -45,9 +45,17 @@ void Initialize()
     cycle = dot = framebuffer_index = 0;
 
     framebuffer.resize(framebuffer_width * framebuffer_height * 3, 0);
-    // Video::SetFramebufferPtr(framebuffer.data());
-    // Video::SetFramebufferSize(framebuffer_width, framebuffer_height);
-    // Video::SetPixelFormat(Video::PixelFormat::RGB888);
+    vram.resize(0x18000, 0);
+}
+
+void InitRenderContext(std::shared_ptr<RenderContext> render_context)
+{
+    render_context->SetFramebufferPtr(framebuffer.data());
+    render_context->SetFramebufferSize(framebuffer_width, framebuffer_height);
+    render_context->SetPixelFormat(RenderContext::PixelFormat::RGB888); // TODO: make RGBA8888
+    render_context->SetWindowSize(240, 160);
+    render_context->SetGameRenderAreaSize(240, 160);
+    ::gba::ppu::render_context = render_context;
 }
 
 void OnHBlank()
@@ -90,8 +98,8 @@ void OnNewScanline()
     if (v_counter < lines_until_vblank) {
         UpdateRotateScalingRegisters();
     } else if (v_counter == lines_until_vblank) {
+        render_context->Render();
         framebuffer_index = 0;
-        // Video::NotifyNewGameFrameReady();
         dispstat.vblank = in_vblank = true;
         if (dispstat.vblank_irq_enable) {
             irq::Raise(irq::Source::VBlank);

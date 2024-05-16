@@ -1,25 +1,17 @@
 #pragma once
 
+#include "numtypes.hpp"
 #include "render_context.hpp"
 #include "SDL.h"
-#include "types.hpp"
 
 #include <chrono>
 #include <memory>
 
 class SdlRenderContext : public RenderContext {
 public:
-    enum class PixelFormat {
-        ABGR8888,
-        INDEX1LSB,
-        BGR888,
-        RGB888,
-        RGBA8888,
-    };
-
     ~SdlRenderContext();
 
-    static std::unique_ptr<SdlRenderContext> Create(DrawGuiCallbackFunc draw_gui);
+    static std::unique_ptr<SdlRenderContext> Create(UpdateGuiCallback update_gui);
 
     void EnableFullscreen(bool enable) override;
     void EnableRendering(bool enable) override;
@@ -32,12 +24,11 @@ public:
     void SetGameRenderAreaOffsetX(uint offset) override;
     void SetGameRenderAreaOffsetY(uint offset) override;
     void SetGameRenderAreaSize(uint width, uint height) override;
+    void SetPixelFormat(PixelFormat format) override;
     void SetWindowSize(uint width, uint height) override;
 
-    void SetPixelFormat(PixelFormat format);
-
 private:
-    SdlRenderContext(SDL_Renderer* sdl_renderer, SDL_Window* sdl_window, DrawGuiCallbackFunc draw_gui);
+    SdlRenderContext(SDL_Renderer* sdl_renderer, SDL_Window* sdl_window, UpdateGuiCallback update_gui);
 
     void EvaluateWindowProperties();
     void RecreateTexture();

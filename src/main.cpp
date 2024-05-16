@@ -12,13 +12,11 @@ namespace fs = std::filesystem;
 
 int main(int argc, char* argv[])
 {
-    fs::path work_path = fs::current_path();
-
     if (Status status = InitFileLog(); !status.Ok()) {
         LogWarn(status.Message());
     }
 
-    if (Status status = frontend::gui::Init(work_path); !status.Ok()) {
+    if (Status status = frontend::gui::Init(fs::current_path()); !status.Ok()) {
         LogFatal(status.Message());
         return EXIT_FAILURE;
     }

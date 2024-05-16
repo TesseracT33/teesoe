@@ -2,13 +2,11 @@
 
 #include "vulkan_headers.hpp"
 
-#include "imgui_impl_vulkan.h"
 #include "n64/rdp/parallel_rdp_wrapper.hpp"
+#include "numtypes.hpp"
 #include "render_context.hpp"
-#include "SDL.h"
 #include "SDL_vulkan.h"
 #include "status.hpp"
-#include "types.hpp"
 
 #include <memory>
 
@@ -16,7 +14,7 @@ class VulkanRenderContext : public RenderContext {
 public:
     ~VulkanRenderContext();
 
-    static std::unique_ptr<VulkanRenderContext> Create(DrawGuiCallbackFunc draw_gui);
+    static std::unique_ptr<VulkanRenderContext> Create(UpdateGuiCallback update_gui);
 
     void EnableFullscreen(bool enable) override;
     void EnableRendering(bool enable) override;
@@ -29,14 +27,17 @@ public:
     void SetGameRenderAreaOffsetX(uint offset) override;
     void SetGameRenderAreaOffsetY(uint offset) override;
     void SetGameRenderAreaSize(uint width, uint height) override;
+    void SetPixelFormat(PixelFormat pixel_format) override;
     void SetWindowSize(uint width, uint height) override;
+
+    void Render(VkCommandBuffer vk_command_buffer);
 
 private:
     VulkanRenderContext(SDL_Window* sdl_window,
-      DrawGuiCallbackFunc draw_gui,
-      n64::rdp::ParallelRDPWrapper* parallel_rdp,
+      UpdateGuiCallback update_gui,
+      std::unique_ptr<n64::rdp::ParallelRdpWrapper> parallel_rdp,
       VkDescriptorPool vk_descriptor_pool);
 
-    n64::rdp::ParallelRDPWrapper* parallel_rdp;
-    VkDescriptorPool vk_descriptor_pool;
+    std::unique_ptr<n64::rdp::ParallelRdpWrapper> parallel_rdp_;
+    VkDescriptorPool vk_descriptor_pool_;
 };

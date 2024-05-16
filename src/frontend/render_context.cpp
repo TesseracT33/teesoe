@@ -2,9 +2,9 @@
 
 #include "SDL.h"
 
-RenderContext::RenderContext(SDL_Window* sdl_window, DrawGuiCallbackFunc draw_gui)
+RenderContext::RenderContext(SDL_Window* sdl_window, UpdateGuiCallback update_gui)
   : sdl_window(sdl_window),
-    draw_gui(draw_gui),
+    update_gui(update_gui),
     frame_counter{}
 {
 }
@@ -21,7 +21,7 @@ void RenderContext::UpdateFrameCounter()
         auto microsecs_to_render_60_frames =
           std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - time).count();
         float fps = 60.0f * 1'000'000.0f / float(microsecs_to_render_60_frames);
-        UpdateWindowTitle(fps);
+        // UpdateWindowTitle(fps);
         frame_counter = 0;
         time = std::chrono::steady_clock::now();
     }

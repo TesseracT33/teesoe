@@ -23,7 +23,7 @@ void Enable()
 Status Init()
 {
     if (SDL_Init(SDL_INIT_AUDIO) != 0) {
-        return FailureStatus(std::format("Failed call to SDL_Init: {}", SDL_GetError()));
+        return FailureStatus("Failed call to SDL_Init: {}", SDL_GetError());
     }
 
     static constexpr int default_sample_rate = 44100;

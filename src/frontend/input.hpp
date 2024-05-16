@@ -1,8 +1,8 @@
 #pragma once
 
 #include "loader.hpp"
-#include "status.hpp"
 #include "numtypes.hpp"
+#include "status.hpp"
 
 #include "SDL.h"
 

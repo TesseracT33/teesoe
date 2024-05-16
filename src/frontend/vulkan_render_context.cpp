@@ -1,68 +1,70 @@
 #include "vulkan_render_context.hpp"
 #include "frontend/message.hpp"
+#include "imgui.h"
 #include "imgui_impl_sdl3.h"
 #include "imgui_impl_vulkan.h"
+#include "SDL.h"
+
 #include "log.hpp"
-#include "n64/rdp/rdp.hpp"
-#include "parallel-rdp-standalone/volk/volk.h"
 
 #include <cstdlib>
-#include <format>
+#include <print>
 #include <utility>
 
+VkInstance vk_instance;
+
 VulkanRenderContext::VulkanRenderContext(SDL_Window* sdl_window,
-  DrawGuiCallbackFunc draw_gui,
-  n64::rdp::ParallelRDPWrapper* parallel_rdp,
+  UpdateGuiCallback update_gui,
+  std::unique_ptr<n64::rdp::ParallelRdpWrapper> parallel_rdp,
   VkDescriptorPool vk_descriptor_pool)
-  : RenderContext(sdl_window, draw_gui),
-    parallel_rdp(parallel_rdp),
-    vk_descriptor_pool(vk_descriptor_pool)
+  : RenderContext(sdl_window, update_gui),
+    parallel_rdp_(std::move(parallel_rdp)),
+    vk_descriptor_pool_(vk_descriptor_pool)
 {
+    parallel_rdp_->SetRenderCallback(std::function<void(VkCommandBuffer)>(
+      std::bind(static_cast<void (VulkanRenderContext::*)(VkCommandBuffer)>(&VulkanRenderContext::Render),
+        this,
+        std::placeholders::_1)));
 }
 
 VulkanRenderContext::~VulkanRenderContext()
 {
-    vkDeviceWaitIdle(parallel_rdp->GetVkDevice());
-    vkDestroyDescriptorPool(parallel_rdp->GetVkDevice(), vk_descriptor_pool, nullptr);
+    vkDeviceWaitIdle(parallel_rdp_->GetVkDevice());
+    vkDestroyDescriptorPool(parallel_rdp_->GetVkDevice(), vk_descriptor_pool_, nullptr);
+    parallel_rdp_ = {};
     ImGui_ImplVulkan_Shutdown();
     ImGui_ImplSDL3_Shutdown();
-    ImGui::DestroyContext();
     // ImGui::Gui_ImplVulkanH_DestroyWindow(vulkan::GetInstance(), vulkan::GetDevice(), &vk_main_window_data,
     // vulkan::GetAllocator());
+    ImGui::DestroyContext();
     SDL_DestroyWindow(sdl_window);
 }
 
-std::unique_ptr<VulkanRenderContext> VulkanRenderContext::Create(DrawGuiCallbackFunc draw_gui)
+std::unique_ptr<VulkanRenderContext> VulkanRenderContext::Create(UpdateGuiCallback update_gui)
 {
-    if (!draw_gui) {
-        // std::println("null gui draw function provided to vulkan render context");
+    if (!update_gui) {
+        std::println("null gui update callbackprovided to vulkan render context");
         return {};
     }
 
     if (SDL_Init(SDL_INIT_VIDEO) != 0) {
-        // std::println("Failed call to SDL_Init: {}", SDL_GetError());
+        std::println("Failed call to SDL_Init: {}", SDL_GetError());
         return {};
     }
 
     SDL_SetHint(SDL_HINT_IME_SHOW_UI, "1");
 
     SDL_Window* sdl_window =
-      SDL_CreateWindow("tessoe", 500, 500, SDL_WINDOW_VULKAN | SDL_WINDOW_INPUT_FOCUS | SDL_WINDOW_RESIZABLE);
+      SDL_CreateWindow("teesoe", 1280, 960, SDL_WINDOW_VULKAN | SDL_WINDOW_INPUT_FOCUS | SDL_WINDOW_RESIZABLE);
     if (!sdl_window) {
-        // std::println("Failed call to SDL_CreateWindow: {}", SDL_GetError());
+        std::println("Failed call to SDL_CreateWindow: {}", SDL_GetError());
         return {};
     }
 
-    if (!n64::rdp::implementation) {
-        Status status = n64::rdp::MakeParallelRdp();
-        if (!status.Ok()) {
-            return {};
-        }
-    }
-    n64::rdp::ParallelRDPWrapper* const parallel_rdp =
-      dynamic_cast<n64::rdp::ParallelRDPWrapper*>(n64::rdp::implementation.get());
+    std::unique_ptr<n64::rdp::ParallelRdpWrapper> parallel_rdp = n64::rdp::ParallelRdpWrapper::Create(sdl_window);
     if (!parallel_rdp) {
-        throw std::exception("Failed to create ParallelRDPWrapper object when creating vulkan context");
+        std::println("Failed to create ParallelRdpWrapper object!");
+        return {};
     }
 
     VkInstance vk_instance = parallel_rdp->GetVkInstance();
@@ -71,17 +73,19 @@ std::unique_ptr<VulkanRenderContext> VulkanRenderContext::Create(DrawGuiCallback
     u32 vk_queue_family = parallel_rdp->GetVkQueueFamily();
     VkQueue vk_queue = parallel_rdp->GetVkQueue();
     VkCommandBuffer vk_command_buffer = parallel_rdp->GetVkCommandBuffer();
+    VkFormat vk_format = parallel_rdp->GetVkFormat();
 
-    VkDescriptorPool vk_descriptor_pool;
-    VkRenderPass vk_render_pass;
+    ::vk_instance = vk_instance;
+
+    VkDescriptorPool vk_descriptor_pool{};
+    VkRenderPass vk_render_pass{};
+    VkResult vk_result{};
 
     auto CheckVkResult = [](VkResult vk_result) {
         if (vk_result != 0) {
             LogError(std::format("[vulkan]: Error: VkResult = {}", std::to_underlying(vk_result)));
         }
     };
-
-    VkResult vk_result;
 
     { // Create Descriptor Pool
         static constexpr VkDescriptorPoolSize pool_sizes[] = {
@@ -109,7 +113,7 @@ std::unique_ptr<VulkanRenderContext> VulkanRenderContext::Create(DrawGuiCallback
 
     { // Create the Render Pass
         VkAttachmentDescription attachment = {};
-        attachment.format = parallel_rdp->GetVkFormat();
+        attachment.format = vk_format;
         attachment.samples = VK_SAMPLE_COUNT_1_BIT;
         attachment.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
         attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -143,7 +147,16 @@ std::unique_ptr<VulkanRenderContext> VulkanRenderContext::Create(DrawGuiCallback
         CheckVkResult(vk_result);
     }
 
-    // ImGui_ImplVulkan_LoadFunctions([](char const* fn, void*) { return vkGetInstanceProcAddr(vk_instance, fn); });
+    IMGUI_CHECKVERSION();
+    (void)ImGui::CreateContext();
+    ImGuiIO& io = ImGui::GetIO();
+    ImGui::StyleColorsDark();
+
+    if (!ImGui_ImplVulkan_LoadFunctions(
+          [](char const* fn, void*) { return vkGetInstanceProcAddr(::vk_instance, fn); })) {
+        LogError("Failed call to ImGui_ImplVulkan_LoadFunctions");
+        return {};
+    }
 
     if (!ImGui_ImplSDL3_InitForVulkan(sdl_window)) {
         LogError("Failed call to ImGui_ImplSDL3_InitForVulkan");
@@ -151,11 +164,11 @@ std::unique_ptr<VulkanRenderContext> VulkanRenderContext::Create(DrawGuiCallback
     }
 
     ImGui_ImplVulkan_InitInfo init_info = {
-        .Instance = parallel_rdp->GetVkInstance(),
-        .PhysicalDevice = parallel_rdp->GetVkPhysicalDevice(),
-        .Device = parallel_rdp->GetVkDevice(),
-        .QueueFamily = parallel_rdp->GetVkQueueFamily(),
-        .Queue = parallel_rdp->GetVkQueue(),
+        .Instance = vk_instance,
+        .PhysicalDevice = vk_physical_device,
+        .Device = vk_device,
+        .QueueFamily = vk_queue_family,
+        .Queue = vk_queue,
         .DescriptorPool = vk_descriptor_pool,
         .MinImageCount = 2,
         .ImageCount = 2,
@@ -168,6 +181,8 @@ std::unique_ptr<VulkanRenderContext> VulkanRenderContext::Create(DrawGuiCallback
         return {};
     }
 
+    (void)io.Fonts->AddFontDefault();
+
     if (!ImGui_ImplVulkan_CreateFontsTexture()) {
         LogWarn("Failed call to ImGui_ImplVulkan_CreateFontsTexture");
     }
@@ -175,7 +190,7 @@ std::unique_ptr<VulkanRenderContext> VulkanRenderContext::Create(DrawGuiCallback
     parallel_rdp->SubmitRequestedVkCommandBuffer();
 
     return std::unique_ptr<VulkanRenderContext>(
-      new VulkanRenderContext(sdl_window, draw_gui, parallel_rdp, vk_descriptor_pool));
+      new VulkanRenderContext(sdl_window, std::move(update_gui), std::move(parallel_rdp), vk_descriptor_pool));
 }
 
 void VulkanRenderContext::EnableFullscreen(bool enable)
@@ -192,13 +207,18 @@ void VulkanRenderContext::NotifyNewGameFrameReady()
 
 void VulkanRenderContext::Render()
 {
+    Render(parallel_rdp_->GetVkCommandBuffer());
+}
+
+void VulkanRenderContext::Render(VkCommandBuffer vk_command_buffer)
+{
     ImGui_ImplVulkan_NewFrame();
     ImGui_ImplSDL3_NewFrame();
     ImGui::NewFrame();
     UpdateFrameCounter();
-    draw_gui();
+    update_gui();
     ImGui::Render();
-    ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), parallel_rdp->GetVkCommandBuffer());
+    ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), vk_command_buffer);
 }
 
 void VulkanRenderContext::SetFramebufferHeight(uint height)
@@ -227,6 +247,11 @@ void VulkanRenderContext::SetGameRenderAreaOffsetY(uint offset)
 
 void VulkanRenderContext::SetGameRenderAreaSize(uint width, uint height)
 {
+}
+
+void VulkanRenderContext::SetPixelFormat(PixelFormat pixel_format)
+{
+    (void)pixel_format;
 }
 
 void VulkanRenderContext::SetWindowSize(uint width, uint height)

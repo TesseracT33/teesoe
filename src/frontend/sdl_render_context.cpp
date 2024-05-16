@@ -4,7 +4,7 @@
 
 #include <print>
 
-SdlRenderContext::SdlRenderContext(SDL_Renderer* sdl_renderer, SDL_Window* sdl_window, DrawGuiCallbackFunc draw_gui)
+SdlRenderContext::SdlRenderContext(SDL_Renderer* sdl_renderer, SDL_Window* sdl_window, UpdateGuiCallback draw_gui)
   : RenderContext(sdl_window, draw_gui),
     sdl_renderer(sdl_renderer)
 {
@@ -19,10 +19,10 @@ SdlRenderContext::~SdlRenderContext()
     SDL_DestroyWindow(sdl_window);
 }
 
-std::unique_ptr<SdlRenderContext> SdlRenderContext::Create(DrawGuiCallbackFunc draw_gui)
+std::unique_ptr<SdlRenderContext> SdlRenderContext::Create(UpdateGuiCallback update_gui)
 {
-    if (!draw_gui) {
-        std::println("null gui draw function provided to SDL render context");
+    if (!update_gui) {
+        std::println("null gui update callbackprovided to SDL render context");
         return {};
     }
 
@@ -34,7 +34,7 @@ std::unique_ptr<SdlRenderContext> SdlRenderContext::Create(DrawGuiCallbackFunc d
     SDL_SetHint(SDL_HINT_IME_SHOW_UI, "1");
 
     SDL_Window* sdl_window =
-      SDL_CreateWindow("tessoe", 500, 500, SDL_WINDOW_OPENGL | SDL_WINDOW_INPUT_FOCUS | SDL_WINDOW_RESIZABLE);
+      SDL_CreateWindow("teesoe", 1280, 960, SDL_WINDOW_OPENGL | SDL_WINDOW_INPUT_FOCUS | SDL_WINDOW_RESIZABLE);
     if (!sdl_window) {
         std::println("Failed call to SDL_CreateWindow: {}", SDL_GetError());
         return {};
@@ -46,16 +46,23 @@ std::unique_ptr<SdlRenderContext> SdlRenderContext::Create(DrawGuiCallbackFunc d
         return {};
     }
 
+    IMGUI_CHECKVERSION();
+    (void)ImGui::CreateContext();
+    ImGuiIO& io = ImGui::GetIO();
+    io.Fonts->AddFontDefault();
+    ImGui::StyleColorsDark();
+
     if (!ImGui_ImplSDL3_InitForSDLRenderer(sdl_window, sdl_renderer)) {
-        std::println("Failed call to ImGui_ImplSDL3_InitForSDLRenderer");
-        return {};
-    }
-    if (!ImGui_ImplSDLRenderer3_Init(sdl_renderer)) {
-        std::println("Failed call to ImGui_ImplSDLRenderer3_Init");
+        std::println("Failed call to ImGui_ImplSDL3_InitForSDLRenderer: {}", SDL_GetError());
         return {};
     }
 
-    return std::unique_ptr<SdlRenderContext>(new SdlRenderContext(sdl_renderer, sdl_window, draw_gui));
+    if (!ImGui_ImplSDLRenderer3_Init(sdl_renderer)) {
+        std::println("Failed call to ImGui_ImplSDLRenderer3_Init: {}", SDL_GetError());
+        return {};
+    }
+
+    return std::unique_ptr<SdlRenderContext>(new SdlRenderContext(sdl_renderer, sdl_window, update_gui));
 }
 
 void SdlRenderContext::EnableFullscreen(bool enable)
@@ -86,10 +93,10 @@ void SdlRenderContext::EvaluateWindowProperties()
     }
     window.game_inner_render_offset_x = (window.game_width - window.scale * framebuffer.width) / 2;
     window.game_inner_render_offset_y = (window.game_height - window.scale * framebuffer.height) / 2;
-    dst_rect.w = window.scale * framebuffer.width;
-    dst_rect.h = window.scale * framebuffer.height;
-    dst_rect.x = window.game_offset_x + window.game_inner_render_offset_x;
-    dst_rect.y = window.game_offset_y + window.game_inner_render_offset_y;
+    dst_rect.w = f32(window.scale * framebuffer.width);
+    dst_rect.h = f32(window.scale * framebuffer.height);
+    dst_rect.x = f32(window.game_offset_x + window.game_inner_render_offset_x);
+    dst_rect.y = f32(window.game_offset_y + window.game_inner_render_offset_y);
 }
 
 void SdlRenderContext::NotifyNewGameFrameReady()
@@ -119,13 +126,13 @@ void SdlRenderContext::Render()
     ImGui_ImplSDLRenderer3_NewFrame();
     ImGui_ImplSDL3_NewFrame();
     ImGui::NewFrame();
-    draw_gui();
+    update_gui();
     ImGui::Render();
 
     SDL_RenderClear(sdl_renderer);
 
     if (rendering_is_enabled) {
-        void* locked_pixels = nullptr;
+        void* locked_pixels;
         int locked_pixels_pitch;
         SDL_LockTexture(sdl_texture, nullptr, &locked_pixels, &locked_pixels_pitch);
 
@@ -202,17 +209,25 @@ void SdlRenderContext::SetGameRenderAreaSize(uint width, uint height)
 
 void SdlRenderContext::SetPixelFormat(PixelFormat format)
 {
-    /* This is not ideal, but it's meant to decouple the cores from SDL completely */
-    framebuffer.pixel_format = [&] {
-        using enum PixelFormat;
-        switch (format) {
-        case ABGR8888: framebuffer.bytes_per_pixel = 4; return SDL_PIXELFORMAT_ABGR8888;
-        case BGR888: framebuffer.bytes_per_pixel = 3; return SDL_PIXELFORMAT_BGR24;
-        case RGB888: framebuffer.bytes_per_pixel = 3; return SDL_PIXELFORMAT_RGB24;
-        case RGBA8888: framebuffer.bytes_per_pixel = 4; return SDL_PIXELFORMAT_RGBA8888;
-        default: throw std::invalid_argument("Unrecognized PixelFormat supplied");
-        }
-    }();
+    switch (format) {
+    case PixelFormat::ABGR8888:
+        framebuffer.bytes_per_pixel = 4;
+        framebuffer.pixel_format = SDL_PIXELFORMAT_ABGR8888;
+        break;
+    case PixelFormat::BGR888:
+        framebuffer.bytes_per_pixel = 3;
+        framebuffer.pixel_format = SDL_PIXELFORMAT_BGR24;
+        break;
+    case PixelFormat::RGB888:
+        framebuffer.bytes_per_pixel = 3;
+        framebuffer.pixel_format = SDL_PIXELFORMAT_RGB24;
+        break;
+    case PixelFormat::RGBA8888:
+        framebuffer.bytes_per_pixel = 4;
+        framebuffer.pixel_format = SDL_PIXELFORMAT_RGBA8888;
+        break;
+    default: throw std::invalid_argument("Unrecognized PixelFormat supplied");
+    }
     framebuffer.pitch = framebuffer.width * framebuffer.bytes_per_pixel;
     RecreateTexture();
 }

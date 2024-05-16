@@ -3,7 +3,7 @@
 
 #include <cstring>
 #include <expected>
-#include <format>
+#include <utility>
 #include <vector>
 
 namespace gba::bios {
@@ -16,15 +16,11 @@ void Initialize()
 
 Status Load(std::filesystem::path const& path)
 {
-    std::expected<std::vector<u8>, std::string> expected_bios = OpenFile(path);
+    constexpr size_t bios_size = 0x4000;
+    std::expected<std::vector<u8>, std::string> expected_bios = OpenFile(path, bios_size);
     if (expected_bios) {
-        if (expected_bios.value().size() == 0x4000) {
-            bios = expected_bios.value();
-            return OkStatus();
-        } else {
-            return FailureStatus(
-              std::format("BIOS must be 16 KiB large, but was {} bytes", expected_bios.value().size()));
-        }
+        bios = std::move(expected_bios.value());
+        return OkStatus();
     } else {
         return FailureStatus(expected_bios.error());
     }
