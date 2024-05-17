@@ -88,9 +88,9 @@ void DecodeExecute(u32 opcode)
         if constexpr (log_instrs) {
             pc_when_current_instr_fetched = pc - 4;
         }
-        DecodeExecuteTHUMB(opcode);
+        DecodeExecuteTHUMB(u16(opcode));
         if constexpr (log_instrs) {
-            LogInstruction(pc_when_current_instr_fetched, opcode, r, std::bit_cast<u32>(cpsr));
+            LogInstruction(pc_when_current_instr_fetched, u16(opcode), r, std::bit_cast<u32>(cpsr));
         }
     }
     if (exception_has_occurred) {
@@ -289,8 +289,9 @@ void StepPipeline()
     ++cycle;
 }
 
-void StreamState(Serializer& stream)
+void StreamState(Serializer& serializer)
 {
+    (void)serializer;
 }
 
 void SuspendRun()

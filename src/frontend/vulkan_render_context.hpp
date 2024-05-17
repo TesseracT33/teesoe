@@ -12,7 +12,7 @@
 
 class VulkanRenderContext : public RenderContext {
 public:
-    ~VulkanRenderContext();
+    ~VulkanRenderContext() override;
 
     static std::unique_ptr<VulkanRenderContext> Create(UpdateGuiCallback update_gui);
 

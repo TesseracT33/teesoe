@@ -40,7 +40,7 @@ std::unique_ptr<SdlRenderContext> SdlRenderContext::Create(UpdateGuiCallback upd
         return {};
     }
 
-    SDL_Renderer* sdl_renderer = SDL_CreateRenderer(sdl_window, 0, SDL_RENDERER_ACCELERATED);
+    SDL_Renderer* sdl_renderer = SDL_CreateRenderer(sdl_window, nullptr, SDL_RENDERER_ACCELERATED);
     if (!sdl_renderer) {
         std::println("Failed call to SDL_CreateRenderer: {}", SDL_GetError());
         return {};

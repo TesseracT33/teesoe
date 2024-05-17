@@ -60,15 +60,13 @@ public:
 
     template<typename T>
     void StreamDeque(std::deque<T>& deque)
-        requires(std::is_trivially_copyable_v<T>)
+        requires(std::is_trivial_v<T>)
     {
         if (mode_ == Mode::Read) {
             deque.clear();
             size_t size;
             Stream(&size, sizeof(size_t));
-            if (size > 0) {
-                deque.reserve(size);
-            }
+            deque.reserve(size);
             for (size_t i = 0; i < size; i++) {
                 T t;
                 Stream(&t, sizeof(T));
@@ -85,7 +83,7 @@ public:
 
     template<typename T>
     void StreamQueue(std::queue<T>& queue)
-        requires(std::is_trivially_copyable_v<T>)
+        requires(std::is_trivial_v<T>)
     {
         if (mode_ == Mode::Read) {
             while (!queue.empty()) {
@@ -115,36 +113,31 @@ public:
         if (mode_ == Mode::Read) {
             size_t size;
             Stream(&size, sizeof(size_t));
-            char* c_str = new char[size + 1]{};
-            Stream(c_str, size * sizeof(char));
-            str = std::string(c_str);
-            delete[] c_str;
+            str.resize(size, 0);
+            Stream(str.data(), size);
         } else {
-            char const* c_str = str.c_str();
-            size_t size = std::strlen(c_str);
+            size_t size = str.size();
             Stream(&size, sizeof(size_t));
-            Stream((void*)c_str, size * sizeof(char));
+            Stream(str.data(), size);
         }
     }
 
     template<typename T>
     void StreamTrivial(T& val)
-        requires(std::is_trivially_copyable_v<T>)
+        requires(std::is_trivial_v<T>)
     {
         Stream(&val, sizeof(T));
     }
 
     template<typename T>
     void StreamVector(std::vector<T>& vec)
-        requires(std::is_trivially_copyable_v<T>)
+        requires(std::is_trivial_v<T>)
     {
         if (mode_ == Mode::Read) {
             vec.clear();
-            size_t size = 0;
+            size_t size;
             Stream(&size, sizeof(size_t));
-            if (size > 0) {
-                vec.reserve(size);
-            }
+            vec.reserve(size);
             for (size_t i = 0; i < size; i++) {
                 T t;
                 Stream(&t, sizeof(T));
@@ -165,7 +158,7 @@ private:
     std::fstream fstream_;
     Mode mode_;
 
-    void Stream(void* obj, size_t size)
+    void Stream(auto obj, size_t size)
     {
         if (has_error_) {
             return;

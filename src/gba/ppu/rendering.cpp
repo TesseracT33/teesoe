@@ -410,7 +410,7 @@ void ScanlineBackgroundTextMode(uint bg)
           base_tile_map_addr *= 0x800;
           return base_tile_map_addr + bg_tile_index_y * bytes_per_bg_map_area_row;
       }();
-    uint const mosaic_incr = bgcnt[bg].mosaic_enable ? mosaic.bg_h_size + 1 : 1; /* TODO */
+    // uint const mosaic_incr = bgcnt[bg].mosaic_enable ? mosaic.bg_h_size + 1 : 1; /* TODO */
     uint bg_tile_index_x = (bghofs[bg] & (bg_width - 1)) / tile_size; /* note: 0-63, but masked to 0-31 when needed */
     uint base_tile_data_addr = bgcnt[bg].char_base_block * 0x4000;
     uint dot = 0;
@@ -502,6 +502,8 @@ void ScanlineBackgroundTextMode(uint bg)
 
 void ScanlineBackgroundRotateScaleMode(uint bg)
 {
+    // TODO
+    (void)bg;
 }
 
 void ScanlineBackgroundBitmapMode3()

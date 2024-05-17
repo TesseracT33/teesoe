@@ -17,10 +17,12 @@ using namespace gba;
 
 void GBA::ApplyConfig(CoreConfiguration config)
 {
+    (void)config; // TODO
 }
 
 Status GBA::EnableAudio(bool enable)
 {
+    (void)enable;
     return UnimplementedStatus();
 }
 
@@ -66,10 +68,16 @@ Status GBA::LoadRom(std::filesystem::path const& path)
 
 void GBA::NotifyAxisState(size_t player, size_t action_index, s32 axis_value)
 {
+    (void)player;
+    (void)action_index;
+    (void)axis_value;
 }
 
 void GBA::NotifyButtonState(size_t player, size_t action_index, bool pressed)
 {
+    (void)player;
+    (void)action_index;
+    (void)pressed;
 }
 
 void GBA::Pause()
@@ -91,6 +99,7 @@ void GBA::Run(std::stop_token stop_token)
 
 void GBA::StreamState(Serializer& serializer)
 {
+    (void)serializer; // TODO
 }
 
 void GBA::UpdateScreen()

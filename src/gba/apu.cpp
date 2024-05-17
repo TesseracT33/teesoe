@@ -18,7 +18,7 @@ public:
     void Disable();
     void Enable();
 
-    const uint id;
+    uint const id;
 
     bool dac_enabled;
     bool enabled;
@@ -130,7 +130,7 @@ static u8 nr10, nr11, nr12, nr13, nr14, nr21, nr22, nr23, nr24, nr30, nr31, nr32
   nr50, nr51, nr52;
 
 static uint frame_seq_step_counter;
-static uint sample_rate;
+// static uint sample_rate;
 static uint t_cycle_sample_counter;
 
 static std::array<u8, 0x10> wave_ram;
@@ -218,8 +218,8 @@ void Sample()
     }
     auto right_vol = nr50 & 7;
     auto left_vol = nr50 >> 4 & 7;
-    f32 left_sample = left_vol / 28.0f * left_output;
-    f32 right_sample = right_vol / 28.0f * right_output;
+    [[maybe_unused]] f32 left_sample = f32(left_vol) / 28.0f * left_output;
+    [[maybe_unused]] f32 right_sample = f32(right_vol) / 28.0f * right_output;
     // Audio::EnqueueSample(left_sample);
     // Audio::EnqueueSample(right_sample);
 }
@@ -246,6 +246,7 @@ void StepFrameSequencer()
 void StreamState(Serializer& stream)
 {
     /* TODO */
+    (void)stream;
 }
 
 template<std::integral Int> Int ReadReg(u32 addr)

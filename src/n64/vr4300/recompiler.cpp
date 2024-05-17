@@ -49,7 +49,7 @@ struct Pool {
 
 static void EmitInstruction();
 static void ExecuteBlock(Block* block);
-static std::pair<Block*, bool> GetBlock(u32 pc);
+static std::pair<Block*, bool> GetBlock(u32 virt_addr);
 static void ResetPool(Pool*& pool);
 static void UpdateBranchStateJit();
 
@@ -189,15 +189,16 @@ void FlushPc(int pc_offset)
     c.mov(JitPtr(pc), rax);
 }
 
-std::pair<Block*, bool> GetBlock(u32 pc)
+std::pair<Block*, bool> GetBlock(u32 virt_addr)
 {
     static_assert(std::has_single_bit(num_pools));
 acquire:
-    Pool*& pool = pools[pc >> 8 & (num_pools - 1)]; // each pool 6 bits, each instruction 2 bits
+    Pool*& pool = pools[virt_addr >> 8 & (num_pools - 1)]; // each pool 6 bits, each instruction 2 bits
     if (!pool) {
         pool = reinterpret_cast<Pool*>(allocator.acquire(sizeof(Pool)));
     }
-    BlockPack*& block_pack = pool->blocks[pc >> 2 & 63];
+    assert(pool);
+    BlockPack*& block_pack = pool->blocks[virt_addr >> 2 & 63];
     if (!block_pack) {
         block_pack = reinterpret_cast<BlockPack*>(allocator.acquire(sizeof(BlockPack)));
         if (allocator.ran_out_of_memory_on_last_acquire()) {

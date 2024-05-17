@@ -166,20 +166,20 @@ s32 Rcp(s32 input)
     u32 shift = std::countl_zero(u32(input));
     u32 index = (u64(input) << shift & 0x7FC0'0000) >> 22;
     s32 result = (0x10000 | rcp_rom[index]) << 14;
-    return result >> 31 - shift ^ mask;
+    return result >> (31 - shift) ^ mask;
 }
 
 s32 Rsq(s32 input)
 {
     if (input == 0) return 0x7FFF'FFFF;
-    if (input == 0xFFFF8000) return 0xFFFF0000;
-    if (input > 0xFFFF8000) --input;
+    if (input == -32768) return -65536;
+    if (input > -32768) return -input;
     s32 mask = input >> 31;
     input ^= mask;
     u32 lshift = std::countl_zero(u32(input)) + 1;
-    u32 rshift = 32 - lshift >> 1;
+    u32 rshift = (32 - lshift) >> 1;
     u32 index = u32(input) << lshift >> 24 | (lshift & 1) << 8;
-    return (0x400'00000 | rsq_rom[index] << 14) >> rshift ^ mask;
+    return (0x4000'0000 | rsq_rom[index] << 14) >> rshift ^ mask;
 }
 
 void cfc2(u32 rt, u32 vs)
@@ -402,7 +402,7 @@ void spv(u32 base, u32 vt, u32 e, s32 offset)
         if ((elem & 15) < 8) {
             val = vpr_src[elem << 1 & 0xE ^ 1];
         } else {
-            val = reinterpret_cast<s16*>(vpr_src)[elem & 7] >> 7;
+            val = u8(reinterpret_cast<s16*>(vpr_src)[elem & 7] >> 7);
         }
         dmem[addr++ & 0xFFF] = val;
     }
@@ -459,7 +459,7 @@ void suv(u32 base, u32 vt, u32 e, s32 offset)
     for (auto elem = e; elem < e + 8; ++elem) {
         u8 val;
         if ((elem & 15) < 8) {
-            val = reinterpret_cast<s16*>(vpr_src)[elem & 7] >> 7;
+            val = u8(reinterpret_cast<s16*>(vpr_src)[elem & 7] >> 7);
         } else {
             val = vpr_src[elem << 1 & 0xE ^ 1];
         }

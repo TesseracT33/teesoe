@@ -72,8 +72,8 @@ std::unique_ptr<VulkanRenderContext> VulkanRenderContext::Create(UpdateGuiCallba
     VkDevice vk_device = parallel_rdp->GetVkDevice();
     u32 vk_queue_family = parallel_rdp->GetVkQueueFamily();
     VkQueue vk_queue = parallel_rdp->GetVkQueue();
-    VkCommandBuffer vk_command_buffer = parallel_rdp->GetVkCommandBuffer();
     VkFormat vk_format = parallel_rdp->GetVkFormat();
+    [[maybe_unused]] VkCommandBuffer vk_command_buffer = parallel_rdp->GetVkCommandBuffer();
 
     ::vk_instance = vk_instance;
 
@@ -195,10 +195,12 @@ std::unique_ptr<VulkanRenderContext> VulkanRenderContext::Create(UpdateGuiCallba
 
 void VulkanRenderContext::EnableFullscreen(bool enable)
 {
+    (void)enable;
 }
 
 void VulkanRenderContext::EnableRendering(bool enable)
 {
+    (void)enable;
 }
 
 void VulkanRenderContext::NotifyNewGameFrameReady()
@@ -223,30 +225,39 @@ void VulkanRenderContext::Render(VkCommandBuffer vk_command_buffer)
 
 void VulkanRenderContext::SetFramebufferHeight(uint height)
 {
+    (void)height;
 }
 
 void VulkanRenderContext::SetFramebufferPtr(u8 const* ptr)
 {
+    (void)ptr;
 }
 
 void VulkanRenderContext::SetFramebufferSize(uint width, uint height)
 {
+    (void)width;
+    (void)height;
 }
 
 void VulkanRenderContext::SetFramebufferWidth(uint width)
 {
+    (void)width;
 }
 
 void VulkanRenderContext::SetGameRenderAreaOffsetX(uint offset)
 {
+    (void)offset;
 }
 
 void VulkanRenderContext::SetGameRenderAreaOffsetY(uint offset)
 {
+    (void)offset;
 }
 
 void VulkanRenderContext::SetGameRenderAreaSize(uint width, uint height)
 {
+    (void)width;
+    (void)height;
 }
 
 void VulkanRenderContext::SetPixelFormat(PixelFormat pixel_format)
@@ -256,4 +267,6 @@ void VulkanRenderContext::SetPixelFormat(PixelFormat pixel_format)
 
 void VulkanRenderContext::SetWindowSize(uint width, uint height)
 {
+    (void)width;
+    (void)height;
 }

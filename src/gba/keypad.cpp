@@ -49,8 +49,9 @@ template<std::integral Int> Int ReadReg(u32 addr)
     }
 }
 
-void StreamState(Serializer& stream)
+void StreamState(Serializer& serializer)
 {
+    (void)serializer; // TODO
 }
 
 void UpdateIrq()

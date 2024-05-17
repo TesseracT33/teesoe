@@ -48,7 +48,7 @@ template<DmaType dma_type> static void InitDma();
 static void OnDmaFinish();
 constexpr std::string_view RegOffsetToStr(u32 reg_offset);
 
-void AdvancePipeline(u64 cycles)
+void AdvancePipeline(u32 cycles)
 {
     cycle_counter += cycles;
 }
@@ -145,7 +145,7 @@ template<DmaType dma_type> void InitDma()
        linear. Moreover, if spaddr overflow it will wrap around within IMEM/DMEM (e.g. $FFC => 0; $1FFC => $1000)
      */
     if (skip == 0) {
-        for (size_t i = 0; i < bytes_to_copy; i += 4) {
+        for (s32 i = 0; i < bytes_to_copy; i += 4) {
             s32 val;
             std::memcpy(&val, SrcPtr(), 4);
             val = std::byteswap(val); // rdram LE, rsp ram BE
@@ -155,7 +155,7 @@ template<DmaType dma_type> void InitDma()
     } else {
         for (s32 i = 0; i < rows; ++i) {
             s32 bytes_to_copy_this_row = std::min(bytes_to_copy, bytes_per_row);
-            for (s32 i = 0; i < bytes_to_copy_this_row; i += 4) {
+            for (s32 j = 0; j < bytes_to_copy_this_row; j += 4) {
                 s32 val;
                 std::memcpy(&val, SrcPtr(), 4);
                 val = std::byteswap(val); // rdram LE, rsp ram BE
@@ -395,10 +395,10 @@ template<std::signed_integral Int> void WriteDMEM(u32 addr, Int data)
 template<size_t access_size> void WriteMemoryCpu(u32 addr, s64 data)
 {
     s32 to_write = [&] {
-        if constexpr (access_size == 1) return data << (8 * (3 - (addr & 3)));
-        if constexpr (access_size == 2) return data << (8 * (2 - (addr & 2)));
-        if constexpr (access_size == 4) return data;
-        if constexpr (access_size == 8) return data >> 32;
+        if constexpr (access_size == 1) return s32(data << (8 * (3 - (addr & 3))));
+        if constexpr (access_size == 2) return s32(data << (8 * (2 - (addr & 2))));
+        if constexpr (access_size == 4) return s32(data);
+        if constexpr (access_size == 8) return s32(data >> 32);
     }();
     if (addr < 0x0404'0000) {
         addr &= 0x1FFC;

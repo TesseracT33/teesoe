@@ -1,6 +1,6 @@
 #pragma once
 
-#include "algorithm"
+#include "algorithm.hpp"
 #include "vr4300/cop1.hpp"
 #include "vr4300/recompiler.hpp"
 
@@ -340,8 +340,7 @@ template<Fmt fmt> inline void compare(u32 fs, u32 ft, u8 cond)
     c.and_(eax, ecx);
     c.and_(eax, 1);
     c.jnz(l_exception);
-    cond & 1 ? c.bts(JitPtr(fcr31), FCR31BitIndex::Condition)
-             : c.btr(JitPtr(fcr31), FCR31BitIndex::Condition);
+    cond & 1 ? c.bts(JitPtr(fcr31), FCR31BitIndex::Condition) : c.btr(JitPtr(fcr31), FCR31BitIndex::Condition);
     c.jmp(l_end);
 
     c.bind(l_exception);

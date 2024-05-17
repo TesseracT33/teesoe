@@ -24,7 +24,7 @@ public:
 
     static std::unique_ptr<ParallelRdpWrapper> Create(SDL_Window* sdl_window);
 
-    ~ParallelRdpWrapper();
+    ~ParallelRdpWrapper() override;
 
     void EnqueueCommand(int cmd_len, u32* cmd_ptr) override;
     void OnFullSync() override;

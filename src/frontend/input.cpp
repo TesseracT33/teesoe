@@ -93,6 +93,7 @@ void OnCoreLoaded(System system)
 
 void OnGamepadAxisMotion(SDL_Event const& event)
 {
+    (void)event;
     // TODO: possibly store and compare against previous axis value to stop from going further for every single axis
     // change.
     // if (auto binding_it = controller_bindings.find(event.caxis.axis); binding_it != controller_bindings.end()) {
@@ -132,11 +133,13 @@ void OnGamepadButtonChange(SDL_Event const& event, bool pressed)
 
 void OnGamepadAdded(SDL_Event const& event)
 {
+    (void)event;
     // TODO
 }
 
 void OnGamepadRemoved(SDL_Event const& event)
 {
+    (void)event;
     // TODO
 }
 

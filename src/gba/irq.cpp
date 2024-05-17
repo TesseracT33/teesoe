@@ -60,8 +60,9 @@ u16 ReadIME()
     return ime;
 }
 
-void StreamState(Serializer& stream)
+void StreamState(Serializer& serializer)
 {
+    (void)serializer; // TODO
 }
 
 void WriteIE(u8 data, u8 byte_index)

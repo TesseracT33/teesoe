@@ -29,11 +29,12 @@ struct Pool {
 };
 
 static void BlockEpilogWithJmp(void* func);
+static void BlockProlog();
 static void BlockRecordCycles();
 static void EmitInstruction();
 static void ExecuteBlock(Block* block);
 static void FinalizeAndExecuteBlock(Block*& block);
-static std::pair<Block*, bool> GetBlock(u32 pc);
+static std::pair<Block*, bool> GetBlock(u32 virt_addr);
 static void ResetPool(Pool*& pool);
 static void UpdateBranchStateJit();
 
@@ -150,14 +151,15 @@ void FinalizeAndExecuteBlock(Block*& block)
     ExecuteBlock(block);
 }
 
-std::pair<Block*, bool> GetBlock(u32 pc)
+std::pair<Block*, bool> GetBlock(u32 virt_addr)
 {
 acquire:
-    Pool*& pool = pools[pc >> 8]; // each pool 6 bits, each instruction 2 bits
+    Pool*& pool = pools[virt_addr >> 8]; // each pool 6 bits, each instruction 2 bits
     if (!pool) {
         pool = reinterpret_cast<Pool*>(allocator.acquire(sizeof(Pool)));
     }
-    Block*& block = pool->blocks[pc >> 2 & 63];
+    assert(pool);
+    Block*& block = pool->blocks[virt_addr >> 2 & 63];
     bool compiled = block != nullptr;
     if (!compiled) {
         block = reinterpret_cast<Block*>(allocator.acquire(sizeof(Block)));

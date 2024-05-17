@@ -77,8 +77,7 @@ u32 ReadReg(u32 addr)
 {
     static_assert(sizeof(vi) >> 2 == 0x10);
     u32 offset = addr >> 2 & 0xF;
-    u32 ret;
-    std::memcpy(&ret, (s32*)(&vi) + offset, 4);
+    u32 ret = std::bit_cast<std::array<u32, 16>>(vi)[offset];
     if constexpr (log_io_vi) {
         Log(std::format("VI: {} => ${:08X}", RegOffsetToStr(offset), ret));
     }

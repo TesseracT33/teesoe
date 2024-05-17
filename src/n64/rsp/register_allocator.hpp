@@ -109,8 +109,8 @@ private:
     using VprBinding = VprRegisterAllocatorState::Binding;
 
 public:
-    RegisterAllocator(AsmjitCompiler& compiler)
-      : c{ compiler },
+    RegisterAllocator(AsmjitCompiler& asmjit_compiler)
+      : c{ asmjit_compiler },
         gpr_state{ c, reg_alloc_volatile_gprs, reg_alloc_nonvolatile_gprs, reg_alloc_base_gpr_ptr_reg },
         vpr_state{ c, reg_alloc_volatile_vprs, reg_alloc_nonvolatile_vprs, reg_alloc_base_vpr_ptr_reg },
         guest_gprs_pointer_reg{ reg_alloc_base_gpr_ptr_reg },
@@ -303,8 +303,8 @@ public:
           [this](GprBinding& freed, bool restore, bool keep_reserved) {
               FlushAndDestroyBinding(freed, restore, keep_reserved);
           },
-          [this](HostGpr gpr) { RestoreHost(gpr); },
-          [this](HostGpr gpr) { SaveHost(gpr); });
+          [this](HostGpr host_gpr) { RestoreHost(host_gpr); },
+          [this](HostGpr host_gpr) { SaveHost(host_gpr); });
     }
 
     template<size_t N> void Reserve(std::array<HostVpr128, N> const& hosts)
@@ -314,8 +314,8 @@ public:
           [this](VprBinding& freed, bool restore, bool keep_reserved) {
               FlushAndDestroyBinding(freed, restore, keep_reserved);
           },
-          [this](HostVpr128 vpr) { RestoreHost(vpr); },
-          [this](HostVpr128 vpr) { SaveHost(vpr); });
+          [this](HostVpr128 host_vpr) { RestoreHost(host_vpr); },
+          [this](HostVpr128 host_vpr) { SaveHost(host_vpr); });
     }
 
     void ReserveArgs(int args)
@@ -330,36 +330,36 @@ public:
         }
     }
 
-    void RestoreHost(HostGpr gpr)
+    void RestoreHost(HostGpr host_gpr)
     {
         if constexpr (arch.a64) {
         } else {
-            c.mov(gpr.r64(), qword_ptr(x86::rsp, 8 * gpr.id()));
+            c.mov(host_gpr.r64(), qword_ptr(x86::rsp, 8 * host_gpr.id()));
         }
     }
 
-    void RestoreHost(HostVpr128 vpr)
+    void RestoreHost(HostVpr128 host_vpr)
     {
         if constexpr (arch.a64) {
         } else {
             static_assert(gprs_stack_space % 16 == 0);
-            c.vmovaps(vpr, xmmword_ptr(x86::rsp, 16 * vpr.id() + gprs_stack_space));
+            c.vmovaps(host_vpr, xmmword_ptr(x86::rsp, 16 * host_vpr.id() + gprs_stack_space));
         }
     }
 
-    void SaveHost(HostGpr gpr)
+    void SaveHost(HostGpr host_gpr)
     {
         if constexpr (arch.a64) {
         } else {
-            c.mov(qword_ptr(x86::rsp, 8 * gpr.id()), gpr.r64());
+            c.mov(qword_ptr(x86::rsp, 8 * host_gpr.id()), host_gpr.r64());
         }
     }
 
-    void SaveHost(HostVpr128 vpr)
+    void SaveHost(HostVpr128 host_vpr)
     {
         if constexpr (arch.a64) {
         } else {
-            c.vmovaps(xmmword_ptr(x86::rsp, 16 * vpr.id() + gprs_stack_space), vpr);
+            c.vmovaps(xmmword_ptr(x86::rsp, 16 * host_vpr.id() + gprs_stack_space), host_vpr);
         }
     }
 

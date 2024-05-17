@@ -33,15 +33,32 @@ list(APPEND GNU_FLAGS
 	-Wcast-align
 	-Wconversion
 	-Wdouble-promotion
+	-Werror=return-type
+	-Werror=switch
+	-Werror=unused-parameter
+	-Werror=unused-variable
 	-Wextra
 	-Wimplicit-fallthrough
 	-Wmissing-include-dirs
 	-Wno-bitwise-op-parentheses
+	-Wno-c++11-compat
+	-Wno-c++14-compat
+	-Wno-c++17-compat
+	-Wno-c++20-compat
+	-Wno-c++98-compat
+	-Wno-c++98-compat-pedantic
 	-Wno-exit-time-destructors
+	-Wno-float-equal
 	-Wno-global-constructors
 	-Wno-gnu-anonymous-struct
+	-Wno-missing-braces
+	-Wno-pre-c++14-compat
+	-Wno-pre-c++17-compat
+	-Wno-pre-c++20-compat
 	-Wno-shadow-uncaptured-local
 	-Wno-sign-conversion
+	-Wno-undefined-func-template
+	-Wno-unsafe-buffer-usage
 	-Wnon-virtual-dtor
 	-Wnull-dereference
 	-Wunreachable-code

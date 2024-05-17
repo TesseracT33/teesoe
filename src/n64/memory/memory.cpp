@@ -19,22 +19,25 @@
 namespace n64::memory {
 
 #define READ_INTERFACE(io, INT, addr)                                                                             \
-    [&] {                                                                                                         \
+    [=] {                                                                                                         \
         if constexpr (sizeof(INT) == 4) {                                                                         \
             return io::ReadReg(addr);                                                                             \
         } else {                                                                                                  \
-            LogWarn(                                                                                             \
+            LogWarn(                                                                                              \
               std::format("Attempted to read IO region at address ${:08X} for sized int {}", addr, sizeof(INT))); \
             return INT{};                                                                                         \
         }                                                                                                         \
     }()
 
-#define WRITE_INTERFACE(io, access_size, addr, data)                                                                  \
-    if constexpr (access_size == 4) {                                                                                 \
-        io::WriteReg(addr, data);                                                                                     \
-    } else {                                                                                                          \
-        LogWarn(std::format("Attempted to write IO region at address ${:08X} for sized int {}", addr, access_size)); \
-    }
+#define WRITE_INTERFACE(io, access_size, addr, data)                                                               \
+    do {                                                                                                           \
+        if constexpr (access_size == 4) {                                                                          \
+            io::WriteReg(addr, u32(data));                                                                         \
+        } else {                                                                                                   \
+            LogWarn(                                                                                               \
+              std::format("Attempted to write IO region at address ${:08X} for sized int {}", addr, access_size)); \
+        }                                                                                                          \
+    } while (0)
 
 template<std::signed_integral Int> Int Read(u32 addr)
 { /* Precondition: 'addr' is aligned according to the size of 'Int' */

@@ -83,7 +83,7 @@ template<DmaType type> void InitDma()
         } else {
             cart_addr &= ~1;
             dram_addr &= ~1;
-            const u32 offset = pi.dram_addr & 7;
+            u32 const offset = pi.dram_addr & 7;
             static constexpr u32 block_size = 128;
             assert(dma_len >= offset); // TODO: what if dma_len < offset?
             u32 num_bytes_first_block = std::min(dma_len, block_size) - offset;
@@ -180,7 +180,7 @@ template<size_t size> void Write(u32 addr, s64 value, u8* dst)
 
     if constexpr (size == 1) latch = u32(value << 8 * (3 - (addr & 3)));
     if constexpr (size == 2) latch = u32(value << 8 * (2 - (addr & 2)));
-    if constexpr (size == 4) latch = value;
+    if constexpr (size == 4) latch = u32(value);
     if constexpr (size == 8) latch = u32(value >> 32);
     addr &= ~1;
     pi.status.io_busy = 1;

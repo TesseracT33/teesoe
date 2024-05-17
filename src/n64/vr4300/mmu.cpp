@@ -107,7 +107,7 @@ template<std::signed_integral Int, Alignment alignment, MemOp mem_op> Int ReadVi
             vaddr &= ~(sizeof(Int) - 1);
         }
     }
-    if (addressing_mode == AddressingMode::_32bit && s32(vaddr) != vaddr) {
+    if (addressing_mode == AddressingMode::_32bit && u64(s32(vaddr)) != vaddr) {
         AddressErrorException<mem_op>(vaddr);
         return {};
     }
@@ -366,7 +366,7 @@ template<size_t access_size, Alignment alignment> void WriteVirtual(u64 vaddr, s
             }
         }
     }
-    if (addressing_mode == AddressingMode::_32bit && s32(vaddr) != vaddr) {
+    if (addressing_mode == AddressingMode::_32bit && u64(s32(vaddr)) != vaddr) {
         return AddressErrorException<MemOp::Write>(vaddr);
     }
     bool cacheable_area;

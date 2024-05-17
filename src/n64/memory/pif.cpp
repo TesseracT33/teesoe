@@ -235,9 +235,9 @@ template<size_t access_size> void WriteMemory(u32 addr, s64 data)
     addr &= 0x7FF;
     if (addr < 0x7C0) return;
     s32 to_write = [&] {
-        if constexpr (access_size == 1) return data << (8 * (3 - (addr & 3)));
-        if constexpr (access_size == 2) return data << (8 * (2 - (addr & 2)));
-        if constexpr (access_size == 4) return data;
+        if constexpr (access_size == 1) return s32(data << (8 * (3 - (addr & 3))));
+        if constexpr (access_size == 2) return s32(data << (8 * (2 - (addr & 2))));
+        if constexpr (access_size == 4) return s32(data);
         if constexpr (access_size == 8) return s32(data >> 32); /* TODO: could cause console lock-up? */
     }();
     to_write = std::byteswap(to_write);

@@ -24,6 +24,6 @@ __m128i _mm_not_si128(__m128i a);
 __m128i _mm_nxor_si128(__m128i a, __m128i b);
 void _mm_setlane_epi16(__m128i* num, int lane, s16 value);
 
-inline const __m128i m128i_epi16_sign_mask = _mm_set1_epi16(0x8000);
+inline __m128i const m128i_epi16_sign_mask = _mm_set1_epi16(0x8000_s16);
 
 #endif

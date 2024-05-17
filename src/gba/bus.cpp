@@ -23,11 +23,11 @@ static void WriteWaitcntHi(u8 data);
 
 /* First Access (Non-sequential) and Second Access (Sequential) define the waitstates for N and S cycles, the actual
  * access time is 1 clock cycle PLUS the number of waitstates. */
-constexpr std::array cart_wait_1st_access = { 5, 4, 3, 9 };
+constexpr std::array<u8, 4> cart_wait_1st_access = { 5, 4, 3, 9 };
 constexpr std::array<std::array<u8, 2>, 3> cart_wait_2nd_access = {
     { { 3, 2 }, { 5, 2 }, { 9, 2 } }
 }; /* wait state * waitcnt setting */
-constexpr std::array sram_wait = { 5, 4, 3, 9 };
+constexpr std::array<u8, 4> sram_wait = { 5, 4, 3, 9 };
 
 struct WAITCNT {
     bool game_pak_type_flag;
@@ -196,13 +196,13 @@ template<std::integral Int, scheduler::DriverType driver> Int Read(u32 addr)
             break;
 
         case 0x2: /* 0200'0000-0203'FFFF   WRAM - On-board Work RAM */
-            std::memcpy(&val, board_wram.data() + (addr & 0x3FFFF), sizeof(Int));
+            std::memcpy(&val, &board_wram[addr & 0x3FFFF], sizeof(Int));
             if constexpr (sizeof(Int) == 4) cycles = 6;
             else cycles = 3;
             break;
 
         case 0x3: /* 0300'0000-0300'7FFF   WRAM - On-chip Work RAM */
-            std::memcpy(&val, chip_wram.data() + (addr & 0x7FFF), sizeof(Int));
+            std::memcpy(&val, &chip_wram[addr & 0x7FFF], sizeof(Int));
             cycles = 1;
             break;
 
@@ -306,7 +306,7 @@ template<std::integral Int> Int ReadIo(u32 addr)
                 case ADDR_IF: return irq::ReadIF(0);
                 case ADDR_IF + 1: return irq::ReadIF(1);
                 case ADDR_IME: return u8(irq::ReadIME());
-                case ADDR_IME + 1: u8(0);
+                case ADDR_IME + 1: return u8(0);
                 case ADDR_WAITCNT: return GetByte(waitcnt.raw, 0);
                 case ADDR_WAITCNT + 1: return GetByte(waitcnt.raw, 1);
                 default: return ReadOpenBus<u8>(addr);
@@ -343,6 +343,7 @@ template<std::integral Int> Int ReadIo(u32 addr)
 
 template<std::integral Int> Int ReadOpenBus(u32 addr)
 {
+    (void)addr;
     return 0;
 }
 
@@ -350,7 +351,7 @@ template<std::integral Int, scheduler::DriverType driver> void Write(u32 addr, I
 {
     static_assert(sizeof(Int) == 1 || sizeof(Int) == 2 || sizeof(Int) == 4);
 
-    bool sequential_access = addr == next_addr_for_sequential_access;
+    [[maybe_unused]] bool sequential_access = addr == next_addr_for_sequential_access; // TODO
     next_addr_for_sequential_access = addr + sizeof(Int);
 
     uint cycles;
@@ -359,13 +360,13 @@ template<std::integral Int, scheduler::DriverType driver> void Write(u32 addr, I
     } else {
         switch (addr >> 24 & 0xF) {
         case 0x2: /* 0200'0000-0203'FFFF   WRAM - On-board Work RAM */
-            std::memcpy(board_wram.data() + (addr & 0x3FFFF), &data, sizeof(Int));
+            std::memcpy(&board_wram[addr & 0x3FFFF], &data, sizeof(Int));
             if constexpr (sizeof(Int) == 4) cycles = 6;
             else cycles = 3;
             break;
 
         case 0x3: /* 0300'0000-0300'7FFF   WRAM - On-chip Work RAM */
-            std::memcpy(chip_wram.data() + (addr & 0x7FFF), &data, sizeof(Int));
+            std::memcpy(&chip_wram[addr & 0x7FFF], &data, sizeof(Int));
             cycles = 1;
             break;
 
@@ -403,7 +404,7 @@ template<std::integral Int, scheduler::DriverType driver> void Write(u32 addr, I
             break;
 
         case 0x7: /* 0700'0000-0700'03FF   OAM - OBJ Attributes */
-            if (sizeof(Int) != 1) {
+            if constexpr (sizeof(Int) != 1) {
                 ppu::WriteOam<Int>(addr, data);
             }
             cycles = 1;

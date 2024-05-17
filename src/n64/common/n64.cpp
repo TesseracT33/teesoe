@@ -34,6 +34,7 @@ void N64::ApplyConfig(CoreConfiguration config)
 
 Status N64::EnableAudio(bool enable)
 {
+    (void)enable;
     return UnimplementedStatus();
 }
 
@@ -83,11 +84,13 @@ Status N64::LoadRom(std::filesystem::path const& path)
 
 void N64::NotifyAxisState(size_t player, size_t action_index, s32 axis_value)
 {
+    (void)player; // TODO
     pif::OnJoystickMovement(static_cast<Control>(action_index), s16(axis_value));
 }
 
 void N64::NotifyButtonState(size_t player, size_t action_index, bool pressed)
 {
+    (void)player; // TODO
     pif::OnButtonAction(static_cast<Control>(action_index), pressed);
 }
 
@@ -121,6 +124,7 @@ void N64::Run(std::stop_token stop_token)
 
 void N64::StreamState(Serializer& serializer)
 {
+    (void)serializer;
 }
 
 void N64::UpdateScreen()

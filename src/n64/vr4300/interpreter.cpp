@@ -2,8 +2,8 @@
 #include "cop0.hpp"
 #include "decoder.hpp"
 #include "exceptions.hpp"
-#include "platform.hpp"
 #include "mmu.hpp"
+#include "platform.hpp"
 
 #include <array>
 #include <limits>
@@ -384,7 +384,7 @@ void Interpreter::ldl(u32 rs, u32 rt, s16 imm) const
     s64 addr = gpr[rs] + imm;
     s64 val = ReadVirtual<s64, Alignment::UnalignedLeft>(addr);
     if (!exception_occurred) {
-        u32 bits_from_last_boundary = (addr & 7) << 3;
+        u32 bits_from_last_boundary = (u32(addr) & 7) << 3;
         val <<= bits_from_last_boundary;
         s64 untouched_gpr = gpr[rt] & ((1ll << bits_from_last_boundary) - 1);
         gpr.set(rt, val | untouched_gpr);
@@ -397,7 +397,7 @@ void Interpreter::ldr(u32 rs, u32 rt, s16 imm) const
     s64 addr = gpr[rs] + imm;
     u64 val = ReadVirtual<s64, Alignment::UnalignedRight>(addr);
     if (!exception_occurred) {
-        u32 bits_from_last_boundary = (addr & 7) << 3;
+        u32 bits_from_last_boundary = (u32(addr) & 7) << 3;
         val >>= 56 - bits_from_last_boundary;
         s64 untouched_gpr = gpr[rt] & 0xFFFF'FFFF'FFFF'FF00 << bits_from_last_boundary;
         gpr.set(rt, val | untouched_gpr);
@@ -453,7 +453,7 @@ void Interpreter::lwl(u32 rs, u32 rt, s16 imm) const
     s64 addr = gpr[rs] + imm;
     s32 val = ReadVirtual<s32, Alignment::UnalignedLeft>(addr);
     if (!exception_occurred) {
-        u32 bits_from_last_boundary = (addr & 3) << 3;
+        u32 bits_from_last_boundary = (u32(addr) & 3) << 3;
         val <<= bits_from_last_boundary;
         s32 untouched_gpr = s32(gpr[rt] & ((1 << bits_from_last_boundary) - 1));
         gpr.set(rt, val | untouched_gpr);
@@ -465,7 +465,7 @@ void Interpreter::lwr(u32 rs, u32 rt, s16 imm) const
     s64 addr = gpr[rs] + imm;
     u32 val = ReadVirtual<s32, Alignment::UnalignedRight>(addr);
     if (!exception_occurred) {
-        u32 bits_from_last_boundary = (addr & 3) << 3;
+        u32 bits_from_last_boundary = (u32(addr) & 3) << 3;
         val >>= 24 - bits_from_last_boundary;
         s32 untouched_gpr = s32(gpr[rt] & 0xFFFF'FF00 << bits_from_last_boundary);
         gpr.set(rt, s32(val) | untouched_gpr);

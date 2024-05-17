@@ -26,7 +26,7 @@ struct Sp {
     u32 dma_full, dma_busy, semaphore;
 } inline sp;
 
-void AdvancePipeline(u64 cycles);
+void AdvancePipeline(u32 cycles);
 u32 FetchInstruction(u32 addr);
 u8* GetPointerToMemory(u32 addr);
 void Link(u32 reg);

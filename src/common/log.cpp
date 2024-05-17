@@ -15,8 +15,8 @@ static void FileOut(std::string_view output);
 static void StdOut(std::string_view output);
 
 static std::ofstream file_log;
-static u64 file_output_repeat_counter;
-static u32 loop_index;
+[[maybe_unused]] static u64 file_output_repeat_counter;
+[[maybe_unused]] static u32 loop_index;
 static std::string prev_file_output;
 static std::vector<std::string> file_output_loop;
 

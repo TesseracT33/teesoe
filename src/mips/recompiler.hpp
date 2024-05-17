@@ -13,7 +13,7 @@ template<std::signed_integral GprInt, std::integral PcInt, typename RegisterAllo
     using CheckCanExecDwordInstrHandler = bool (*)();
     using ExceptionHandler = void (*)();
     using GetLoHiPtrHandler = std::conditional_t<arch.a64, asmjit::a64::Mem, asmjit::x86::Mem> (*)();
-    using IndirectJumpHandler = void (*)(SizeToHostReg<sizeof(PcInt)>::type target);
+    using IndirectJumpHandler = void (*)(typename SizeToHostReg<sizeof(PcInt)>::type target);
     using LinkHandler = void (*)(u32 reg);
     using TakeBranchHandler = void (*)(PcInt target);
 

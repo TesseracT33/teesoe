@@ -41,29 +41,35 @@
 #define RS   (instr >> 21 & 31)
 #define BASE (instr >> 21 & 31)
 
-#define LOG_RSP(instr, ...)                                         \
-    if constexpr (cpu == Cpu::RSP && log_rsp_instructions) {        \
-        Log(std::format("${:03X}  {}",                              \
-          cpu_impl == CpuImpl::Interpreter ? rsp::pc : rsp::jit_pc, \
-          rsp::disassembler.instr(__VA_ARGS__)));                   \
-    }
+#define LOG_RSP(instr, ...)                                             \
+    do {                                                                \
+        if constexpr (cpu == Cpu::RSP && log_rsp_instructions) {        \
+            Log(std::format("${:03X}  {}",                              \
+              cpu_impl == CpuImpl::Interpreter ? rsp::pc : rsp::jit_pc, \
+              rsp::disassembler.instr(__VA_ARGS__)));                   \
+        }                                                               \
+    } while (0)
 
-#define LOG_VR4300(instr, ...)                                            \
-    if constexpr (cpu == Cpu::VR4300 && log_cpu_instructions) {           \
-        Log(std::format("${:016X}  {}",                                   \
-          cpu_impl == CpuImpl::Interpreter ? vr4300::pc : vr4300::jit_pc, \
-          vr4300::disassembler.instr(__VA_ARGS__)));                      \
-    }
+#define LOG_VR4300(instr, ...)                                                \
+    do {                                                                      \
+        if constexpr (cpu == Cpu::VR4300 && log_cpu_instructions) {           \
+            Log(std::format("${:016X}  {}",                                   \
+              cpu_impl == CpuImpl::Interpreter ? vr4300::pc : vr4300::jit_pc, \
+              vr4300::disassembler.instr(__VA_ARGS__)));                      \
+        }                                                                     \
+    } while (0)
 
-#define LOG(instr, ...)                     \
-    if constexpr (cpu == Cpu::VR4300) {     \
-        LOG_VR4300(instr, __VA_ARGS__);     \
-    } else if constexpr (cpu == Cpu::RSP) { \
-        LOG_RSP(instr, __VA_ARGS__);        \
-    }
+#define LOG(instr, ...)                         \
+    do {                                        \
+        if constexpr (cpu == Cpu::VR4300) {     \
+            LOG_VR4300(instr, __VA_ARGS__);     \
+        } else if constexpr (cpu == Cpu::RSP) { \
+            LOG_RSP(instr, __VA_ARGS__);        \
+        }                                       \
+    } while (0)
 
 #define COP1_FMT_IMPL(instr, fmt, ...)                    \
-    {                                                     \
+    do {                                                  \
         LOG_VR4300(instr<fmt>, __VA_ARGS__);              \
         if constexpr (cpu_impl == CpuImpl::Interpreter) { \
             vr4300::instr<fmt>(__VA_ARGS__);              \
@@ -72,21 +78,27 @@
         } else {                                          \
             vr4300::x64::instr<fmt>(__VA_ARGS__);         \
         }                                                 \
-    }
+    } while (0)
 
-#define COP1_FMT(instr_name, ...)                                                                                   \
-    switch (instr >> 21 & 31) {                                                                                     \
-    case std::to_underlying(vr4300::Fmt::Float32): COP1_FMT_IMPL(instr_name, vr4300::Fmt::Float32, __VA_ARGS__);    \
-      break;                                                                                                        \
-    case std::to_underlying(vr4300::Fmt::Float64): COP1_FMT_IMPL(instr_name, vr4300::Fmt::Float64, __VA_ARGS__);    \
-      break;                                                                                                        \
-    case std::to_underlying(vr4300::Fmt::Int32): COP1_FMT_IMPL(instr_name, vr4300::Fmt::Int32, __VA_ARGS__); break; \
-    case std::to_underlying(vr4300::Fmt::Int64): COP1_FMT_IMPL(instr_name, vr4300::Fmt::Int64, __VA_ARGS__); break; \
-    default: COP1_FMT_IMPL(instr_name, vr4300::Fmt::Invalid, __VA_ARGS__); break;                                   \
-    }
+#define COP1_FMT(instr_name, ...)                                                                                \
+    do {                                                                                                         \
+        switch (instr >> 21 & 31) {                                                                              \
+        case std::to_underlying(vr4300::Fmt::Float32):                                                           \
+            COP1_FMT_IMPL(instr_name, vr4300::Fmt::Float32, __VA_ARGS__);                                        \
+            break;                                                                                               \
+        case std::to_underlying(vr4300::Fmt::Float64):                                                           \
+            COP1_FMT_IMPL(instr_name, vr4300::Fmt::Float64, __VA_ARGS__);                                        \
+            break;                                                                                               \
+        case std::to_underlying(vr4300::Fmt::Int32): COP1_FMT_IMPL(instr_name, vr4300::Fmt::Int32, __VA_ARGS__); \
+          break;                                                                                                 \
+        case std::to_underlying(vr4300::Fmt::Int64): COP1_FMT_IMPL(instr_name, vr4300::Fmt::Int64, __VA_ARGS__); \
+          break;                                                                                                 \
+        default: COP1_FMT_IMPL(instr_name, vr4300::Fmt::Invalid, __VA_ARGS__); break;                            \
+        }                                                                                                        \
+    } while (0)
 
 #define COP_RSP(instr, ...)                               \
-    {                                                     \
+    do {                                                  \
         LOG_RSP(instr, __VA_ARGS__);                      \
         if constexpr (cpu_impl == CpuImpl::Interpreter) { \
             rsp::instr(__VA_ARGS__);                      \
@@ -95,10 +107,10 @@
         } else {                                          \
             rsp::x64::instr(__VA_ARGS__);                 \
         }                                                 \
-    }
+    } while (0)
 
 #define COP_VR4300(instr, ...)                                \
-    {                                                         \
+    do {                                                      \
         LOG_VR4300(instr, __VA_ARGS__);                       \
         if constexpr (cpu == Cpu::VR4300) {                   \
             if constexpr (cpu_impl == CpuImpl::Interpreter) { \
@@ -111,10 +123,10 @@
         } else {                                              \
             rsp::NotifyIllegalInstr(#instr);                  \
         }                                                     \
-    }
+    } while (0)
 
 #define CPU(instr, ...)                                             \
-    {                                                               \
+    do {                                                            \
         LOG(instr, __VA_ARGS__);                                    \
         if constexpr (cpu == Cpu::VR4300) {                         \
             if constexpr (cpu_impl == CpuImpl::Interpreter) {       \
@@ -133,10 +145,10 @@
                 rsp::x64::cpu_recompiler.instr(__VA_ARGS__);        \
             }                                                       \
         }                                                           \
-    }
+    } while (0)
 
 #define CPU_RSP(instr, ...)                                  \
-    {                                                        \
+    do {                                                     \
         LOG_RSP(instr, __VA_ARGS__);                         \
         if constexpr (cpu_impl == CpuImpl::Interpreter) {    \
             rsp::cpu_interpreter.instr(__VA_ARGS__);         \
@@ -145,10 +157,10 @@
         } else {                                             \
             rsp::x64::cpu_recompiler.instr(__VA_ARGS__);     \
         }                                                    \
-    }
+    } while (0)
 
 #define CPU_VR4300(instr, ...)                                      \
-    {                                                               \
+    do {                                                            \
         LOG_VR4300(instr, __VA_ARGS__);                             \
         if constexpr (cpu == Cpu::VR4300) {                         \
             if constexpr (cpu_impl == CpuImpl::Interpreter) {       \
@@ -161,7 +173,7 @@
         } else {                                                    \
             rsp::NotifyIllegalInstr(#instr);                        \
         }                                                           \
-    }
+    } while (0)
 
 namespace n64::decoder {
 

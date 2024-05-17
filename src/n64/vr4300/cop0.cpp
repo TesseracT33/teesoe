@@ -89,7 +89,7 @@ template<bool raw> void Cop0Registers::Set(size_t reg_index, std::signed_integra
         break;
 
     case Cop0Reg::random:
-        if constexpr (raw) random = value;
+        if constexpr (raw) random = u32(value);
         else random = value & 0x20;
         break;
 
@@ -109,12 +109,12 @@ template<bool raw> void Cop0Registers::Set(size_t reg_index, std::signed_integra
         break;
 
     case Cop0Reg::page_mask:
-        if constexpr (raw) page_mask = value;
+        if constexpr (raw) page_mask = u32(value);
         else page_mask = value & 0x01FF'E000;
         break;
 
     case Cop0Reg::wired:
-        if constexpr (raw) wired = value;
+        if constexpr (raw) wired = u32(value);
         else wired = value & 0x3F;
         OnWriteToWired();
         break;
@@ -157,7 +157,7 @@ template<bool raw> void Cop0Registers::Set(size_t reg_index, std::signed_integra
         else Write(config, value, 0xF00'800F);
         break;
 
-    case Cop0Reg::ll_addr: ll_addr = value; break;
+    case Cop0Reg::ll_addr: ll_addr = u32(value); break;
 
     case Cop0Reg::watch_lo:
         if constexpr (raw) Write(watch_lo, value);

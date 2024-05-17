@@ -110,7 +110,7 @@ template<CpuImpl vr4300_impl, CpuImpl rsp_impl> void Run(std::stop_token stop_to
         } else {
             cpu_cycle_overrun -= cpu_cycles_per_update;
         }
-        u32 rsp_step = rsp_cycles_per_update + 2 * cpu_cycle_overrun / 3;
+        s32 rsp_step = rsp_cycles_per_update + 2 * cpu_cycle_overrun / 3;
         if (rsp_cycle_overrun < rsp_step) {
             rsp_step -= rsp_cycle_overrun;
             rsp_cycle_overrun =

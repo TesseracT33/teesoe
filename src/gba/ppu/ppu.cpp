@@ -117,6 +117,7 @@ void OnNewScanline()
 
 void StreamState(Serializer& stream)
 {
+    (void)stream;
 }
 
 void UpdateRotateScalingRegisters()

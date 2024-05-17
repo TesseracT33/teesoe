@@ -33,7 +33,7 @@ void Fatal(std::string_view message /*, std::source_location loc*/)
           message);*/
         SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Fatal", message.data(), sdl_window);
     }
-    exit(EXIT_FAILURE);
+    std::exit(EXIT_FAILURE);
 }
 
 void Info(std::string_view message)

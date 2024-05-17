@@ -24,7 +24,7 @@ void AddInitialEvents()
     ReloadCountCompareEvent<true>();
 }
 
-void AdvancePipeline(u64 cycles)
+void AdvancePipeline(u32 cycles)
 {
     cycle_counter += cycles;
     cop0.count += cycles;
@@ -44,9 +44,9 @@ void CheckInterrupts()
 }
 
 /* Devices external to the CPU (e.g. the console's reset button) use this function to tell the CPU about interrupts. */
-void ClearInterruptPending(ExternalInterruptSource interrupt)
+void ClearInterruptPending(ExternalInterruptSource interrupt_source)
 {
-    cop0.cause.ip &= ~std::to_underlying(interrupt);
+    cop0.cause.ip &= ~std::to_underlying(interrupt_source);
     CheckInterrupts();
 }
 
@@ -142,9 +142,9 @@ void SetActiveCpuImpl(CpuImpl cpu_impl)
     }
 }
 
-void SetInterruptPending(ExternalInterruptSource interrupt)
+void SetInterruptPending(ExternalInterruptSource interrupt_source)
 {
-    cop0.cause.ip |= std::to_underlying(interrupt);
+    cop0.cause.ip |= std::to_underlying(interrupt_source);
     CheckInterrupts();
 }
 

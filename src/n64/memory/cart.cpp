@@ -63,7 +63,7 @@ Status LoadRom(std::filesystem::path const& rom_path)
           rom_region_size));
         rom.resize(rom_region_size);
     }
-    original_rom_size = rom.size();
+    original_rom_size = u32(rom.size());
     ResizeRomToPowerOfTwo();
     rom_access_mask = u32(rom.size() - 1);
     AllocateSram();
@@ -105,7 +105,7 @@ template<std::signed_integral Int> Int ReadRom(u32 addr)
         if constexpr (sizeof(Int) == 2) {
             if (!(addr & 2)) ret >>= 16; /* PI external bus glitch */
         }
-        return ret;
+        return Int(ret);
     }
     if constexpr (sizeof(Int) < 4) {
         addr += addr & 2; /* PI external bus glitch */
@@ -126,7 +126,7 @@ template<std::signed_integral Int> Int ReadSram(u32 addr)
         if constexpr (sizeof(Int) == 2) {
             if (!(addr & 2)) ret >>= 16; /* PI external bus glitch */
         }
-        return ret;
+        return Int(ret);
     }
     if constexpr (sizeof(Int) < 4) {
         addr += addr & 2; /* PI external bus glitch */

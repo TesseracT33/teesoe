@@ -16,7 +16,7 @@ enum class ExternalInterruptSource {
 };
 
 void AddInitialEvents();
-void AdvancePipeline(u64 cycles);
+void AdvancePipeline(u32 cycles);
 void CheckInterrupts();
 void ClearInterruptPending(ExternalInterruptSource);
 u64 GetElapsedCycles();

@@ -9,7 +9,7 @@
 
 class SdlRenderContext : public RenderContext {
 public:
-    ~SdlRenderContext();
+    ~SdlRenderContext() override;
 
     static std::unique_ptr<SdlRenderContext> Create(UpdateGuiCallback update_gui);
 

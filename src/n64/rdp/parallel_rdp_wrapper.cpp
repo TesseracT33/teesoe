@@ -137,8 +137,6 @@ constexpr u32 fragment_spirv[] = {
 
 // clang-format on
 
-static VkInstance vk_instance;
-
 ParallelRdpWrapper::ParallelRdpWrapper(std::unique_ptr<SDLWSIPlatform> sdl_wsi_platform,
   std::unique_ptr<Vulkan::WSI> wsi,
   std::unique_ptr<::RDP::CommandProcessor> cmd_processor)

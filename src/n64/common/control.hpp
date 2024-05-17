@@ -5,9 +5,9 @@
 #include <array>
 #include <string_view>
 
-using namespace std::literals;
-
 namespace n64 {
+
+using namespace std::literals::string_view_literals;
 
 // TODO: allow controlling C buttons with joystick
 

@@ -28,7 +28,7 @@ Status Init()
 
     static constexpr int default_sample_rate = 44100;
     static constexpr int default_num_output_channels = 2;
-    static constexpr int default_sample_buffer_size_per_channel = 512;
+    // static constexpr int default_sample_buffer_size_per_channel = 512;
 
     SDL_AudioSpec spec = {
         .format = SDL_AUDIO_S16BE,
@@ -36,7 +36,7 @@ Status Init()
         .freq = default_sample_rate,
     };
 
-    SDL_AudioSpec obtained_spec;
+    [[maybe_unused]] SDL_AudioSpec obtained_spec;
     audio_device_id = SDL_OpenAudioDevice(0, &spec);
     if (audio_device_id == 0) {
         // message::warning(std::format("Could not open an audio device; {}", SDL_GetError()));
@@ -54,21 +54,26 @@ Status Init()
 
 void OnDeviceAdded(SDL_Event event)
 {
+    (void)event;
     // TODO
 }
 
 void OnDeviceRemoved(SDL_Event event)
 {
+    (void)event;
     // TODO
 }
 
 void PushSample(s16 left, s16 right)
 {
+    (void)left;
+    (void)right;
     // TODO
 }
 
 void SetSampleRate(u32 sample_rate)
 {
+    (void)sample_rate;
     // TODO
 }
 

@@ -92,7 +92,6 @@ static void Update();
 static void UpdateWindowTitle(float fps = 0.f);
 static void UseDefaultConfig();
 
-constexpr std::chrono::milliseconds gui_update_period{ 10 };
 
 static bool game_is_running;
 static bool menu_enable_audio;
@@ -451,7 +450,8 @@ Status Init(fs::path work_path)
 {
     exe_path = work_path;
 
-    window_width = 960, window_height = 720;
+    window_width = 960;
+    window_height = 720;
 
     game_is_running = false;
     menu_enable_audio = true;
@@ -761,6 +761,8 @@ void OnSdlQuit()
 
 void OnWindowResizeEvent(SDL_Event const& event)
 {
+    // TODO
+    (void)event;
 }
 
 void PollEvents()

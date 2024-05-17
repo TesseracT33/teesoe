@@ -2,13 +2,13 @@
 
 #include <bit>
 
-#if defined __x86_64__ || defined _M_X64
+#if defined(__x86_64__) || defined(__amd64__) || defined(_M_X64) || defined(_M_AMD64)
 struct Arch {
     static constexpr bool x64 = 1;
     static constexpr bool a64 = 0;
 } constexpr arch;
 #define X64 1
-#elif defined __aarch64__ || defined _M_ARM64
+#elif defined(__aarch64__) || defined(__arm64__) || defined(_M_ARM64)
 struct Arch {
     static constexpr bool x64 = 0;
     static constexpr bool a64 = 1;
@@ -43,13 +43,16 @@ constexpr bool avx512 = 1;
 constexpr bool avx512 = 0;
 #endif
 
-#ifdef __has_builtin
+#ifndef __has_builtin
+#define __has_builtin(x) 0
+#endif
+
 #if __has_builtin(__builtin_add_overflow)
 #define HAS_BUILTIN_ADD_OVERFLOW 1
 #endif
+
 #if __has_builtin(__builtin_sub_overflow)
 #define HAS_BUILTIN_SUB_OVERFLOW 1
-#endif
 #endif
 
 static_assert(std::endian::native == std::endian::little, "Only little-endian hosts are supported.");

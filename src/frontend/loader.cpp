@@ -61,12 +61,13 @@ Status LoadCore(System system_arg)
         core = {};
     }
     switch (system_arg) {
-    case System::CHIP8: core = nullptr; break;
-    case System::GB: core = nullptr; break;
+    case System::None: core = {}; break;
+    case System::CHIP8: core = {}; break;
+    case System::GB: core = {}; break;
     case System::GBA: core = std::make_unique<GBA>(); break;
     case System::N64: core = std::make_unique<N64>(); break;
-    case System::NES: core = nullptr; break;
-    case System::PS2: core = nullptr; break;
+    case System::NES: core = {}; break;
+    case System::PS2: core = {}; break;
     }
     if (core) {
         Status status = core->Init();

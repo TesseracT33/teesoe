@@ -138,8 +138,9 @@ template<std::integral Int> Int ReadReg(u32 addr)
     }
 }
 
-void StreamState(Serializer& stream)
+void StreamState(Serializer& serializer)
 {
+    (void)serializer; // TODO
 }
 
 template<std::integral Int> void WriteReg(u32 addr, Int data)

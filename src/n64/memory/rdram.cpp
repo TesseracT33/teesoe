@@ -11,7 +11,6 @@ struct {
       device_manuf, dummy0, dummy1, dummy2, dummy3, dummy4, dummy5;
 } static reg;
 
-constexpr size_t rdram_standard_size = 0x40'0000;
 constexpr size_t rdram_expanded_size = 0x80'0000;
 
 /* Note: could not use std::array here as .data() does not become properly aligned */
@@ -121,6 +120,8 @@ template<size_t access_size, typename... MaskT> void Write(u32 addr, s64 data, M
 /* $03F0'0000 - $03FF'FFFF */
 void WriteReg(u32 addr, u32 data)
 {
+    (void)addr;
+    (void)data;
     /* TODO */
 }
 
