@@ -41,7 +41,7 @@ template<std::integral Int> Int AddWithCarry(Int a, Int b, bool* carry_out)
     static_assert(sizeof(Int) <= 8, "Integers larger than 8 bytes not supported.");
     using uInt = std::make_unsigned_t<Int>;
     uInt sum;
-#if defined __has_builtin && __has_builtin(__builtin_add_overflow)
+#if __has_builtin(__builtin_add_overflow)
     *carry_out = __builtin_add_overflow(uInt(a), uInt(b), &sum);
 #elif defined _MSC_VER && defined _M_X64
     if constexpr (sizeof(Int) == 1) *carry_out = _addcarry_u8(0, uInt(a), uInt(b), &sum);
@@ -80,7 +80,7 @@ template<std::integral Int> Int SubWithBorrow(Int a, Int b, bool* borrow_out)
     static_assert(sizeof(Int) <= 8);
     using uInt = std::make_unsigned_t<Int>;
     uInt diff;
-#if defined __has_builtin && __has_builtin(__builtin_sub_overflow)
+#if __has_builtin(__builtin_sub_overflow)
     *borrow_out = __builtin_sub_overflow(uInt(a), uInt(b), &diff);
 #elif defined _MSC_VER && defined _M_X64
     if constexpr (sizeof(Int) == 1) *borrow_out = _subborrow_u8(0, uInt(a), uInt(b), &diff);

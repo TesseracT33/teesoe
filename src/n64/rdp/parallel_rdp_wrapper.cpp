@@ -5,11 +5,11 @@
 #include "log.hpp"
 #include "memory/rdram.hpp"
 #include "n64/rdp/rdp.hpp"
-#include "parallel-rdp-standalone/volk/volk.h"
 #include "rdp.hpp"
 #include "SDL.h"
 #include "SDL_vulkan.h"
 #include "status.hpp"
+#include "volk/volk.h"
 
 #include <algorithm>
 #include <array>

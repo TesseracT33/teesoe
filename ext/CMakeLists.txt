@@ -1,15 +1,13 @@
 cmake_minimum_required(VERSION 3.25)
 
-target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE .)
-
 ##### asmjit ####################
 set(ASMJIT_BUILD_TEST OFF)
 set(ASMJIT_STATIC ON)
 set(ASMJIT_BUILD_X86 X64)
 set(ASMJIT_BUILD_ARM ARM64)
 add_subdirectory(asmjit)
+target_compile_options(asmjit PRIVATE -w) # disable warnings
 target_link_libraries(${CMAKE_PROJECT_NAME} asmjit)
-set_property(TARGET asmjit PROPERTY SYSTEM TRUE)
 
 ##### bit7z ####################
 set(BIT7Z_BUILD_DOCS OFF)
@@ -19,9 +17,8 @@ if(MSVC AND CLANG)
 	# prevent clang-cl "argument unused during compilation: /Zc:throwingNew, /Zc:referenceBinding" errors
 	target_compile_options(bit7z64 PRIVATE -Wno-error=unused-command-line-argument)
 endif()
-target_compile_definitions(bit7z64 PRIVATE _SILENCE_CXX20_U8PATH_DEPRECATION_WARNING)
+target_compile_options(bit7z64 PRIVATE -w) # disable warnings
 target_link_libraries(${CMAKE_PROJECT_NAME} bit7z64)
-set_property(TARGET bit7z64 PROPERTY SYSTEM TRUE)
 
 ##### imgui #########################
 add_library(imgui STATIC
@@ -40,13 +37,13 @@ target_include_directories(imgui PUBLIC
 	SDL/include
 )
 target_compile_definitions(imgui PUBLIC VK_NO_PROTOTYPES)
+target_compile_options(imgui PRIVATE -w) # disable warnings
 target_link_libraries(${CMAKE_PROJECT_NAME} imgui)
-set_property(TARGET imgui PROPERTY SYSTEM TRUE)
 
 ##### nativefiledialog-extended #########################
 add_subdirectory(nativefiledialog-extended)
+target_compile_options(nfd PRIVATE -w) # disable warnings
 target_link_libraries(${CMAKE_PROJECT_NAME} nfd)
-set_property(TARGET nfd PROPERTY SYSTEM TRUE)
 
 ##### parallel-rdp-standalone #########################
 add_library(parallel-rdp-standalone STATIC
@@ -98,24 +95,32 @@ target_compile_definitions(parallel-rdp-standalone PUBLIC VK_NO_PROTOTYPES)
 if(WIN32)
 	target_compile_definitions(parallel-rdp-standalone PRIVATE VK_USE_PLATFORM_WIN32_KHR)
 endif()
+target_compile_options(parallel-rdp-standalone PRIVATE -w) # disable warnings
 target_link_libraries(${CMAKE_PROJECT_NAME} parallel-rdp-standalone)
-set_property(TARGET parallel-rdp-standalone PROPERTY SYSTEM TRUE)
 
 ##### SDL #########################
-set(SDL2_DISABLE_SDL2MAIN ON)
-set(SDL2_DISABLE_INSTALL ON)
-set(SDL2_DISABLE_UNINSTALL ON)
 set(SDL_SHARED OFF)
 set(SDL_STATIC ON)
-set(SDL_TEST OFF)
+set(SDL_TEST_LIBRARY OFF)
+set(SDL_TESTS OFF)
 set(SDL_SHARED_ENABLED_BY_DEFAULT OFF)
 set(SDL_STATIC_ENABLED_BY_DEFAULT ON)
 set(SDL_TEST_ENABLED_BY_DEFAULT OFF)
+set(SDL2_DISABLE_SDL2MAIN ON)
+set(SDL2_DISABLE_INSTALL ON)
+set(SDL2_DISABLE_UNINSTALL ON)
 add_subdirectory(SDL)
+target_compile_options(SDL3-static PRIVATE -w) # disable warnings
 target_link_libraries(${CMAKE_PROJECT_NAME} SDL3-static)
-set_property(TARGET SDL3-static PROPERTY SYSTEM TRUE)
 
 #### yaml-cpp #########################
 add_subdirectory(yaml-cpp)
 target_link_libraries(${CMAKE_PROJECT_NAME} yaml-cpp)
-set_property(TARGET yaml-cpp PROPERTY SYSTEM TRUE)
+target_compile_options(yaml-cpp PRIVATE -w) # disable warnings
+
+##### General #################
+set_target_properties(
+	asmjit bit7z64 imgui nfd parallel-rdp-standalone SDL3-static yaml-cpp
+	PROPERTIES
+	SYSTEM TRUE
+)

@@ -144,7 +144,7 @@ constexpr char const* SystemToNode(System system)
     case System::N64: return "n64";
     case System::NES: return "nes";
     case System::PS2: return "ps2";
-    default: assert(false);
+    default: throw std::invalid_argument("Unexpected System given to SystemToNode");
     }
 }
 

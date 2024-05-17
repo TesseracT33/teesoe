@@ -3,12 +3,12 @@
 #include "vulkan_headers.hpp"
 
 #include "numtypes.hpp"
-#include "parallel-rdp-standalone/parallel-rdp/rdp_device.hpp"
-#include "parallel-rdp-standalone/volk/volk.h"
-#include "parallel-rdp-standalone/vulkan/wsi.hpp"
+#include "parallel-rdp/rdp_device.hpp"
 #include "rdp_implementation.hpp"
 #include "SDL_vulkan.h"
 #include "status.hpp"
+#include "volk/volk.h"
+#include "vulkan/wsi.hpp"
 
 #include <array>
 #include <functional>
