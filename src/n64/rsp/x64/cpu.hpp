@@ -123,12 +123,12 @@ struct Recompiler : public mips::RecompilerX64<s32, u32, RegisterAllocator> {
         if (rs || imm > 0xFFC) {
             Gpd hs = GetGpr(rs);
             Label l_no_ov = c.newLabel(), l_end = c.newLabel();
-            c.mov(rcx, dmem);
             c.lea(eax, ptr(hs, imm)); // addr
             c.and_(eax, 0xFFF);
             c.cmp(eax, 0xFFC);
             c.jbe(l_no_ov);
 
+            c.mov(rcx, dmem);
             c.mov(dh, byte_ptr(rcx, rax));
             c.inc(eax);
             c.and_(eax, 0xFFF);
@@ -144,7 +144,7 @@ struct Recompiler : public mips::RecompilerX64<s32, u32, RegisterAllocator> {
             c.jmp(l_end);
 
             c.bind(l_no_ov);
-            c.movbe(ht, dword_ptr(rcx, rax));
+            c.movbe(ht, JitPtrOffset(dmem, rax, 4));
 
             c.bind(l_end);
         } else {
@@ -226,12 +226,12 @@ struct Recompiler : public mips::RecompilerX64<s32, u32, RegisterAllocator> {
         if (rs || imm > 0xFFC) {
             Gpd hs = GetGpr(rs);
             Label l_no_ov = c.newLabel(), l_end = c.newLabel();
-            c.mov(rcx, dmem);
             c.lea(eax, ptr(hs, imm)); // addr
             c.and_(eax, 0xFFF);
             c.cmp(eax, 0xFFC);
             c.jbe(l_no_ov);
 
+            c.mov(rcx, dmem);
             c.mov(edx, ht);
             c.bswap(edx);
             c.mov(byte_ptr(rcx, rax), dl);
@@ -248,7 +248,7 @@ struct Recompiler : public mips::RecompilerX64<s32, u32, RegisterAllocator> {
             c.jmp(l_end);
 
             c.bind(l_no_ov);
-            c.movbe(dword_ptr(rcx, rax), ht);
+            c.movbe(JitPtrOffset(dmem, rax, 4), ht);
 
             c.bind(l_end);
         } else {
