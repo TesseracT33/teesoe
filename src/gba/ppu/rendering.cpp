@@ -735,24 +735,8 @@ void ScanOam()
         }
         u8 obj_shape = oam[oam_addr + 1] >> 6 & 3;
         u8 obj_size = oam[oam_addr + 3] >> 6 & 3;
-        static constexpr u8 obj_height_table[4][4] = { /* OBJ Size (0-3) * OBJ Shape (0-2 (3 prohibited)) */
-            8,
-            8,
-            16,
-            8,
-            16,
-            8,
-            32,
-            16,
-            32,
-            16,
-            32,
-            32,
-            64,
-            32,
-            64,
-            64
-        };
+        /* OBJ Size (0-3) * OBJ Shape (0-2 (3 prohibited)) */
+        static constexpr u8 obj_height_table[4][4] = { 8, 8, 16, 8, 16, 8, 32, 16, 32, 16, 32, 32, 64, 32, 64, 64 };
         static constexpr u8 obj_width_table[4][4] = { 8, 16, 8, 8, 16, 32, 8, 16, 32, 32, 16, 32, 64, 64, 32, 64 };
         u8 obj_height = obj_height_table[obj_size][obj_shape] << (double_size_obj_disable & rotate_scale);
         if (y_coord + obj_height <= v_counter) {

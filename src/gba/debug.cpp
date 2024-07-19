@@ -7,12 +7,13 @@
 namespace gba {
 
 static std::string FormatCPSR(u32 cpsr);
-static std::string FormatRegisters(std::array<u32, 16> const& r);
+static std::string FormatRegisters(std::span<u32 const, 16> reg);
 static std::ofstream log;
 
 std::string FormatCPSR(u32 cpsr)
 {
-    static constexpr std::array flag_strs = { "nzcv",
+    static constexpr std::array flag_strs = {
+        "nzcv",
         "nzcV",
         "nzCv",
         "nzCV",
@@ -27,34 +28,35 @@ std::string FormatCPSR(u32 cpsr)
         "NZcv",
         "NZcV",
         "NZCv",
-        "NZCV" };
+        "NZCV",
+    };
     static constexpr std::array ift_strs = { "ift", "ifT", "iFt", "iFT", "Ift", "IfT", "IFt", "IFT" };
     return std::format("{}/{}/{:02X}", flag_strs[cpsr >> 28], ift_strs[cpsr >> 5 & 7], cpsr & 0x1F);
 }
 
-std::string FormatRegisters(std::array<u32, 16> const& r)
+std::string FormatRegisters(std::span<u32 const, 16> reg)
 {
     return std::format("r0:{:08X} r1:{:08X} r2:{:08X} r3:{:08X} r4:{:08X} r5:{:08X} r6:{:08X} r7:{:08X} "
                        "r8:{:08X} r9:{:08X} r10:{:08X} r11:{:08X} r12:{:08X} sp:{:08X} lr:{:08X} pc:{:08X}",
-      r[0],
-      r[1],
-      r[2],
-      r[3],
-      r[4],
-      r[5],
-      r[6],
-      r[7],
-      r[8],
-      r[9],
-      r[10],
-      r[11],
-      r[12],
-      r[13],
-      r[14],
-      r[15]);
+      reg[0],
+      reg[1],
+      reg[2],
+      reg[3],
+      reg[4],
+      reg[5],
+      reg[6],
+      reg[7],
+      reg[8],
+      reg[9],
+      reg[10],
+      reg[11],
+      reg[12],
+      reg[13],
+      reg[14],
+      reg[15]);
 }
 
-void LogInstruction(u32 pc, u32 opcode, std::string_view cond_str, bool cond, std::array<u32, 16> const& r, u32 cpsr)
+void LogInstruction(u32 pc, u32 opcode, std::string_view cond_str, bool cond, std::span<u32 const, 16> reg, u32 cpsr)
 {
     if (!log.is_open()) {
         return;
@@ -63,27 +65,27 @@ void LogInstruction(u32 pc, u32 opcode, std::string_view cond_str, bool cond, st
       pc,
       opcode,
       cond_str,
-      cond,
-      FormatRegisters(r),
+      int(cond),
+      FormatRegisters(reg),
       FormatCPSR(cpsr));
     std::flush(log);
 }
 
-void LogInstruction(u32 pc, u16 opcode, std::array<u32, 16> const& r, u32 cpsr)
+void LogInstruction(u32 pc, u16 opcode, std::span<u32 const, 16> reg, u32 cpsr)
 {
     if (!log.is_open()) {
         return;
     }
-    log << std::format("{:08X}  THUMB:{:04X} {} cpsr:{}\n", pc, opcode, FormatRegisters(r), FormatCPSR(cpsr));
+    log << std::format("{:08X}  THUMB:{:04X} {} cpsr:{}\n", pc, opcode, FormatRegisters(reg), FormatCPSR(cpsr));
     std::flush(log);
 }
 
-void LogInstruction(u32 pc, std::string instr_output, std::array<u32, 16> const& r, u32 cpsr)
+void LogInstruction(u32 pc, std::string instr_output, std::span<u32 const, 16> reg, u32 cpsr)
 {
     if (!log.is_open()) {
         return;
     }
-    log << std::format("{:08X}  {} {} cpsr:{}\n", pc, instr_output, FormatRegisters(r), FormatCPSR(cpsr));
+    log << std::format("{:08X}  {} {} cpsr:{}\n", pc, instr_output, FormatRegisters(reg), FormatCPSR(cpsr));
     std::flush(log);
 }
 

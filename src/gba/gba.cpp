@@ -47,6 +47,11 @@ Status GBA::Init()
     scheduler::Initialize();
     serial::Initialize();
     timers::Initialize();
+
+    if (LoggingIsEnabled()) {
+        SetLogPath("I:\\teesoe_gba.log");
+    }
+
     return OkStatus();
 }
 

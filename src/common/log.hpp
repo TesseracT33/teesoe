@@ -1,10 +1,12 @@
 #pragma once
 
+#include <iosfwd>
 #include <source_location>
 #include <string_view>
 
 class Status;
 
+std::ofstream const& GetFileLogHandle();
 Status InitFileLog();
 void Log(std::string_view out);
 void LogError(std::string_view out);

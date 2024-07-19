@@ -58,7 +58,7 @@ inline CpuImpl cpu_impl;
 alignas(
   16) inline constinit std::array<u8, 0x2000> mem{}; /* 0 - $FFF: data memory; $1000 - $1FFF: instruction memory */
 
-inline constinit u8* const dmem = mem.data();
-inline constinit u8* const imem = mem.data() + 0x1000;
+inline constexpr u8* dmem = mem.data();
+inline constexpr u8* imem = mem.data() + 0x1000;
 
 } // namespace n64::rsp

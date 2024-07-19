@@ -70,7 +70,7 @@ template<std::signed_integral Int> Int Read(u32 addr)
     if ((addr & 0xFFFF'F800) == 0x1FC0'0000) { /* $1FC0'0000 - $1FC0'07FF */
         return pif::ReadMemory<Int>(addr);
     }
-    LogWarn(std::format("Unexpected cpu read to address ${:08X}", addr));
+    LogWarn(std::format("Unexpected cpu read from address ${:08X}", addr));
     return Int{};
 }
 
