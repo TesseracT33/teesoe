@@ -25,22 +25,22 @@ struct {
 static_assert(sizeof(mem) == 0x800);
 
 struct JoypadStatus {
-    u32 a      : 1;
-    u32 b      : 1;
-    u32 z      : 1;
-    u32 s      : 1;
-    u32 dU     : 1;
-    u32 dD     : 1;
-    u32 dL     : 1;
     u32 dR     : 1;
-    u32 rst    : 1;
-    u32        : 1;
-    u32 l      : 1;
-    u32 r      : 1;
-    u32 cU     : 1;
-    u32 cD     : 1;
-    u32 cL     : 1;
+    u32 dL     : 1;
+    u32 dD     : 1;
+    u32 dU     : 1;
+    u32 s      : 1;
+    u32 z      : 1;
+    u32 b      : 1;
+    u32 a      : 1;
     u32 cR     : 1;
+    u32 cL     : 1;
+    u32 cD     : 1;
+    u32 cU     : 1;
+    u32 rt     : 1;
+    u32 lt     : 1;
+    u32        : 1;
+    u32 rst    : 1;
     u32 x_axis : 8;
     u32 y_axis : 8;
 } static joypad_status;
@@ -124,7 +124,7 @@ void OnButtonAction(Control control, bool pressed)
 {
     auto OnShoulderOrStartChanged = [pressed] {
         if (pressed) {
-            if (joypad_status.l && joypad_status.r && joypad_status.s) {
+            if (joypad_status.lt && joypad_status.rt && joypad_status.s) {
                 joypad_status.rst = 1;
                 joypad_status.s = joypad_status.x_axis = joypad_status.y_axis = 0;
             }
@@ -144,11 +144,11 @@ void OnButtonAction(Control control, bool pressed)
     case Control::DLeft: joypad_status.dL = pressed; break;
     case Control::DRight: joypad_status.dR = pressed; break;
     case Control::L:
-        joypad_status.l = pressed;
+        joypad_status.lt = pressed;
         OnShoulderOrStartChanged();
         break;
     case Control::R:
-        joypad_status.r = pressed;
+        joypad_status.rt = pressed;
         OnShoulderOrStartChanged();
         break;
     case Control::Start:
@@ -187,22 +187,31 @@ void RunJoybusProtocol()
 {
     int channel{}, offset{};
     while (offset < 64 && channel < 5) {
-        u8* cmd_base = &mem.ram[offset++];
-        u8 cmd_len = cmd_base[0];
+        /* command format
+            | command length (1 byte) | result length (1 byte) | command | result |
+            repeat until $fe (end of commands)
+        */
+        u8 cmd_len = mem.ram[offset++];
         if (cmd_len == 0 || cmd_len == 253) {
             ++channel;
             continue;
         }
-        if (cmd_len == 254) break; // end of commands
-        if (cmd_len == 255) continue;
+        if (cmd_len == 254) { // end of commands
+            break;
+        }
+        if (cmd_len == 255) {
+            continue;
+        }
         cmd_len &= 63;
         u8 result_len = mem.ram[offset++];
-        if (result_len == 254) break; // end of commands
+        if (result_len == 254) { // end of commands
+            break;
+        }
         result_len &= 63;
-        assert(offset + cmd_len < mem.ram.size());
+        assert(offset + cmd_len + result_len < mem.ram.size());
         u8* result = &mem.ram[offset + cmd_len];
 
-        switch (u8 cmd = mem.ram[offset++]; cmd) {
+        switch (u8 cmd = mem.ram[offset]; cmd) { // TODO: currently only supprting 1-byte commands
         case 0:
             ControllerId(result);
             ++channel;
@@ -223,6 +232,7 @@ void RunJoybusProtocol()
             break;
         default: LogWarn(std::format("Unexpected joybus command {} encountered.", cmd));
         }
+        offset += cmd_len + result_len;
     }
 }
 
