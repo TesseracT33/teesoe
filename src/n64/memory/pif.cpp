@@ -53,7 +53,6 @@ static void ControllerReset();
 static u8 AddrCrc(u16 addr);
 static u8 DataCrc(std::string_view data);
 static void RomLockout();
-static void RunJoybusProtocol();
 static void TerminateBootProcess();
 
 void ChallengeProtection()
@@ -172,6 +171,13 @@ void OnJoystickMovement(Control control, s16 value)
     }
 }
 
+s32 ReadCommand()
+{
+    s32 ret;
+    std::memcpy(&ret, &mem.ram[0x3C], 4);
+    return std::byteswap(ret);
+}
+
 template<std::signed_integral Int> Int ReadMemory(u32 addr)
 { /* CPU precondition: addr is aligned */
     Int ret;
@@ -238,6 +244,12 @@ void RunJoybusProtocol()
 
 void TerminateBootProcess()
 {
+}
+
+void WriteCommand(s32 data)
+{
+    data = std::byteswap(data);
+    std::memcpy(&mem.ram[0x3C], &data, 4);
 }
 
 template<size_t access_size> void WriteMemory(u32 addr, s64 data)
