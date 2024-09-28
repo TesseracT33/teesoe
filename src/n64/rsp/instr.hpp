@@ -50,3 +50,4 @@ void subu(u32 rs, u32 rt, u32 rd);
 void sw(u32 rs, u32 rt, s16 imm);
 void xor_(u32 rs, u32 rt, u32 rd);
 void xori(u32 rs, u32 rt, u16 imm);
+ 

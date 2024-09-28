@@ -35,77 +35,122 @@ struct RecompilerX64 : public Recompiler<GprInt, PcInt, RegisterAllocator> {
 
     void add(u32 rs, u32 rt, u32 rd) const
     {
-        Label l_noexception = c.newLabel();
-        Gpd hs = GetGpr32(rs), ht = GetGpr32(rt);
-        c.mov(eax, hs);
-        c.add(eax, ht);
-        c.jno(l_noexception);
+        Label l_no_ov = c.newLabel();
+        c.mov(eax, GprPtr32(rs));
+        if (rs == rt) {
+            c.add(eax, eax);
+        } else {
+            c.add(eax, GprPtr32(rt));
+        }
+        c.jno(l_no_ov);
         block_epilog_with_pc_flush_and_jmp(integer_overflow_exception, 0);
-        c.bind(l_noexception);
+        c.bind(l_no_ov);
         if (rd) {
-            Gp hd = GetDirtyGpr(rd);
-            mips32 ? c.mov(hd, eax) : c.movsxd(hd, eax);
+            c.cdqe(rax);
+            c.mov(GprPtr64(rd), rax);
         }
     }
 
     void addi(u32 rs, u32 rt, s16 imm) const
     {
-        Label l_noexception = c.newLabel();
-        Gpd hs = GetGpr32(rs);
-        c.mov(eax, hs);
-        c.add(eax, imm);
-        c.jno(l_noexception);
+        Label l_no_ov = c.newLabel();
+        c.mov(eax, GprPtr32(rs));
+        if (imm == 1) {
+            c.inc(eax);
+        } else if (imm == -1) {
+            c.dec(eax);
+        } else {
+            c.add(eax, imm);
+        }
+        c.jno(l_no_ov);
         block_epilog_with_pc_flush_and_jmp(integer_overflow_exception, 0);
-        c.bind(l_noexception);
+        c.bind(l_no_ov);
         if (rt) {
-            Gp ht = GetDirtyGpr(rt);
-            mips32 ? c.mov(ht, eax) : c.movsxd(ht, eax);
+            c.cdqe(rax);
+            c.mov(GprPtr64(rt), rax);
         }
     }
 
     void addiu(u32 rs, u32 rt, s16 imm) const
     {
         if (!rt) return;
-        Gpd ht = GetDirtyGpr32(rt), hs = GetGpr32(rs);
-        c.lea(ht, ptr(hs, imm));
-        if constexpr (mips64) c.movsxd(ht.r64(), ht);
+        c.mov(eax, GprPtr32(rs));
+        if (imm == 1) {
+            c.inc(eax);
+        } else if (imm == -1) {
+            c.dec(eax);
+        } else {
+            c.add(eax, imm);
+        }
+        c.cdqe(rax);
+        c.mov(GprPtr64(rt), rax);
     }
 
     void addu(u32 rs, u32 rt, u32 rd) const
     {
         if (!rd) return;
-        Gpd hd = GetDirtyGpr32(rd), hs = GetGpr32(rs), ht = GetGpr32(rt);
-        c.lea(hd, ptr(hs, ht));
-        if constexpr (mips64) c.movsxd(hd.r64(), hd);
+        c.mov(eax, GprPtr32(rs));
+        if (rs == rt) {
+            c.add(eax, eax);
+        } else {
+            c.add(eax, GprPtr32(rt));
+        }
+        c.cdqe(rax);
+        c.mov(GprPtr64(rd), rax);
+
+        Gpq hd = GetDirtyGpr64(rd);
+        Gpd hs = GetGpr32(rs);
+        if (GprIsLoaded(rt)) {
+            Gpd ht = GetGpr32(rt);
+            c.add(hs, ht);
+        } else {
+            c.add(hs, GprPtr32(rt));
+        }
+        c.movsxd(hd, hs);
     }
 
     void and_(u32 rs, u32 rt, u32 rd) const
     {
         if (!rd) return;
-        Gp hd = GetDirtyGpr(rd);
-        if (!rs || !rt) {
-            c.xor_(hd.r32(), hd.r32());
+        if (rd == rs) {
+            c.mov(rax, GprPtr64(rt));
+            c.and_(GprPtr64(rd), rax);
         } else {
-            Gp hs = GetGpr(rs), ht = GetGpr(rt);
-            if (rt == rd) {
-                c.and_(hd, hs);
-            } else {
-                if (rs != rd) c.mov(hd, hs);
-                c.and_(hd, ht);
-            }
+            c.mov(rax, GprPtr64(rs));
+            c.and_(rax, GprPtr64(rt));
+            c.mov(GprPtr64(rd), rax);
+        }
+
+        Gpq hd = GetDirtyGpr64(rd);
+        Gpq hs = GetGpr64(rs);
+        if (GprIsLoaded(rt)) {
+            c.and_(hs, GetGpr64(rt));
+        } else {
+            c.and_(hs, GprPtr64(rt));
+        }
+        if (rd != rs) {
+            c.mov(hd, hs);
         }
     }
 
     void andi(u32 rs, u32 rt, u16 imm) const
     {
         if (!rt) return;
-        Gp ht = GetDirtyGpr(rt);
-        if (!rs) {
-            c.xor_(ht.r32(), ht.r32());
+        if (rs == rt) {
+            c.and_(GprPtr64(rt), imm);
         } else {
-            Gp hs = GetGpr(rs);
-            if (rs != rt) c.mov(ht, hs);
+            c.mov(eax, GprPtr32(rs));
+            c.and_(eax, imm);
+            c.mov(GprPtr64(rt), rax);
+        }
+
+        Gpd ht = GetDirtyGpr32(rt);
+        if (rs == rt) {
             c.and_(ht, imm);
+        } else {
+            Gpd hs = GetGpr32(rs);
+            c.and_(hs, imm);
+            c.mov(ht, hs);
         }
     }
 
@@ -128,149 +173,230 @@ struct RecompilerX64 : public Recompiler<GprInt, PcInt, RegisterAllocator> {
     void dadd(u32 rs, u32 rt, u32 rd) const
     {
         if (!check_can_exec_dword_instr()) return;
-        Label l_noexception = c.newLabel();
-        Gpq hs = GetGpr(rs), ht = GetGpr(rt);
-        c.mov(rax, hs);
-        c.add(rax, ht);
-        c.jno(l_noexception);
+        Label l_no_ov = c.newLabel();
+        c.mov(rax, GprPtr64(rs));
+        if (rs == rt) {
+            c.add(rax, rax);
+        } else {
+            c.add(rax, GprPtr64(rt));
+        }
+        c.jno(l_no_ov);
         block_epilog_with_pc_flush_and_jmp(integer_overflow_exception, 0);
-        c.bind(l_noexception);
-        if (rd) c.mov(GetDirtyGpr(rd), rax);
+        c.bind(l_no_ov);
+        if (rd) {
+            c.mov(GprPtr64(rd), rax);
+        }
     }
 
     void daddi(u32 rs, u32 rt, s16 imm) const
     {
         if (!check_can_exec_dword_instr()) return;
-        Label l_noexception = c.newLabel();
-        Gpq hs = GetGpr(rs);
-        c.mov(rax, hs);
+        Label l_no_ov = c.newLabel();
+        c.mov(rax, GprPtr64(rs));
         c.add(rax, imm);
-        c.jno(l_noexception);
+        c.jno(l_no_ov);
         block_epilog_with_pc_flush_and_jmp(integer_overflow_exception, 0);
-        c.bind(l_noexception);
-        if (rt) c.mov(GetDirtyGpr(rt), rax);
+        c.bind(l_no_ov);
+        if (rt) {
+            c.mov(GprPtr64(rt), rax);
+        }
     }
 
     void daddiu(u32 rs, u32 rt, s16 imm) const
     {
         if (!check_can_exec_dword_instr()) return;
-        if (!rt) return;
-        Gpq ht = GetDirtyGpr(rt), hs = GetGpr(rs);
-        c.lea(ht, ptr(hs, imm));
+        if (!rt || !imm) return;
+        if (rs == rt) {
+            if (imm == 1) {
+                c.inc(GprPtr64(rt));
+            } else if (imm == -1) {
+                c.dec(GprPtr64(rt));
+            } else {
+                c.add(GprPtr64(rt), imm);
+            }
+        } else {
+            c.mov(rax, GprPtr64(rs));
+            c.add(rax, imm);
+            c.mov(GprPtr64(rt), rax);
+        }
     }
 
     void daddu(u32 rs, u32 rt, u32 rd) const
     {
         if (!check_can_exec_dword_instr()) return;
         if (!rd) return;
-        Gpq hd = GetDirtyGpr(rd), hs = GetGpr(rs), ht = GetGpr(rt);
-        c.lea(hd, ptr(hs, ht));
+        if (rd == rs) {
+            if (rs == rt) {
+                c.shl(GprPtr64(rd), 1);
+            } else {
+                c.mov(rax, GprPtr64(rt));
+                c.add(GprPtr64(rd), rax);
+            }
+        } else {
+            c.mov(rax, GprPtr64(rs));
+            if (rs == rt) {
+                c.add(rax, rax);
+            } else {
+                c.add(rax, GprPtr64(rt));
+            }
+            c.mov(GprPtr64(rd), rax);
+        }
     }
 
     void dsll(u32 rt, u32 rd, u32 sa) const
     {
         if (!check_can_exec_dword_instr()) return;
         if (!rd) return;
-        Gpq hd = GetDirtyGpr(rd), ht = GetGpr(rt);
-        if (rt != rd) c.mov(hd, ht);
-        if (sa) c.shl(hd, sa);
+        if (rd == rt) {
+            if (sa) {
+                c.shl(GprPtr64(rd), sa);
+            }
+        } else {
+            c.mov(rax, GprPtr64(rt));
+            if (sa) {
+                c.shl(rax, sa);
+            }
+            c.mov(GprPtr64(rd), rax);
+        }
     }
 
     void dsll32(u32 rt, u32 rd, u32 sa) const
     {
         if (!check_can_exec_dword_instr()) return;
         if (!rd) return;
-        Gpq hd = GetDirtyGpr(rd), ht = GetGpr(rt);
-        if (rt != rd) c.mov(hd, ht);
-        c.shl(hd, sa + 32);
+        if (rd == rt) {
+            c.shl(GprPtr64(rd), sa + 32);
+        } else {
+            c.mov(eax, GprPtr32(rt));
+            c.shl(rax, sa + 32);
+            c.mov(GprPtr64(rd), rax);
+        }
     }
 
     void dsllv(u32 rs, u32 rt, u32 rd) const
     {
         if (!check_can_exec_dword_instr()) return;
         if (!rd) return;
-        Gpq hd = GetDirtyGpr(rd), hs = GetGpr(rs), ht = GetGpr(rt);
-        c.shlx(hd, ht, hs);
+        c.mov(ecx, GprPtr32(rs));
+        if (rd == rt) {
+            c.shl(GprPtr64(rd), cl);
+        } else {
+            c.shlx(rax, GprPtr64(rt), rcx);
+            c.mov(GprPtr64(rd), rax);
+        }
     }
 
     void dsra(u32 rt, u32 rd, u32 sa) const
     {
         if (!check_can_exec_dword_instr()) return;
         if (!rd) return;
-        Gpq hd = GetDirtyGpr(rd), ht = GetGpr(rt);
-        if (rt != rd) c.mov(hd, ht);
-        if (sa) c.sar(hd, sa);
+        if (rd == rt) {
+            if (sa) {
+                c.sar(GprPtr64(rd), sa);
+            }
+        } else {
+            c.mov(rax, GprPtr64(rt));
+            if (sa) {
+                c.sar(rax, sa);
+            }
+            c.mov(GprPtr64(rd), rax);
+        }
     }
 
     void dsra32(u32 rt, u32 rd, u32 sa) const
     {
         if (!check_can_exec_dword_instr()) return;
         if (!rd) return;
-        Gpq hd = GetDirtyGpr(rd), ht = GetGpr(rt);
-        if (rt != rd) c.mov(hd, ht);
-        c.sar(hd, sa + 32);
+        if (rd == rt) {
+            c.sar(GprPtr64(rd), sa + 32);
+        } else {
+            c.mov(rax, GprPtr64(rt));
+            c.sar(rax, sa + 32);
+            c.mov(GprPtr64(rd), rax);
+        }
     }
 
     void dsrav(u32 rs, u32 rt, u32 rd) const
     {
         if (!check_can_exec_dword_instr()) return;
         if (!rd) return;
-        Gpq hd = GetDirtyGpr(rd), hs = GetGpr(rs), ht = GetGpr(rt);
-        c.sarx(hd, ht, hs);
+        c.mov(ecx, GprPtr32(rs));
+        if (rd == rt) {
+            c.sar(GprPtr64(rd), cl);
+        } else {
+            c.sarx(rax, GprPtr64(rt), rcx);
+            c.mov(GprPtr64(rd), rax);
+        }
     }
 
     void dsrl(u32 rt, u32 rd, u32 sa) const
     {
         if (!check_can_exec_dword_instr()) return;
         if (!rd) return;
-        Gpq hd = GetDirtyGpr(rd), ht = GetGpr(rt);
-        if (rt != rd) c.mov(hd, ht);
-        if (sa) c.shr(hd, sa);
+        if (rd == rt) {
+            if (sa) {
+                c.shr(GprPtr64(rd), sa);
+            }
+        } else {
+            c.mov(rax, GprPtr64(rt));
+            if (sa) {
+                c.shr(rax, sa);
+            }
+            c.mov(GprPtr64(rd), rax);
+        }
     }
 
     void dsrl32(u32 rt, u32 rd, u32 sa) const
     {
         if (!check_can_exec_dword_instr()) return;
         if (!rd) return;
-        Gpq hd = GetDirtyGpr(rd), ht = GetGpr(rt);
-        if (rt != rd) c.mov(hd, ht);
-        c.shr(hd, sa + 32);
+        if (rd == rt) {
+            c.shr(GprPtr64(rd), sa + 32);
+        } else {
+            c.mov(rax, GprPtr64(rt));
+            c.shr(rax, sa + 32);
+            c.mov(GprPtr64(rd), rax);
+        }
     }
 
     void dsrlv(u32 rs, u32 rt, u32 rd) const
     {
         if (!check_can_exec_dword_instr()) return;
         if (!rd) return;
-        Gpq hd = GetDirtyGpr(rd), hs = GetGpr(rs), ht = GetGpr(rt);
-        c.shrx(hd, ht, hs);
+        c.mov(ecx, GprPtr32(rs));
+        if (rd == rt) {
+            c.shr(GprPtr64(rd), cl);
+        } else {
+            c.shrx(rax, GprPtr64(rt), rcx);
+            c.mov(GprPtr64(rd), rax);
+        }
     }
 
     void dsub(u32 rs, u32 rt, u32 rd) const
     {
         if (!check_can_exec_dword_instr()) return;
-        Label l_noexception = c.newLabel();
-        Gpq hs = GetGpr(rs), ht = GetGpr(rt);
-        c.mov(rax, hs);
-        c.sub(rax, ht);
-        c.jno(l_noexception);
+        Label l_no_ov = c.newLabel();
+        c.mov(rax, GprPtr64(rs));
+        c.sub(rax, GprPtr64(rt));
+        c.jno(l_no_ov);
         block_epilog_with_pc_flush_and_jmp(integer_overflow_exception, 0);
-        c.bind(l_noexception);
-        if (rd) c.mov(GetDirtyGpr(rd), rax);
+        c.bind(l_no_ov);
+        if (rd) {
+            c.mov(GprPtr64(rd), rax);
+        }
     }
 
     void dsubu(u32 rs, u32 rt, u32 rd) const
     {
         if (!check_can_exec_dword_instr()) return;
         if (!rd) return;
-        Gpq hd = GetDirtyGpr(rd), hs = GetGpr(rs), ht = GetGpr(rt);
-        if (rs == rt && rt == rd) {
-            c.xor_(hd.r32(), hd.r32());
-        } else if (rt == rd) {
-            c.neg(hd);
-            c.add(hd, hs);
+        if (rd == rs) {
+            c.mov(rax, GprPtr64(rt));
+            c.sub(GprPtr64(rd), rax);
         } else {
-            if (rs != rd) c.mov(hd, hs);
-            c.sub(hd, ht);
+            c.mov(rax, GprPtr64(rs));
+            c.sub(rax, GprPtr64(rt));
+            c.mov(GprPtr64(rd), rax);
         }
     }
 
@@ -303,137 +429,160 @@ struct RecompilerX64 : public Recompiler<GprInt, PcInt, RegisterAllocator> {
     void lui(u32 rt, s16 imm) const
     {
         if (!rt) return;
-        Gp ht = GetDirtyGpr(rt);
-        imm ? c.mov(ht, imm << 16) : c.xor_(ht.r32(), ht.r32());
+        c.mov(GprPtr64(rt), imm << 16);
     }
 
     void mfhi(u32 rd) const
     {
         if (rd) {
-            c.mov(GetDirtyGpr(rd), get_hi_ptr());
+            c.mov(rax, get_hi_ptr());
+            c.mov(GprPtr64(rd), rax);
         }
     }
 
     void mflo(u32 rd) const
     {
         if (rd) {
-            c.mov(GetDirtyGpr(rd), get_lo_ptr());
+            c.mov(rax, get_lo_ptr());
+            c.mov(GprPtr64(rd), rax);
         }
     }
 
-    void movn(u32 rs, u32 rt, u32 rd) const
+    void mthi(u32 rs) const
     {
-        if (!rd) return;
-        Gp hd = GetDirtyGpr(rd), hs = GetGpr(rs), ht = GetGpr(rt);
-        c.test(ht, ht);
-        c.cmovne(hd, hs);
+        c.mov(rax, GprPtr64(rs));
+        c.mov(get_hi_ptr(), rax);
     }
 
-    void movz(u32 rs, u32 rt, u32 rd) const
+    void mtlo(u32 rs) const
     {
-        if (!rd) return;
-        Gp hd = GetDirtyGpr(rd), hs = GetGpr(rs), ht = GetGpr(rt);
-        c.test(ht, ht);
-        c.cmove(hd, hs);
+        c.mov(rax, GprPtr64(rs));
+        c.mov(get_lo_ptr(), rax);
     }
-
-    void mthi(u32 rs) const { c.mov(get_hi_ptr(), GetGpr(rs)); }
-
-    void mtlo(u32 rs) const { c.mov(get_lo_ptr(), GetGpr(rs)); }
 
     void nor(u32 rs, u32 rt, u32 rd) const
     {
         if (!rd) return;
-        Gp hd = GetDirtyGpr(rd), hs = GetGpr(rs), ht = GetGpr(rt);
-        if (rt == rd) {
-            c.or_(hd, hs);
-        } else {
-            if (rs != rd) c.mov(hd, hs);
-            c.or_(hd, ht);
-        }
-        c.not_(hd);
+        c.mov(rax, GprPtr64(rs));
+        c.or_(rax, GprPtr64(rt));
+        c.not_(rax);
+        c.mov(GprPtr64(rd), rax);
     }
 
     void or_(u32 rs, u32 rt, u32 rd) const
     {
         if (!rd) return;
-        Gp hd = GetDirtyGpr(rd), hs = GetGpr(rs), ht = GetGpr(rt);
-        if (rt == rd) {
-            c.or_(hd, hs);
+        if (rd == rs) {
+            c.mov(rax, GprPtr64(rt));
+            c.or_(GprPtr64(rd), rax);
         } else {
-            if (rs != rd) c.mov(hd, hs);
-            c.or_(hd, ht);
+            c.mov(rax, GprPtr64(rs));
+            c.or_(rax, GprPtr64(rt));
+            c.mov(GprPtr64(rd), rax);
         }
     }
 
     void ori(u32 rs, u32 rt, u16 imm) const
     {
         if (!rt) return;
-        Gp ht = GetDirtyGpr(rt), hs = GetGpr(rs);
-        if (rs != rt) c.mov(ht, hs);
-        if (imm) c.or_(ht, imm);
+        if (rs == rt) {
+            c.or_(GprPtr32(rt), imm);
+        } else {
+            c.mov(eax, GprPtr32(rs));
+            c.or_(eax, imm);
+            c.mov(GprPtr32(rt), eax);
+        }
     }
 
     void sll(u32 rt, u32 rd, u32 sa) const
     {
         if (!rd) return;
-        Gpd hd = GetDirtyGpr32(rd), ht = GetGpr32(rt);
-        if (rt != rd) c.mov(hd, ht);
-        if (sa) c.shl(hd, sa);
-        if constexpr (mips64) c.movsxd(hd.r64(), hd);
+        if (sa) {
+            c.mov(eax, GprPtr32(rt));
+            c.shl(eax, sa);
+            c.cdqe(rax);
+            c.mov(GprPtr64(rd), rax);
+        } else {
+            c.movsxd(rax, GprPtr32(rt));
+            c.mov(GprPtr64(rd), rax);
+        }
     }
 
     void sllv(u32 rs, u32 rt, u32 rd) const
     {
         if (!rd) return;
-        Gpd hd = GetDirtyGpr32(rd), hs = GetGpr32(rs), ht = GetGpr32(rt);
-        c.shlx(hd, ht, hs);
-        if constexpr (mips64) c.movsxd(hd.r64(), hd);
+        c.mov(ecx, GprPtr32(rs));
+        c.shlx(eax, GprPtr32(rt), ecx);
+        c.cdqe(rax);
+        c.mov(GprPtr64(rd), rax);
     }
 
     void slt(u32 rs, u32 rt, u32 rd) const
     {
         if (!rd) return;
-        Gp hd = GetDirtyGpr(rd), hs = GetGpr(rs), ht = GetGpr(rt);
-        c.cmp(hs, ht);
-        c.setl(hd.r8());
-        c.and_(hd.r32(), 1);
+        if (!rs) {
+            c.cmp(GprPtr64(rt), 0);
+            c.setg(al);
+        } else if (!rt) {
+            c.cmp(GprPtr64(rs), 0);
+            c.setl(al);
+        } else {
+            c.mov(rax, GprPtr64(rs));
+            c.cmp(rax, GprPtr64(rt));
+            c.setl(al);
+        }
+        c.and_(eax, 1);
+        c.mov(GprPtr64(rd), rax);
     }
 
     void slti(u32 rs, u32 rt, s16 imm) const
     {
         if (!rt) return;
-        Gp ht = GetDirtyGpr(rt), hs = GetGpr(rs);
-        c.cmp(hs, imm);
-        c.setl(ht.r8());
-        c.and_(ht.r32(), 1);
+        c.cmp(GprPtr64(rs), imm);
+        c.setl(al);
+        c.and_(eax, 1);
+        c.mov(GprPtr64(rd), rax);
     }
 
     void sltiu(u32 rs, u32 rt, s16 imm) const
     {
         if (!rt) return;
-        Gp ht = GetDirtyGpr(rt), hs = GetGpr(rs);
-        c.cmp(hs, imm);
-        c.setb(ht.r8());
-        c.and_(ht.r32(), 1);
+        c.cmp(GprPtr64(rs), imm);
+        c.setb(al);
+        c.and_(eax, 1);
+        c.mov(GprPtr64(rd), rax);
     }
 
     void sltu(u32 rs, u32 rt, u32 rd) const
     {
         if (!rd) return;
-        Gp hd = GetDirtyGpr(rd), hs = GetGpr(rs), ht = GetGpr(rt);
-        c.cmp(hs, ht);
-        c.setb(hd.r8());
-        c.and_(hd.r32(), 1);
+        if (!rs) {
+            c.cmp(GprPtr64(rt), 0);
+            c.seta(al);
+        } else if (!rt) {
+            c.cmp(GprPtr64(rs), 0);
+            c.setb(al);
+        } else {
+            c.mov(rax, GprPtr64(rs));
+            c.cmp(rax, GprPtr64(rt));
+            c.setb(al);
+        }
+        c.and_(eax, 1);
+        c.mov(GprPtr64(rd), rax);
     }
 
     void sra(u32 rt, u32 rd, u32 sa) const
     {
         if (!rd) return;
-        Gp hd = GetDirtyGpr(rd), ht = GetGpr(rt);
-        if (rt != rd) c.mov(hd, ht);
-        if (sa) c.sar(hd, sa);
-        if constexpr (mips64) c.movsxd(hd.r64(), hd);
+        if (sa) {
+            c.mov(eax, GprPtr32(rt));
+            c.sar(eax, sa);
+            c.cdqe(rax);
+            c.mov(GprPtr64(rd), rax);
+        } else {
+            c.movsxd(rax, GprPtr32(rt));
+            c.mov(GprPtr64(rd), rax);
+        }
     }
 
     void srav(u32 rs, u32 rt, u32 rd) const
@@ -469,34 +618,25 @@ struct RecompilerX64 : public Recompiler<GprInt, PcInt, RegisterAllocator> {
 
     void sub(u32 rs, u32 rt, u32 rd) const
     {
-        Label l_noexception = c.newLabel();
-        Gpd hs = GetGpr32(rs), ht = GetGpr32(rt);
-        c.mov(eax, hs);
-        c.sub(eax, ht);
-        c.jno(l_noexception);
+        Label l_no_ov = c.newLabel();
+        c.mov(eax, GprPtr32(rs));
+        c.sub(eax, GprPtr32(rt));
+        c.jno(l_no_ov);
         block_epilog_with_pc_flush_and_jmp(integer_overflow_exception, 0);
-        c.bind(l_noexception);
+        c.bind(l_no_ov);
         if (rd) {
-            Gp hd = GetDirtyGpr(rd);
-            mips32 ? c.mov(hd, eax) : c.movsxd(hd, eax);
+            c.cdqe(rax);
+            c.mov(GprPtr64(rd), rax);
         }
     }
 
     void subu(u32 rs, u32 rt, u32 rd) const
     {
         if (!rd) return;
-        Gpd hd = GetDirtyGpr32(rd), hs = GetGpr32(rs), ht = GetGpr32(rt);
-        if (rs == rt && rt == rd) {
-            c.xor_(hd, hd);
-        } else if (rt == rd) {
-            c.neg(hd);
-            c.add(hd, hs);
-            if constexpr (mips64) c.movsxd(hd.r64(), hd);
-        } else {
-            if (rs != rd) c.mov(hd, hs);
-            c.sub(hd, ht);
-            if constexpr (mips64) c.movsxd(hd.r64(), hd);
-        }
+        c.mov(eax, GprPtr32(rs));
+        c.sub(eax, GprPtr32(rt));
+        c.cdqe(rax);
+        c.mov(GprPtr64(rd), rax);
     }
 
     void teq(u32 rs, u32 rt) const { trap<Cond::Eq>(rs, rt); }
@@ -526,26 +666,26 @@ struct RecompilerX64 : public Recompiler<GprInt, PcInt, RegisterAllocator> {
     void xor_(u32 rs, u32 rt, u32 rd) const
     {
         if (!rd) return;
-        Gp hd = GetDirtyGpr(rd);
-        if (rs == rt) {
-            c.xor_(hd.r32(), hd.r32());
+        if (rd == rs) {
+            c.mov(rax, GprPtr64(rt));
+            c.xor_(GprPtr64(rd), rax);
         } else {
-            Gp hs = GetGpr(rs), ht = GetGpr(rt);
-            if (rt == rd) {
-                c.xor_(hd, hs);
-            } else {
-                if (rs != rd) c.mov(hd, hs);
-                c.xor_(hd, ht);
-            }
+            c.mov(rax, GprPtr64(rs));
+            c.xor_(rax, GprPtr64(rt));
+            c.mov(GprPtr64(rd), rax);
         }
     }
 
     void xori(u32 rs, u32 rt, u16 imm) const
     {
         if (!rt) return;
-        Gp ht = GetDirtyGpr(rt), hs = GetGpr(rs);
-        if (rs != rt) c.mov(ht, hs);
-        if (imm) c.xor_(ht, imm);
+        if (rs == rt) {
+            c.xor_(GprPtr32(rt), imm);
+        } else {
+            c.mov(eax, GprPtr32(rs));
+            c.xor_(eax, imm);
+            c.mov(GprPtr32(rt), eax);
+        }
     }
 
 protected:

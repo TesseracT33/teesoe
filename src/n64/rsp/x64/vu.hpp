@@ -168,14 +168,11 @@ template<std::signed_integral Int> static void LoadUpToDword(u32 base, u32 vt, u
     Xmm ht = GetDirtyVpr(vt);
     c.lea(eax, ptr(hbase, offset * sizeof(Int)));
     c.mov(rcx, dmem);
-    c.vmovaps(xmmword_ptr(x86::rsp, -16), ht);
     for (u32 i = 0; i < std::min((u32)sizeof(Int), 16 - e); ++i) {
         if (i) c.inc(eax);
         c.and_(eax, 0xFFF);
-        c.mov(dl, byte_ptr(rcx, rax));
-        c.mov(byte_ptr(x86::rsp, (e + i ^ 1) - 16), dl);
+        c.vpinsrb(ht, ht, byte_ptr(rcx, rax), (e + i ^ 1) - 16));
     }
-    c.vmovaps(ht, xmmword_ptr(x86::rsp, -16));
 }
 
 // SSV, SLV, SDV
@@ -185,12 +182,10 @@ template<std::signed_integral Int> static void StoreUpToDword(u32 base, u32 vt, 
     Xmm ht = GetVpr(vt);
     c.lea(eax, ptr(hbase, offset * sizeof(Int)));
     c.mov(rcx, dmem);
-    c.vmovaps(xmmword_ptr(x86::rsp, -16), ht);
     for (u32 i = 0; i < sizeof(Int); ++i) {
         if (i) c.inc(eax);
         c.and_(eax, 0xFFF);
-        c.mov(dl, byte_ptr(x86::rsp, (e + i & 15 ^ 1) - 16));
-        c.mov(byte_ptr(rcx, rax), dl);
+        c.vpextrb(byte_ptr(rcx, rax), ht, (e + i & 15 ^ 1) - 16));
     }
 }
 
@@ -657,7 +652,7 @@ void srv(u32 base, u32 vt, u32 e, s32 offset)
     c.lea(eax, ptr(hbase, offset * 16)); // addr
     c.mov(ecx, eax);
     c.and_(ecx, 15); // addr_offset
-    c.je(l_end);
+    c.jz(l_end);
     c.mov(edx, 16);
     c.sub(edx, ecx); // base element
     e ? c.mov(r8d, e) : c.xor_(r8d, r8d); // element
@@ -718,14 +713,14 @@ void suv(u32 base, u32 vt, u32 e, s32 offset)
     Gpd hbase = GetGpr(base);
     Xmm ht = GetVpr(vt);
     c.lea(eax, ptr(hbase, offset * 8)); // addr
-    c.mov(rcx, dmem);
+    c.mov(rcx, JitPtr(dmem, 8));
     c.vmovaps(xmmword_ptr(x86::rsp, -16), ht);
     for (auto elem = e; elem < e + 8; ++elem) {
         if ((elem & 15) < 8) {
-            c.mov(dx, word_ptr(x86::rsp, (elem << 1 & 15) - 16));
+            c.mov(dx, word_ptr(x86::rsp, ((2 * elem) & 15) - 16));
             c.shr(edx, 7);
         } else {
-            c.mov(dl, byte_ptr(x86::rsp, (elem << 1 & 0xE ^ 1) - 16));
+            c.mov(dl, byte_ptr(x86::rsp, ((2 * elem) & 15 ^ 1) - 16));
         }
         if (elem > e) c.inc(eax);
         c.and_(eax, 0xFFF);
@@ -735,25 +730,36 @@ void suv(u32 base, u32 vt, u32 e, s32 offset)
 
 void swv(u32 base, u32 vt, u32 e, s32 offset)
 {
-    reg_alloc.Reserve(r8);
+    reg_alloc.Reserve<2>({ rdi, rsi });
     Gpd hbase = GetGpr(base);
     Xmm ht = GetVpr(vt);
     c.lea(eax, ptr(hbase, offset * 16)); // addr
     c.mov(ecx, eax);
     c.and_(ecx, 7); // base
     c.and_(eax, ~7);
+    c.mov(rdi, JitPtr(dmem, 8));
     c.vmovaps(xmmword_ptr(x86::rsp, -16), ht);
-    for (auto elem = e; elem < e + 16; ++elem) {
+    int i = 0;
+    auto elem = e;
+    for (; elem < e + 9; ++elem, ++i) {
         c.mov(dl, byte_ptr(x86::rsp, (elem & 15 ^ 1) - 16));
-        if (elem > e) {
+        c.lea(esi, ptr(eax, ecx, 0, i));
+        c.and_(esi, 0xFFF);
+        c.mov(JitPtrOffset(rdi, rsi, 1), dl);
+    }
+    c.add(ecx, 9);
+    c.and_(ecx, 15);
+    for (; elem < e + 16; ++elem) {
+        c.mov(dl, byte_ptr(x86::rsp, (elem & 15 ^ 1) - 16));
+        if (elem > e + 9) {
             c.inc(ecx);
             c.and_(ecx, 15);
         }
-        c.lea(r8d, ptr(eax, ecx));
-        c.and_(r8d, 0xFFF);
-        c.mov(JitPtrOffset(dmem, r8, 1), dl);
+        c.lea(esi, ptr(eax, ecx));
+        c.and_(esi, 0xFFF);
+        c.mov(JitPtrOffset(rdi, rsi, 1), dl);
     }
-    reg_alloc.Free(r8);
+    reg_alloc.Free<2>({ rdi, rsi });
 }
 
 void vabs(u32 vs, u32 vt, u32 vd, u32 e)
@@ -1283,8 +1289,8 @@ void vmulq(u32 vs, u32 vt, u32 vd, u32 e)
     c.vpcmpeqw(xmm1, xmm1, xmm1);
     c.vpsllw(xmm1, xmm1, 4); // ~0xf mask
     c.vpand(hd, xmm0, xmm1);
-    // todo: could keep result from first vpcmpeqw in xmm0. Then we'd have to use xmm3, and I guess we should let the
-    // reg alloc have it? But we would not need the last vpcmpeqw. Probably go with first option
+    // todo: could keep result from first vpcmpeqw in xmm0. Then we'd have to use xmm3, and I guess we should let
+    // the reg alloc have it? But we would not need the last vpcmpeqw. Probably go with first option
 }
 
 void vmulu(u32 vs, u32 vt, u32 vd, u32 e)

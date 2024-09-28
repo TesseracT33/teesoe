@@ -36,7 +36,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
 	vr4300/mmu.cpp
 	vr4300/recompiler.cpp
 	vr4300/vr4300.cpp
-)
+ "vr4300/x64/x86.cpp")
 
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
 	.

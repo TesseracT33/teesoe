@@ -194,7 +194,7 @@ template<std::signed_integral Int> bool IsValidInputCvtRound(std::floating_point
     return true;
 }
 
-bool IsValidOutput(std::floating_point auto& f)
+bool IsValidOutput(std::floating_point  f)
 {
     switch (std::fpclassify(f)) {
     case FP_NAN:

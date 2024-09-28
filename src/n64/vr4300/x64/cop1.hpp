@@ -554,15 +554,10 @@ template<ComputeInstr1Op instr, std::floating_point Float> void Compute(u32 fs, 
     FlushPc();
     c.sub(x86::rsp, 16);
     c.vmovq(xmm0, JitPtrOffset(fpr, 8 * fs, 8));
-    c.vmovq(qword_ptr(x86::rsp), xmm0);
     reg_alloc.Call(IsValidInput<Float>);
     c.test(al, al);
     c.jz(l_epilog);
-    if constexpr (sizeof(Float) == 4) {
-        c.vmovd(xmm0, dword_ptr(x86::rsp));
-    } else {
-        c.vmovq(xmm0, qword_ptr(x86::rsp));
-    }
+    c.vmovq(xmm0, JitPtrOffset(fpr, 8 * fs, 8));
     if constexpr (instr == ABS) {
         if constexpr (sizeof(Float) == 4) {
             c.vandps(xmm0, xmm0, JitPtr(abs_f32_mask));
@@ -579,10 +574,10 @@ template<ComputeInstr1Op instr, std::floating_point Float> void Compute(u32 fs, 
     }
     if constexpr (instr == SQRT) {
         if constexpr (sizeof(Float) == 4) {
-            c.vsqrtps(xmm0, xmm0);
+            c.vsqrtss(xmm0, xmm0);
             block_cycles += 28;
         } else {
-            c.vsqrtpd(xmm0, xmm0);
+            c.vsqrtsd(xmm0, xmm0);
             block_cycles += 57;
         }
     }
@@ -590,7 +585,7 @@ template<ComputeInstr1Op instr, std::floating_point Float> void Compute(u32 fs, 
     reg_alloc.Call(GetAndTestExceptions);
     c.test(al, al);
     c.jnz(l_epilog);
-    c.mov(host_gpr_arg[0], x86::rsp);
+    c.vmovq(xmm0, qword_ptr(x86::rsp));
     reg_alloc.Call(IsValidOutput<Float>);
     c.test(al, al);
     c.jz(l_epilog);
