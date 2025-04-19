@@ -68,7 +68,7 @@ std::optional<SDL_Scancode> GetKeyBinding(System system, size_t input_index)
 
 Status Init()
 {
-    if (SDL_Init(SDL_INIT_GAMEPAD) != 0) {
+    if (!SDL_Init(SDL_INIT_GAMEPAD)) {
         return FailureStatus(std::format("Failed to init gamecontroller system: {}\n", SDL_GetError()));
     }
     if (!LoadBindingsFromDisk().Ok()) {

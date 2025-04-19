@@ -26,7 +26,7 @@ std::unique_ptr<SdlRenderContext> SdlRenderContext::Create(UpdateGuiCallback upd
         return {};
     }
 
-    if (SDL_Init(SDL_INIT_VIDEO) != 0) {
+    if (!SDL_Init(SDL_INIT_VIDEO)) {
         std::println("Failed call to SDL_Init: {}", SDL_GetError());
         return {};
     }

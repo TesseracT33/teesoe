@@ -22,7 +22,7 @@ void Enable()
 
 Status Init()
 {
-    if (SDL_Init(SDL_INIT_AUDIO) != 0) {
+    if (!SDL_Init(SDL_INIT_AUDIO)) {
         return FailureStatus("Failed call to SDL_Init: {}", SDL_GetError());
     }
 

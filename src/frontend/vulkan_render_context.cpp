@@ -47,7 +47,7 @@ std::unique_ptr<VulkanRenderContext> VulkanRenderContext::Create(UpdateGuiCallba
         return {};
     }
 
-    if (SDL_Init(SDL_INIT_VIDEO) != 0) {
+    if (!SDL_Init(SDL_INIT_VIDEO)) {
         std::println("Failed call to SDL_Init: {}", SDL_GetError());
         return {};
     }
@@ -168,6 +168,7 @@ std::unique_ptr<VulkanRenderContext> VulkanRenderContext::Create(UpdateGuiCallba
         .QueueFamily = vk_queue_family,
         .Queue = vk_queue,
         .DescriptorPool = vk_descriptor_pool,
+        .RenderPass = vk_render_pass,
         .MinImageCount = 2,
         .ImageCount = 2,
         .MSAASamples = VK_SAMPLE_COUNT_1_BIT,

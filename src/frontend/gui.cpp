@@ -524,7 +524,7 @@ Status InitGraphics()
 
 Status InitSdl()
 {
-    if (SDL_Init(SDL_INIT_AUDIO | SDL_INIT_EVENTS | SDL_INIT_GAMEPAD | SDL_INIT_VIDEO) != 0) {
+    if (!SDL_Init(SDL_INIT_EVENTS | SDL_INIT_VIDEO)) {
         return FailureStatus(std::format("Failed to init SDL: {}\n", SDL_GetError()));
     }
     return OkStatus();
