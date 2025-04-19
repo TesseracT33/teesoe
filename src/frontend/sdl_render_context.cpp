@@ -31,8 +31,6 @@ std::unique_ptr<SdlRenderContext> SdlRenderContext::Create(UpdateGuiCallback upd
         return {};
     }
 
-    SDL_SetHint(SDL_HINT_IME_SHOW_UI, "1");
-
     SDL_Window* sdl_window =
       SDL_CreateWindow("teesoe", 1280, 960, SDL_WINDOW_OPENGL | SDL_WINDOW_INPUT_FOCUS | SDL_WINDOW_RESIZABLE);
     if (!sdl_window) {
@@ -40,7 +38,7 @@ std::unique_ptr<SdlRenderContext> SdlRenderContext::Create(UpdateGuiCallback upd
         return {};
     }
 
-    SDL_Renderer* sdl_renderer = SDL_CreateRenderer(sdl_window, nullptr, SDL_RENDERER_ACCELERATED);
+    SDL_Renderer* sdl_renderer = SDL_CreateRenderer(sdl_window, nullptr);
     if (!sdl_renderer) {
         std::println("Failed call to SDL_CreateRenderer: {}", SDL_GetError());
         return {};
@@ -67,15 +65,15 @@ std::unique_ptr<SdlRenderContext> SdlRenderContext::Create(UpdateGuiCallback upd
 
 void SdlRenderContext::EnableFullscreen(bool enable)
 {
+    SDL_SetWindowFullscreen(sdl_window, enable);
+
     if (enable) {
-        SDL_SetWindowFullscreen(sdl_window, SDL_TRUE);
         SDL_DisplayMode const* display_mode = SDL_GetCurrentDisplayMode(0);
         window.width = window.game_width = display_mode->w;
         window.height = window.game_height = display_mode->h;
         EvaluateWindowProperties();
     } else {
         // TODO
-        SDL_SetWindowFullscreen(sdl_window, SDL_FALSE);
     }
 }
 
@@ -150,7 +148,7 @@ void SdlRenderContext::Render()
         SDL_RenderTexture(sdl_renderer, sdl_texture, nullptr, &dst_rect);
     }
 
-    ImGui_ImplSDLRenderer3_RenderDrawData(ImGui::GetDrawData());
+    ImGui_ImplSDLRenderer3_RenderDrawData(ImGui::GetDrawData(), sdl_renderer);
     SDL_RenderPresent(sdl_renderer);
 
     UpdateFrameCounter();

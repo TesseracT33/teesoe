@@ -77,7 +77,7 @@ struct Recompiler : public mips::RecompilerX64<s64, u64, RegAllocator> {
 
     void break_() const
     {
-        BlockEpilogWithPcFlushAndJmp(BreakpointException);
+        BlockEpilogWithPcFlushAndJmp((void*)BreakpointException);
         branched = true;
     }
 
@@ -528,7 +528,7 @@ struct Recompiler : public mips::RecompilerX64<s64, u64, RegAllocator> {
 
     void syscall() const
     {
-        BlockEpilogWithPcFlushAndJmp(SyscallException);
+        BlockEpilogWithPcFlushAndJmp((void*)SyscallException);
         branched = true;
     }
 
@@ -734,7 +734,7 @@ private:
     [] { return JitPtr(lo); },
     [] { return JitPtr(hi); },
     [](u64 target) { TakeBranchJit(target); },
-    [](HostGpr target) { TakeBranchJit(target); },
+    [](HostGpr32 target) { TakeBranchJit(target); },
     LinkJit,
     BlockEpilogWithPcFlushAndJmp,
     IntegerOverflowException,

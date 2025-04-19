@@ -1,4 +1,5 @@
 #include "decoder.hpp"
+#include "log.hpp"
 #include "n64_build_options.hpp"
 #include "numeric.hpp"
 #include "rsp/disassembler.hpp"
@@ -21,7 +22,7 @@
 #include <utility>
 
 #define IMM7    (SignExtend<s32, 7>(instr & 127))
-#define IMM16   (instr & 0xFFFF)
+#define IMM16   (s16(instr))
 #define COND    (instr & 15)
 #define FMT     (instr & 63)
 #define SA      (instr >> 6 & 31)
@@ -73,7 +74,7 @@
         LOG_VR4300(instr<fmt>, __VA_ARGS__);              \
         if constexpr (cpu_impl == CpuImpl::Interpreter) { \
             vr4300::instr<fmt>(__VA_ARGS__);              \
-        } else if constexpr (arch.a64) {                  \
+        } else if constexpr (platform.a64) {              \
             /* vr4300::a64::instr<fmt>(__VA_ARGS__);*/    \
         } else {                                          \
             vr4300::x64::instr<fmt>(__VA_ARGS__);         \
@@ -102,7 +103,7 @@
         LOG_RSP(instr, __VA_ARGS__);                      \
         if constexpr (cpu_impl == CpuImpl::Interpreter) { \
             rsp::instr(__VA_ARGS__);                      \
-        } else if constexpr (arch.a64) {                  \
+        } else if constexpr (platform.a64) {              \
             /* rsp::a64::instr(__VA_ARGS__);*/            \
         } else {                                          \
             rsp::x64::instr(__VA_ARGS__);                 \
@@ -115,7 +116,7 @@
         if constexpr (cpu == Cpu::VR4300) {                   \
             if constexpr (cpu_impl == CpuImpl::Interpreter) { \
                 vr4300::instr(__VA_ARGS__);                   \
-            } else if constexpr (arch.a64) {                  \
+            } else if constexpr (platform.a64) {              \
                 /*vr4300::a64::instr(__VA_ARGS__);*/          \
             } else {                                          \
                 vr4300::x64::instr(__VA_ARGS__);              \
@@ -131,7 +132,7 @@
         if constexpr (cpu == Cpu::VR4300) {                         \
             if constexpr (cpu_impl == CpuImpl::Interpreter) {       \
                 vr4300::cpu_interpreter.instr(__VA_ARGS__);         \
-            } else if constexpr (arch.a64) {                        \
+            } else if constexpr (platform.a64) {                    \
                 /*vr4300::a64::cpu_recompiler.instr(__VA_ARGS__);*/ \
             } else {                                                \
                 vr4300::x64::cpu_recompiler.instr(__VA_ARGS__);     \
@@ -139,7 +140,7 @@
         } else {                                                    \
             if constexpr (cpu_impl == CpuImpl::Interpreter) {       \
                 rsp::cpu_interpreter.instr(__VA_ARGS__);            \
-            } else if constexpr (arch.a64) {                        \
+            } else if constexpr (platform.a64) {                    \
                 /*rsp::a64::cpu_recompiler.instr(__VA_ARGS__);*/    \
             } else {                                                \
                 rsp::x64::cpu_recompiler.instr(__VA_ARGS__);        \
@@ -152,7 +153,7 @@
         LOG_RSP(instr, __VA_ARGS__);                         \
         if constexpr (cpu_impl == CpuImpl::Interpreter) {    \
             rsp::cpu_interpreter.instr(__VA_ARGS__);         \
-        } else if constexpr (arch.a64) {                     \
+        } else if constexpr (platform.a64) {                 \
             /*rsp::a64::cpu_recompiler.instr(__VA_ARGS__);*/ \
         } else {                                             \
             rsp::x64::cpu_recompiler.instr(__VA_ARGS__);     \
@@ -165,7 +166,7 @@
         if constexpr (cpu == Cpu::VR4300) {                         \
             if constexpr (cpu_impl == CpuImpl::Interpreter) {       \
                 vr4300::cpu_interpreter.instr(__VA_ARGS__);         \
-            } else if constexpr (arch.a64) {                        \
+            } else if constexpr (platform.a64) {                    \
                 /*vr4300::a64::cpu_recompiler.instr(__VA_ARGS__);*/ \
             } else {                                                \
                 vr4300::x64::cpu_recompiler.instr(__VA_ARGS__);     \
@@ -365,9 +366,9 @@ template<Cpu cpu, CpuImpl cpu_impl, bool make_string> void cop3(u32 instr)
                 c.bt(JitPtr(vr4300::cop0.status), 31); // cu3
                 c.jc(l0);
                 c.mov(host_gpr_arg[0].r32(), 3);
-                BlockEpilogWithPcFlushAndJmp(CoprocessorUnusableException);
+                BlockEpilogWithPcFlushAndJmp((void*)CoprocessorUnusableException);
                 c.bind(l0);
-                BlockEpilogWithPcFlushAndJmp(ReservedInstructionException);
+                BlockEpilogWithPcFlushAndJmp((void*)ReservedInstructionException);
                 compiler_exception_occurred = true;
             }
         } else { // MFC3
@@ -511,7 +512,7 @@ template<Cpu cpu, CpuImpl cpu_impl, bool make_string> void reserved_instruction(
         if constexpr (cpu_impl == CpuImpl::Interpreter) {
             ReservedInstructionException();
         } else {
-            BlockEpilogWithPcFlushAndJmp(ReservedInstructionException);
+            BlockEpilogWithPcFlushAndJmp((void*)ReservedInstructionException);
             compiler_exception_occurred = true;
         }
     } else {

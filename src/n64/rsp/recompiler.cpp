@@ -48,7 +48,7 @@ static asmjit::JitRuntime jit_runtime;
 static std::vector<Pool*> pools;
 static bool block_has_branch_instr;
 
-static AsmjitCompiler& c = compiler;
+static JitCompiler& c = compiler;
 
 void BlockEpilog()
 {
@@ -98,7 +98,7 @@ void BlockProlog()
     FuncNode* func_node = c.addFunc(FuncSignatureT<void>());
     func_node->frame().setAvxEnabled();
     func_node->frame().setAvxCleanup();
-    if constexpr (avx512) {
+    if constexpr (platform.avx512) {
         func_node->frame().setAvx512Enabled();
     }
     if constexpr (log_rsp_jit_blocks) {
@@ -278,7 +278,7 @@ void UpdateBranchStateJit()
     Label l_nobranch = c.newLabel();
     c.cmp(JitPtr(jump_is_pending), 0);
     c.je(l_nobranch);
-    BlockEpilogWithJmp(PerformBranch);
+    BlockEpilogWithJmp((void*)PerformBranch);
     c.bind(l_nobranch);
 }
 

@@ -2,7 +2,7 @@
 #include "log.hpp"
 #include "status.hpp"
 
-#include "SDL.h"
+#include "SDL3/SDL.h"
 
 #include <cstdlib>
 #include <format>

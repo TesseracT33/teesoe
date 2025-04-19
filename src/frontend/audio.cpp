@@ -2,7 +2,7 @@
 #include "frontend/message.hpp"
 #include "status.hpp"
 
-#include "SDL.h"
+#include "SDL3/SDL.h"
 
 #include <format>
 

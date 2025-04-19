@@ -16,7 +16,7 @@ void Cop2Prolog()
     c.jc(l_usable);
     reg_alloc.ReserveArgs(1);
     c.mov(host_gpr_arg[0].r32(), 2);
-    BlockEpilogWithPcFlushAndJmp(CoprocessorUnusableException);
+    BlockEpilogWithPcFlushAndJmp((void*)CoprocessorUnusableException);
     c.bind(l_usable);
     reg_alloc.FreeArgs(1);
 }
@@ -30,7 +30,7 @@ void cfc2(u32 rt)
 void cop2_reserved()
 {
     Cop2Prolog();
-    BlockEpilogWithPcFlushAndJmp(ReservedInstructionCop2Exception);
+    BlockEpilogWithPcFlushAndJmp((void*)ReservedInstructionCop2Exception);
     compiler_exception_occurred = true;
 }
 
@@ -43,7 +43,7 @@ void ctc2(u32 rt)
 void dcfc2()
 {
     Cop2Prolog();
-    BlockEpilogWithPcFlushAndJmp(ReservedInstructionCop2Exception);
+    BlockEpilogWithPcFlushAndJmp((void*)ReservedInstructionCop2Exception);
     branched = true;
 }
 

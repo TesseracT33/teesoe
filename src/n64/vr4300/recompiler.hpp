@@ -1,7 +1,7 @@
 #pragma once
 
 #include "exceptions.hpp"
-#include "jit_util.hpp"
+#include "jit_common.hpp"
 #include "mips/recompiler.hpp"
 #include "mips/register_allocator.hpp"
 #include "numtypes.hpp"
@@ -10,7 +10,6 @@
 #include "vr4300.hpp"
 
 #include <concepts>
-#include <type_traits>
 
 namespace n64::vr4300 {
 
@@ -35,7 +34,7 @@ inline bool compiler_exception_occurred;
 
 inline constexpr std::array reg_alloc_volatile_gprs = [] {
     using namespace asmjit::x86;
-    if constexpr (os.linux) {
+    if constexpr (platform.abi.systemv) {
         return std::array<Gpq, 8>{ r11, r10, r9, r8, rcx, rdx, rsi, rdi };
     } else {
         return std::array<Gpq, 6>{ r11, r10, r9, r8, rdx, rcx };
@@ -44,7 +43,7 @@ inline constexpr std::array reg_alloc_volatile_gprs = [] {
 
 inline constexpr std::array reg_alloc_nonvolatile_gprs = [] {
     using namespace asmjit::x86;
-    if constexpr (os.linux) {
+    if constexpr (platform.abi.systemv) {
         return std::array<Gpq, 5>{ rbx, r12, r13, r14, r15 };
     } else {
         return std::array<Gpq, 7>{ rbx, r12, r13, r14, r15, rdi, rsi };
@@ -52,46 +51,50 @@ inline constexpr std::array reg_alloc_nonvolatile_gprs = [] {
 }();
 
 inline constexpr HostGpr reg_alloc_base_gpr_ptr_reg = [] {
-    if constexpr (arch.a64) return asmjit::a64::x0;
-    if constexpr (arch.x64) return asmjit::x86::rbp;
+    if constexpr (platform.a64) return asmjit::a64::x0;
+    if constexpr (platform.x64) return asmjit::x86::rbp;
 }();
 
-inline AsmjitCompiler compiler;
+inline JitCompiler compiler;
 inline mips::RegisterAllocator<s64, reg_alloc_volatile_gprs.size(), reg_alloc_nonvolatile_gprs.size()>
   reg_alloc{ gpr.view(), reg_alloc_volatile_gprs, reg_alloc_nonvolatile_gprs, reg_alloc_base_gpr_ptr_reg, compiler };
 inline u64 jit_pc;
 inline u32 block_cycles;
 inline bool branch_hit, branched;
 
-template<typename T> asmjit::x86::Mem JitPtr(T const& obj, u32 ptr_size = sizeof(std::remove_pointer_t<T>))
+template<typename T> asmjit::x86::Mem JitPtr(T const& obj, u32 ptr_size = sizeof(T))
 {
-    auto obj_ptr = [&] {
-        if constexpr (std::is_pointer_v<T>) return obj;
-        else return &obj;
-    }();
-    std::ptrdiff_t diff = reinterpret_cast<u8 const*>(obj_ptr) - reinterpret_cast<u8 const*>(gpr.ptr(0));
+    std::ptrdiff_t diff = reinterpret_cast<u8 const*>(&obj) - reinterpret_cast<u8 const*>(gpr.ptr(0));
     return asmjit::x86::ptr(asmjit::x86::rbp, s32(diff), ptr_size);
 }
 
-template<typename T>
-asmjit::x86::Mem JitPtrOffset(T const& obj, u32 index, u32 ptr_size = sizeof(std::remove_pointer_t<T>))
+template<typename T> asmjit::x86::Mem JitPtr(T const* obj, u32 ptr_size = sizeof(T))
 {
-    auto obj_ptr = [&] {
-        if constexpr (std::is_pointer_v<T>) return obj;
-        else return &obj;
-    }();
-    std::ptrdiff_t diff = reinterpret_cast<u8 const*>(obj_ptr) + index - reinterpret_cast<u8 const*>(gpr.ptr(0));
+    std::ptrdiff_t diff = reinterpret_cast<u8 const*>(obj) - reinterpret_cast<u8 const*>(gpr.ptr(0));
     return asmjit::x86::ptr(asmjit::x86::rbp, s32(diff), ptr_size);
 }
 
-template<typename T>
-asmjit::x86::Mem JitPtrOffset(T const& obj, asmjit::x86::Gp index, u32 ptr_size = sizeof(std::remove_pointer_t<T>))
+template<typename T> asmjit::x86::Mem JitPtrOffset(T const& obj, u32 index, u32 ptr_size = sizeof(T))
 {
-    auto obj_ptr = [&] {
-        if constexpr (std::is_pointer_v<T>) return obj;
-        else return &obj;
-    }();
-    std::ptrdiff_t diff = reinterpret_cast<u8 const*>(obj_ptr) - reinterpret_cast<u8 const*>(gpr.ptr(0));
+    std::ptrdiff_t diff = reinterpret_cast<u8 const*>(&obj) + index - reinterpret_cast<u8 const*>(gpr.ptr(0));
+    return asmjit::x86::ptr(asmjit::x86::rbp, s32(diff), ptr_size);
+}
+
+template<typename T> asmjit::x86::Mem JitPtrOffset(T const* obj, u32 index, u32 ptr_size = sizeof(T))
+{
+    std::ptrdiff_t diff = reinterpret_cast<u8 const*>(obj) + index - reinterpret_cast<u8 const*>(gpr.ptr(0));
+    return asmjit::x86::ptr(asmjit::x86::rbp, s32(diff), ptr_size);
+}
+
+template<typename T> asmjit::x86::Mem JitPtrOffset(T const& obj, asmjit::x86::Gp index, u32 ptr_size = sizeof(T))
+{
+    std::ptrdiff_t diff = reinterpret_cast<u8 const*>(&obj) - reinterpret_cast<u8 const*>(gpr.ptr(0));
+    return asmjit::x86::ptr(asmjit::x86::rbp, index.r64(), 0u, s32(diff), ptr_size);
+}
+
+template<typename T> asmjit::x86::Mem JitPtrOffset(T const* obj, asmjit::x86::Gp index, u32 ptr_size = sizeof(T))
+{
+    std::ptrdiff_t diff = reinterpret_cast<u8 const*>(obj) - reinterpret_cast<u8 const*>(gpr.ptr(0));
     return asmjit::x86::ptr(asmjit::x86::rbp, index.r64(), 0u, s32(diff), ptr_size);
 }
 

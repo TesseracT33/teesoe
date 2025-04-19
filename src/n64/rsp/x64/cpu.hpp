@@ -27,7 +27,7 @@ struct Recompiler : public mips::RecompilerX64<s32, u32, RegisterAllocator> {
         c.bt(JitPtr(sp.status), 6); // test intbreak
         c.jnc(l_end);
         c.mov(host_gpr_arg[0].r32(), std::to_underlying(mi::InterruptType::SP));
-        BlockEpilogWithPcFlushAndJmp(mi::RaiseInterrupt);
+        BlockEpilogWithPcFlushAndJmp((void*)mi::RaiseInterrupt);
         c.bind(l_end);
         branched = true;
     }
@@ -265,7 +265,9 @@ struct Recompiler : public mips::RecompilerX64<s32, u32, RegisterAllocator> {
     [] { return JitPtr(lo_dummy); },
     [] { return JitPtr(hi_dummy); },
     [](u32 target) { TakeBranchJit(target); },
-    [](HostGpr32 target) { TakeBranchJit(target); },
+    [](Gpd target) {
+        TakeBranchJit(target); /* TODO: param was previously Gp*/
+    },
     LinkJit,
 };
 

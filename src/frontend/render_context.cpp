@@ -1,6 +1,6 @@
 #include "render_context.hpp"
 
-#include "SDL.h"
+#include "SDL3/SDL.h"
 
 RenderContext::RenderContext(SDL_Window* sdl_window, UpdateGuiCallback update_gui)
   : sdl_window(sdl_window),

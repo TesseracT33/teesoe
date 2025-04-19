@@ -1,6 +1,6 @@
 #pragma once
 
-#include "jit_util.hpp"
+#include "jit_common.hpp"
 #include "rsp/recompiler.hpp"
 #include "rsp/rsp.hpp"
 #include "rsp/vu.hpp"
@@ -17,7 +17,7 @@ namespace n64::rsp::x64 {
 using namespace asmjit;
 using namespace asmjit::x86;
 
-AsmjitCompiler& c = compiler;
+JitCompiler& c = compiler;
 
 static Xmm GetVpr(u32 idx)
 {
@@ -1345,7 +1345,7 @@ void vor(u32 vs, u32 vt, u32 vd, u32 e)
     c.vmovaps(haccl, hd);
 }
 
-void vrcpq(u32 vt, u32 vt_e, u32 vd, u32 vd_e, void* impl)
+void vrcpq(u32 vt, u32 vt_e, u32 vd, u32 vd_e, s32 (*impl)(s32))
 {
     reg_alloc.ReserveArgs(1);
     Xmm ht = GetVpr(vt), hte = GetVte(vt, vt_e), haccl = GetDirtyAccLow();
@@ -1361,7 +1361,7 @@ void vrcpq(u32 vt, u32 vt_e, u32 vd, u32 vd_e, void* impl)
     reg_alloc.FreeArgs(1);
 }
 
-void vrcpql(u32 vt, u32 vt_e, u32 vd, u32 vd_e, void* impl)
+void vrcpql(u32 vt, u32 vt_e, u32 vd, u32 vd_e, s32 (*impl)(s32))
 {
     reg_alloc.ReserveArgs(1);
     Xmm ht = GetVpr(vt), hte = GetVte(vt, vt_e), haccl = GetDirtyAccLow();

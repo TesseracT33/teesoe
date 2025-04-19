@@ -89,11 +89,6 @@ Status InitFileLog()
     }
 }
 
-std::ofstream const& GetFileLogHandle()
-{
-    return file_log;
-}
-
 void Log(std::string_view output)
 {
     StdOut(output);

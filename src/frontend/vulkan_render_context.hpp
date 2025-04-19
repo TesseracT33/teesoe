@@ -5,7 +5,7 @@
 #include "n64/rdp/parallel_rdp_wrapper.hpp"
 #include "numtypes.hpp"
 #include "render_context.hpp"
-#include "SDL_vulkan.h"
+#include "SDL3/SDL_vulkan.h"
 #include "status.hpp"
 
 #include <memory>

@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <bit>
 #include <cassert>
+#include <cstring>
 #include <expected>
 #include <filesystem>
 #include <vector>

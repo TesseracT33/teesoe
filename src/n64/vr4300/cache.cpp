@@ -1,5 +1,5 @@
 #include "cache.hpp"
-#include "algorithm"
+#include "algorithm.hpp"
 #include "cop0.hpp"
 #include "exceptions.hpp"
 #include "log.hpp"

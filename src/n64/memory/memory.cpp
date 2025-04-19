@@ -68,9 +68,9 @@ template<std::signed_integral Int> Int Read(u32 addr)
         return cart::ReadRom<Int>(addr);
     }
     if ((addr & 0xFFFF'F800) == 0x1FC0'0000) { /* $1FC0'0000 - $1FC0'07FF */
-        return si::ReadMemory<Int>(addr);
+        return pif::ReadMemory<Int>(addr);
     }
-    LogWarn(std::format("Unexpected cpu read from address ${:08X}", addr));
+    LogWarn(std::format("Unexpected cpu read to address ${:08X}", addr));
     return Int{};
 }
 
@@ -101,7 +101,7 @@ template<size_t access_size, typename... MaskT> void Write(u32 addr, s64 data, M
     } else if (addr >= 0x1000'0000 && addr <= 0x1FBF'FFFF) {
         cart::WriteRom<access_size>(addr, data);
     } else if ((addr & 0xFFFF'F800) == 0x1FC0'0000) { /* $1FC0'0000 - $1FC0'07FF */
-        si::WriteMemory<access_size>(addr, data);
+        pif::WriteMemory<access_size>(addr, data);
     } else {
         LogWarn(std::format("Unexpected cpu write to address ${:08X}", addr));
     }

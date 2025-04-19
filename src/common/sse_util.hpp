@@ -2,7 +2,7 @@
 
 #include "platform.hpp"
 
-#if X64
+#if PLATFORM_X64
 #include "numtypes.hpp"
 
 #include <immintrin.h>

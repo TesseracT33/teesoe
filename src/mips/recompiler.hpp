@@ -1,9 +1,10 @@
 #pragma once
 
+#include <asmjit/x86/x86operand.h>
 #include <bit>
 #include <concepts>
 
-#include "jit_util.hpp"
+#include "jit_common.hpp"
 #include "mips/types.hpp"
 
 namespace mips {
@@ -12,12 +13,12 @@ template<std::signed_integral GprInt, std::integral PcInt, typename RegisterAllo
     using BlockEpilogWithPcFlushAndJmpHandler = void (*)(void*, int);
     using CheckCanExecDwordInstrHandler = bool (*)();
     using ExceptionHandler = void (*)();
-    using GetLoHiPtrHandler = std::conditional_t<arch.a64, asmjit::a64::Mem, asmjit::x86::Mem> (*)();
-    using IndirectJumpHandler = void (*)(typename SizeToHostReg<sizeof(PcInt)>::type target);
+    using GetLoHiPtrHandler = std::conditional_t<platform.a64, asmjit::a64::Mem, asmjit::x86::Mem> (*)();
+    using IndirectJumpHandler = void (*)(asmjit::x86::Gpd target);
     using LinkHandler = void (*)(u32 reg);
     using TakeBranchHandler = void (*)(PcInt target);
 
-    consteval Recompiler(AsmjitCompiler& compiler,
+    consteval Recompiler(JitCompiler& compiler,
       RegisterAllocator& reg_alloc,
       PcInt& jit_pc,
       bool& branch_hit,
@@ -49,7 +50,7 @@ template<std::signed_integral GprInt, std::integral PcInt, typename RegisterAllo
     {
     }
 
-    AsmjitCompiler& c;
+    JitCompiler& c;
     RegisterAllocator& reg_alloc;
     PcInt& jit_pc;
     bool& branch_hit;
@@ -69,7 +70,7 @@ protected:
     auto GetGpr(u32 idx) const
     {
         auto r = reg_alloc.GetHostGpr(idx);
-        if constexpr (arch.a64) {
+        if constexpr (platform.a64) {
             if constexpr (mips32) {
                 return r.w();
             } else {
@@ -86,7 +87,7 @@ protected:
 
     HostGpr32 GetGpr32(u32 idx) const
     {
-        if constexpr (arch.a64) {
+        if constexpr (platform.a64) {
             return reg_alloc.GetHostGpr(idx).w();
         } else {
             return reg_alloc.GetHostGpr(idx).r32();
@@ -96,7 +97,7 @@ protected:
     auto GetDirtyGpr(u32 idx) const
     {
         auto r = reg_alloc.GetHostGprMarkDirty(idx);
-        if constexpr (arch.a64) {
+        if constexpr (platform.a64) {
             if constexpr (mips32) {
                 return r.w();
             } else {
@@ -113,7 +114,7 @@ protected:
 
     HostGpr32 GetDirtyGpr32(u32 idx) const
     {
-        if constexpr (arch.a64) {
+        if constexpr (platform.a64) {
             return reg_alloc.GetHostGprMarkDirty(idx).w();
         } else {
             return reg_alloc.GetHostGprMarkDirty(idx).r32();

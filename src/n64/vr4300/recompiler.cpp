@@ -8,7 +8,7 @@
 #include "decoder.hpp"
 #include "exceptions.hpp"
 #include "frontend/message.hpp"
-#include "jit_util.hpp"
+#include "jit_common.hpp"
 #include "mmu.hpp"
 #include "n64_build_options.hpp"
 
@@ -60,7 +60,7 @@ static asmjit::JitRuntime jit_runtime;
 static std::vector<Pool*> pools;
 static bool block_has_branch_instr;
 
-static AsmjitCompiler& c = compiler;
+static JitCompiler& c = compiler;
 
 void BlockEpilog()
 {
@@ -72,7 +72,7 @@ void BlockEpilog()
 void BlockEpilogWithJmp(void* func)
 {
     BlockRecordCycles();
-    reg_alloc.BlockEpilogWithJmp(func);
+    reg_alloc.BlockEpilogWithJmp((void*)func);
 }
 
 void BlockEpilogWithPcFlushAndJmp(void* func, int pc_offset)
@@ -129,7 +129,7 @@ bool CheckDwordOpCondJit()
     if (can_execute_dword_instrs) {
         return true;
     } else {
-        BlockEpilogWithPcFlushAndJmp(ReservedInstructionException);
+        BlockEpilogWithPcFlushAndJmp((void*)ReservedInstructionException);
         branched = true;
         return false;
     }
@@ -337,7 +337,7 @@ void UpdateBranchStateJit()
     Label l_nobranch = c.newLabel();
     c.cmp(JitPtr(branch_state), std::to_underlying(BranchState::Perform));
     c.jne(l_nobranch);
-    BlockEpilogWithJmp(PerformBranch);
+    BlockEpilogWithJmp((void*)PerformBranch);
     c.bind(l_nobranch);
     c.mov(JitPtr(in_branch_delay_slot_not_taken), 0);
 }

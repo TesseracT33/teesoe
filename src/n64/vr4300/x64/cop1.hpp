@@ -17,6 +17,11 @@ alignas(16) inline constexpr std::array neg_f64_mask{ 0x8000'0000'0000'0000, 0x8
 bool CheckCop1Usable();
 void OnCop1Unusable();
 
+template<ComputeInstr1Op instr, std::floating_point Float> void Compute(u32 fs, u32 fd);
+template<ComputeInstr2Op instr, std::floating_point Float> void Compute(u32 fs, u32 ft, u32 fd);
+template<FpuNum From, FpuNum To> static void Convert(u32 fs, u32 fd);
+template<RoundInstr instr, FpuNum From, FpuNum To> void Round(u32 fs, u32 fd);
+
 void CallCop1InterpreterImpl(auto impl, u32 fs, u32 fd)
 {
     Label l_noexception = c.newLabel();
@@ -78,19 +83,19 @@ template<bool cond, bool likely> void Cop1Branch(s16 imm)
 
 Gpq GetGpr(u32 idx)
 {
-    return reg_alloc.GetHostGpr(idx);
+    return reg_alloc.GetHostGpr(idx).r64();
 }
 
 Gpq GetDirtyGpr(u32 idx)
 {
-    return reg_alloc.GetHostGprMarkDirty(idx);
+    return reg_alloc.GetHostGprMarkDirty(idx).r64();
 }
 
 void OnCop1Unusable()
 {
     reg_alloc.FlushAll();
     c.mov(host_gpr_arg[0].r32(), 1);
-    BlockEpilogWithPcFlushAndJmp(CoprocessorUnusableException);
+    BlockEpilogWithPcFlushAndJmp((void*)CoprocessorUnusableException);
     branched = true;
 }
 
@@ -99,7 +104,7 @@ void OnInvalidFormat()
     if (!CheckCop1Usable()) return;
     c.bts(JitPtr(fcr31), FCR31BitIndex::CauseUnimplemented);
     block_cycles++;
-    BlockEpilogWithPcFlushAndJmp(FloatingPointException);
+    BlockEpilogWithPcFlushAndJmp((void*)FloatingPointException);
     branched = true;
 }
 
@@ -160,7 +165,7 @@ inline void dcfc1()
     if (!CheckCop1Usable()) return;
     c.bts(JitPtr(fcr31), FCR31BitIndex::CauseUnimplemented);
     block_cycles++;
-    BlockEpilogWithPcFlushAndJmp(FloatingPointException);
+    BlockEpilogWithPcFlushAndJmp((void*)FloatingPointException);
     branched = true;
 }
 
@@ -344,7 +349,7 @@ template<Fmt fmt> inline void compare(u32 fs, u32 ft, u8 cond)
     c.jmp(l_end);
 
     c.bind(l_exception);
-    BlockEpilogWithPcFlushAndJmp(FloatingPointException);
+    BlockEpilogWithPcFlushAndJmp((void*)FloatingPointException);
 
     c.bind(l_no_nans);
     u8 cond12 = cond >> 1 & 3;
@@ -500,7 +505,7 @@ template<Fmt fmt> inline void mov(u32 fs, u32 fd)
         } else {
             reg_alloc.FlushAll();
             c.mov(host_gpr_arg[0].r32(), 1);
-            BlockEpilogWithPcFlushAndJmp(CoprocessorUnusableException);
+            BlockEpilogWithPcFlushAndJmp((void*)CoprocessorUnusableException);
             branched = true;
         }
     } else {

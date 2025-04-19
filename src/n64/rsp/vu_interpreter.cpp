@@ -10,7 +10,7 @@
 #include <concepts>
 #include <cstring>
 
-#if X64
+#if PLATFORM_X64
 #include "sse_util.hpp"
 #endif
 

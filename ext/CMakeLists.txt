@@ -30,7 +30,7 @@ add_library(imgui STATIC
 	imgui/backends/imgui_impl_sdlrenderer3.cpp
 	imgui/backends/imgui_impl_vulkan.cpp
 )
-target_include_directories(imgui PUBLIC 
+target_include_directories(imgui PUBLIC
 	imgui
 	imgui/backends
 	parallel-rdp-standalone/vulkan-headers/include
@@ -46,6 +46,7 @@ target_compile_options(nfd PRIVATE -w) # disable warnings
 target_link_libraries(${CMAKE_PROJECT_NAME} nfd)
 
 ##### parallel-rdp-standalone #########################
+# Do not use vulkan/device_fossilize.cpp
 add_library(parallel-rdp-standalone STATIC
 	parallel-rdp-standalone/parallel-rdp/command_ring.cpp
 	parallel-rdp-standalone/parallel-rdp/rdp_device.cpp
@@ -54,6 +55,7 @@ add_library(parallel-rdp-standalone STATIC
 	parallel-rdp-standalone/parallel-rdp/video_interface.cpp
 	parallel-rdp-standalone/util/aligned_alloc.cpp
 	parallel-rdp-standalone/util/arena_allocator.cpp
+	parallel-rdp-standalone/util/environment.cpp
 	parallel-rdp-standalone/util/logging.cpp
 	parallel-rdp-standalone/util/thread_id.cpp
 	parallel-rdp-standalone/util/thread_name.cpp
@@ -61,8 +63,8 @@ add_library(parallel-rdp-standalone STATIC
 	parallel-rdp-standalone/util/timer.cpp
 	parallel-rdp-standalone/volk/volk.c
 	parallel-rdp-standalone/vulkan/texture/texture_format.cpp
-	parallel-rdp-standalone/vulkan/buffer.cpp
 	parallel-rdp-standalone/vulkan/buffer_pool.cpp
+	parallel-rdp-standalone/vulkan/buffer.cpp
 	parallel-rdp-standalone/vulkan/command_buffer.cpp
 	parallel-rdp-standalone/vulkan/command_pool.cpp
 	parallel-rdp-standalone/vulkan/context.cpp
@@ -70,8 +72,8 @@ add_library(parallel-rdp-standalone STATIC
 	parallel-rdp-standalone/vulkan/descriptor_set.cpp
 	parallel-rdp-standalone/vulkan/device.cpp
 	parallel-rdp-standalone/vulkan/event_manager.cpp
-	parallel-rdp-standalone/vulkan/fence.cpp
 	parallel-rdp-standalone/vulkan/fence_manager.cpp
+	parallel-rdp-standalone/vulkan/fence.cpp
 	parallel-rdp-standalone/vulkan/image.cpp
 	parallel-rdp-standalone/vulkan/indirect_layout.cpp
 	parallel-rdp-standalone/vulkan/memory_allocator.cpp
@@ -79,12 +81,12 @@ add_library(parallel-rdp-standalone STATIC
 	parallel-rdp-standalone/vulkan/query_pool.cpp
 	parallel-rdp-standalone/vulkan/render_pass.cpp
 	parallel-rdp-standalone/vulkan/sampler.cpp
-	parallel-rdp-standalone/vulkan/semaphore.cpp
 	parallel-rdp-standalone/vulkan/semaphore_manager.cpp
+	parallel-rdp-standalone/vulkan/semaphore.cpp
 	parallel-rdp-standalone/vulkan/shader.cpp
 	parallel-rdp-standalone/vulkan/wsi.cpp
 )
-target_include_directories(parallel-rdp-standalone PUBLIC 
+target_include_directories(parallel-rdp-standalone PUBLIC
 	parallel-rdp-standalone
 	parallel-rdp-standalone/util
 	parallel-rdp-standalone/volk

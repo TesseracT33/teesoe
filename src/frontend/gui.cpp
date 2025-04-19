@@ -24,6 +24,8 @@
 #include <format>
 #include <functional>
 #include <optional>
+#include <SDL3/SDL_init.h>
+#include <stdexcept>
 #include <stop_token>
 #include <string>
 #include <string_view>
@@ -91,7 +93,6 @@ static void StopGame();
 static void Update();
 static void UpdateWindowTitle(float fps = 0.f);
 static void UseDefaultConfig();
-
 
 static bool game_is_running;
 static bool menu_enable_audio;
@@ -394,7 +395,7 @@ void DrawMenu()
 
 Status EnableFullscreen(bool enable)
 {
-    if (SDL_SetWindowFullscreen(sdl_window, static_cast<SDL_bool>(enable))) {
+    if (SDL_SetWindowFullscreen(sdl_window, enable)) {
         return FailureStatus(std::format("Failed to toggle fullscreen: {}", SDL_GetError()));
     } else {
         return OkStatus();
@@ -506,7 +507,7 @@ Status InitGraphics()
     case System::GBA:
     case System::NES: render_context = SdlRenderContext::Create(update_gui_callback); break;
     case System::N64: render_context = VulkanRenderContext::Create(update_gui_callback); break;
-    default: throw std::exception("Unknown system loaded; failed to create render context");
+    default: throw std::invalid_argument("Unknown system loaded; failed to create render context");
     }
     if (render_context) {
         if (system == System::None) {
@@ -523,7 +524,7 @@ Status InitGraphics()
 
 Status InitSdl()
 {
-    if (SDL_Init(SDL_INIT_EVERYTHING) != 0) {
+    if (SDL_Init(SDL_INIT_AUDIO | SDL_INIT_EVENTS | SDL_INIT_GAMEPAD | SDL_INIT_VIDEO) != 0) {
         return FailureStatus(std::format("Failed to init SDL: {}\n", SDL_GetError()));
     }
     return OkStatus();
@@ -556,34 +557,34 @@ Status LoadGame(fs::path const& path)
 void OnCtrlKeyPress(SDL_Keycode keycode)
 {
     switch (keycode) {
-    case SDLK_a:
+    case SDLK_A:
         menu_enable_audio = !menu_enable_audio;
         OnMenuEnableAudio();
         break;
 
-    case SDLK_l: OnMenuLoadState(); break;
+    case SDLK_L: OnMenuLoadState(); break;
 
-    case SDLK_m: show_menu = !show_menu; break;
+    case SDLK_M: show_menu = !show_menu; break;
 
-    case SDLK_o: OnMenuOpen(); break;
+    case SDLK_O: OnMenuOpen(); break;
 
-    case SDLK_p:
+    case SDLK_P:
         menu_pause_emulation = !menu_pause_emulation;
         OnMenuPause();
         break;
 
-    case SDLK_q: OnMenuQuit(); break;
+    case SDLK_Q: OnMenuQuit(); break;
 
-    case SDLK_r: OnMenuReset(); break;
+    case SDLK_R: OnMenuReset(); break;
 
     case SDLK_RETURN:
         menu_fullscreen = !menu_fullscreen;
         OnMenuFullscreen();
         break;
 
-    case SDLK_s: OnMenuSaveState(); break;
+    case SDLK_S: OnMenuSaveState(); break;
 
-    case SDLK_x: OnMenuStop(); break;
+    case SDLK_X: OnMenuStop(); break;
     }
 }
 

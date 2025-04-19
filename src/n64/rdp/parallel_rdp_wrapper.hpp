@@ -5,7 +5,7 @@
 #include "numtypes.hpp"
 #include "parallel-rdp/rdp_device.hpp"
 #include "rdp_implementation.hpp"
-#include "SDL_vulkan.h"
+#include "SDL3/SDL_vulkan.h"
 #include "status.hpp"
 #include "volk/volk.h"
 #include "vulkan/wsi.hpp"
@@ -51,6 +51,7 @@ private:
         u32 get_surface_height() override;
         u32 get_surface_width() override;
         void poll_input() override;
+        void poll_input_async(Granite::InputTrackerHandler* handler) override;
         SDL_Window* const sdl_window;
     };
 

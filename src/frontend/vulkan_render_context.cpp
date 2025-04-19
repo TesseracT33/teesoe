@@ -3,7 +3,7 @@
 #include "imgui.h"
 #include "imgui_impl_sdl3.h"
 #include "imgui_impl_vulkan.h"
-#include "SDL.h"
+#include "SDL3/SDL.h"
 
 #include "log.hpp"
 
@@ -51,8 +51,6 @@ std::unique_ptr<VulkanRenderContext> VulkanRenderContext::Create(UpdateGuiCallba
         std::println("Failed call to SDL_Init: {}", SDL_GetError());
         return {};
     }
-
-    SDL_SetHint(SDL_HINT_IME_SHOW_UI, "1");
 
     SDL_Window* sdl_window =
       SDL_CreateWindow("teesoe", 1280, 960, SDL_WINDOW_VULKAN | SDL_WINDOW_INPUT_FOCUS | SDL_WINDOW_RESIZABLE);
@@ -152,7 +150,7 @@ std::unique_ptr<VulkanRenderContext> VulkanRenderContext::Create(UpdateGuiCallba
     ImGuiIO& io = ImGui::GetIO();
     ImGui::StyleColorsDark();
 
-    if (!ImGui_ImplVulkan_LoadFunctions(
+    if (!ImGui_ImplVulkan_LoadFunctions(VK_API_VERSION_1_3,
           [](char const* fn, void*) { return vkGetInstanceProcAddr(::vk_instance, fn); })) {
         LogError("Failed call to ImGui_ImplVulkan_LoadFunctions");
         return {};
@@ -176,7 +174,7 @@ std::unique_ptr<VulkanRenderContext> VulkanRenderContext::Create(UpdateGuiCallba
         .CheckVkResultFn = CheckVkResult,
     };
 
-    if (!ImGui_ImplVulkan_Init(&init_info, vk_render_pass)) {
+    if (!ImGui_ImplVulkan_Init(&init_info)) {
         LogError("Failed call to ImGui_ImplVulkan_Init");
         return {};
     }

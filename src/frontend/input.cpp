@@ -147,7 +147,7 @@ void OnKeyChange(SDL_Event const& event, bool pressed)
 {
     if (current_bindings != nullptr) {
         assert(CoreIsLoaded());
-        auto it = current_bindings->key_bindings.find(event.key.keysym.scancode);
+        auto it = current_bindings->key_bindings.find(event.key.scancode);
         if (it != current_bindings->key_bindings.end()) {
             GetCore()->NotifyButtonState(0, it->second, pressed);
         }

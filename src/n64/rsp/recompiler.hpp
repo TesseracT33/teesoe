@@ -6,8 +6,6 @@
 #include "status.hpp"
 #include "vu.hpp"
 
-#include <type_traits>
-
 namespace n64::rsp {
 
 void BlockEpilog();
@@ -20,40 +18,44 @@ void LinkJit(u32 reg);
 u32 RunRecompiler(u32 cpu_cycles);
 void TearDownRecompiler();
 
-inline AsmjitCompiler compiler;
+inline JitCompiler compiler;
 inline u32 jit_pc;
 inline bool branch_hit, branched;
 inline u32 block_cycles;
 
-template<typename T> asmjit::x86::Mem JitPtr(T const& obj, u32 ptr_size = sizeof(std::remove_pointer_t<T>))
+template<typename T> asmjit::x86::Mem JitPtr(T const& obj, u32 ptr_size = sizeof(T))
 {
-    auto obj_ptr = [&] {
-        if constexpr (std::is_pointer_v<T>) return obj;
-        else return &obj;
-    }();
-    std::ptrdiff_t diff = reinterpret_cast<u8 const*>(obj_ptr) - reinterpret_cast<u8 const*>(gpr.ptr(0));
+    std::ptrdiff_t diff = reinterpret_cast<u8 const*>(&obj) - reinterpret_cast<u8 const*>(gpr.ptr(0));
     return asmjit::x86::ptr(asmjit::x86::rbp, s32(diff), ptr_size);
 }
 
-template<typename T>
-asmjit::x86::Mem JitPtrOffset(T const& obj, u32 index, u32 ptr_size = sizeof(std::remove_pointer_t<T>))
+template<typename T> asmjit::x86::Mem JitPtr(T const* obj, u32 ptr_size = sizeof(T))
 {
-    auto obj_ptr = [&] {
-        if constexpr (std::is_pointer_v<T>) return obj;
-        else return &obj;
-    }();
-    std::ptrdiff_t diff = reinterpret_cast<u8 const*>(obj_ptr) + index - reinterpret_cast<u8 const*>(gpr.ptr(0));
+    std::ptrdiff_t diff = reinterpret_cast<u8 const*>(obj) - reinterpret_cast<u8 const*>(gpr.ptr(0));
     return asmjit::x86::ptr(asmjit::x86::rbp, s32(diff), ptr_size);
 }
 
-template<typename T>
-asmjit::x86::Mem JitPtrOffset(T const& obj, asmjit::x86::Gp index, u32 ptr_size = sizeof(std::remove_pointer_t<T>))
+template<typename T> asmjit::x86::Mem JitPtrOffset(T const& obj, u32 index, u32 ptr_size = sizeof(T))
 {
-    auto obj_ptr = [&] {
-        if constexpr (std::is_pointer_v<T>) return obj;
-        else return &obj;
-    }();
-    std::ptrdiff_t diff = reinterpret_cast<u8 const*>(obj_ptr) - reinterpret_cast<u8 const*>(gpr.ptr(0));
+    std::ptrdiff_t diff = reinterpret_cast<u8 const*>(&obj) + index - reinterpret_cast<u8 const*>(gpr.ptr(0));
+    return asmjit::x86::ptr(asmjit::x86::rbp, s32(diff), ptr_size);
+}
+
+template<typename T> asmjit::x86::Mem JitPtrOffset(T const* obj, u32 index, u32 ptr_size = sizeof(T))
+{
+    std::ptrdiff_t diff = reinterpret_cast<u8 const*>(obj) + index - reinterpret_cast<u8 const*>(gpr.ptr(0));
+    return asmjit::x86::ptr(asmjit::x86::rbp, s32(diff), ptr_size);
+}
+
+template<typename T> asmjit::x86::Mem JitPtrOffset(T const& obj, asmjit::x86::Gp index, u32 ptr_size = sizeof(T))
+{
+    std::ptrdiff_t diff = reinterpret_cast<u8 const*>(&obj) - reinterpret_cast<u8 const*>(gpr.ptr(0));
+    return asmjit::x86::ptr(asmjit::x86::rbp, index.r64(), 0u, s32(diff), ptr_size);
+}
+
+template<typename T> asmjit::x86::Mem JitPtrOffset(T const* obj, asmjit::x86::Gp index, u32 ptr_size = sizeof(T))
+{
+    std::ptrdiff_t diff = reinterpret_cast<u8 const*>(obj) - reinterpret_cast<u8 const*>(gpr.ptr(0));
     return asmjit::x86::ptr(asmjit::x86::rbp, index.r64(), 0u, s32(diff), ptr_size);
 }
 

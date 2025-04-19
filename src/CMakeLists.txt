@@ -4,6 +4,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
 	main.cpp
 
 	common/files.cpp
+	common/jit_common.cpp
 	common/log.cpp
 	common/sse_util.cpp
 

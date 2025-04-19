@@ -5,7 +5,6 @@
 #include "log.hpp"
 #include "memory/memory.hpp"
 #include "n64_build_options.hpp"
-#include "numeric.hpp"
 
 #include "vr4300.hpp"
 
@@ -130,7 +129,7 @@ template<std::signed_integral Int, Alignment alignment, MemOp mem_op> Int ReadVi
         }
     }();
     if constexpr (log_cpu_reads && mem_op == MemOp::Read) {
-        Log(std::format("CPU vAddr ${:016X} pAddr ${:08X} => ${:X}", vaddr, paddr, MakeUnsigned(ret)));
+        log(std::format("CPU vAddr ${:016X} pAddr ${:08X} => ${:X}", vaddr, paddr, to_unsigned(ret)));
     }
     return ret;
 }
@@ -371,14 +370,10 @@ template<size_t access_size, Alignment alignment> void WriteVirtual(u64 vaddr, s
         return AddressErrorException<MemOp::Write>(vaddr);
     }
     bool cacheable_area;
-    u32 paddr = vaddr_to_paddr_write_func(vaddr, cacheable_area);
+    u32 physical_address = vaddr_to_paddr_write_func(vaddr, cacheable_area);
     if (exception_occurred) {
         return;
     }
-    if constexpr (log_cpu_writes) {
-        Log(std::format("CPU vAddr ${:016X} pAddr ${:08X} <= ${:X}", vaddr, paddr, MakeUnsigned(data)));
-    }
-
     static constexpr bool use_mask = alignment != Alignment::Aligned;
     auto Mask = [offset] {
         // TODO: the below probably only works when reading from rdram (it's in LE)
@@ -394,12 +389,12 @@ template<size_t access_size, Alignment alignment> void WriteVirtual(u64 vaddr, s
         }
     };
     if (cacheable_area) {
-        if constexpr (use_mask) WriteCacheableArea<access_size>(paddr, data, Mask());
-        else WriteCacheableArea<access_size>(paddr, data);
+        if constexpr (use_mask) WriteCacheableArea<access_size>(physical_address, data, Mask());
+        else WriteCacheableArea<access_size>(physical_address, data);
     } else {
         // TODO: proper timings
-        if constexpr (use_mask) memory::Write<access_size>(paddr, data, Mask());
-        else memory::Write<access_size>(paddr, data);
+        if constexpr (use_mask) memory::Write<access_size>(physical_address, data, Mask());
+        else memory::Write<access_size>(physical_address, data);
     }
 }
 

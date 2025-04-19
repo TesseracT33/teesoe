@@ -10,7 +10,7 @@ namespace n64::vr4300::x64 {
 using namespace asmjit;
 using namespace asmjit::x86;
 
-inline AsmjitCompiler& c = compiler;
+inline JitCompiler& c = compiler;
 
 u32 ReadRandomJit();
 
@@ -18,7 +18,7 @@ inline void OnCop0Unusable()
 {
     reg_alloc.FlushAll();
     c.xor_(host_gpr_arg[0].r32(), host_gpr_arg[0].r32());
-    BlockEpilogWithPcFlushAndJmp(CoprocessorUnusableException);
+    BlockEpilogWithPcFlushAndJmp((void*)CoprocessorUnusableException);
     branched = true;
 }
 
@@ -164,7 +164,7 @@ template<size_t size> inline void WriteCop0(Gpq src, u32 idx)
     } break;
     case Cop0Reg::status:
         WriteMasked(cop0.status, 0xFF57'FFFF);
-        BlockEpilogWithPcFlushAndJmp(OnWriteToStatus, 4);
+        BlockEpilogWithPcFlushAndJmp((void*)OnWriteToStatus, 4);
         branched = true;
         break;
     case Cop0Reg::cause: {
@@ -213,11 +213,11 @@ inline void dmfc0(u32 rt, u32 rd)
         c.je(l_noexception);
         c.cmp(JitPtr(addressing_mode), AddressingMode::_64bit);
         c.je(l_noexception);
-        BlockEpilogWithPcFlushAndJmp(ReservedInstructionException);
+        BlockEpilogWithPcFlushAndJmp((void*)ReservedInstructionException);
 
         c.bind(l_noexception);
         if (!rt) return;
-        Gpq ht = reg_alloc.GetHostGprMarkDirty(rt);
+        Gpq ht = reg_alloc.GetHostGprMarkDirty(rt).r64();
         ReadCop0<8>(ht, rd);
     } else {
         OnCop0Unusable();
@@ -232,10 +232,10 @@ inline void dmtc0(u32 rt, u32 rd)
         c.je(l_noexception);
         c.cmp(JitPtr(addressing_mode), AddressingMode::_64bit);
         c.je(l_noexception);
-        BlockEpilogWithPcFlushAndJmp(ReservedInstructionException);
+        BlockEpilogWithPcFlushAndJmp((void*)ReservedInstructionException);
 
         c.bind(l_noexception);
-        Gpq ht = reg_alloc.GetHostGpr(rt);
+        Gpq ht = reg_alloc.GetHostGpr(rt).r64();
         WriteCop0<8>(ht, rd);
     } else {
         OnCop0Unusable();
@@ -275,7 +275,7 @@ inline void eret()
         c.mov(JitPtr(branch_state), std::to_underlying(mips::BranchState::NoBranch));
 
         c.bind(l3);
-        BlockEpilogWithJmp(SetVaddrToPaddrFuncs);
+        BlockEpilogWithJmp((void*)SetVaddrToPaddrFuncs);
         branched = true;
     } else {
         OnCop0Unusable();
@@ -286,7 +286,7 @@ inline void mfc0(u32 rt, u32 rd)
 {
     if (can_exec_cop0_instrs) {
         if (!rt) return;
-        Gpq ht = reg_alloc.GetHostGprMarkDirty(rt);
+        Gpq ht = reg_alloc.GetHostGprMarkDirty(rt).r64();
         ReadCop0<4>(ht, rd);
     } else {
         OnCop0Unusable();
@@ -296,7 +296,7 @@ inline void mfc0(u32 rt, u32 rd)
 inline void mtc0(u32 rt, u32 rd)
 {
     if (can_exec_cop0_instrs) {
-        Gpq ht = reg_alloc.GetHostGpr(rt);
+        Gpq ht = reg_alloc.GetHostGpr(rt).r64();
         WriteCop0<4>(ht, rd);
     } else {
         OnCop0Unusable();

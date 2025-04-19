@@ -6,8 +6,8 @@
 #include "memory/rdram.hpp"
 #include "n64/rdp/rdp.hpp"
 #include "rdp.hpp"
-#include "SDL.h"
-#include "SDL_vulkan.h"
+#include "SDL3/SDL.h"
+#include "SDL3/SDL_vulkan.h"
 #include "status.hpp"
 #include "volk/volk.h"
 
@@ -405,6 +405,11 @@ u32 ParallelRdpWrapper::SDLWSIPlatform::get_surface_height()
 void ParallelRdpWrapper::SDLWSIPlatform::poll_input()
 {
     frontend::gui::PollEvents();
+}
+
+void ParallelRdpWrapper::SDLWSIPlatform::poll_input_async(Granite::InputTrackerHandler* handler)
+{
+    (void)handler;
 }
 
 } // namespace n64::rdp

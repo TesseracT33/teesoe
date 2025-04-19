@@ -40,7 +40,7 @@ struct RecompilerX64 : public Recompiler<GprInt, PcInt, RegisterAllocator> {
         c.mov(eax, hs);
         c.add(eax, ht);
         c.jno(l_noexception);
-        block_epilog_with_pc_flush_and_jmp(integer_overflow_exception, 0);
+        block_epilog_with_pc_flush_and_jmp((void*)integer_overflow_exception, 0);
         c.bind(l_noexception);
         if (rd) {
             Gp hd = GetDirtyGpr(rd);
@@ -55,7 +55,7 @@ struct RecompilerX64 : public Recompiler<GprInt, PcInt, RegisterAllocator> {
         c.mov(eax, hs);
         c.add(eax, imm);
         c.jno(l_noexception);
-        block_epilog_with_pc_flush_and_jmp(integer_overflow_exception, 0);
+        block_epilog_with_pc_flush_and_jmp((void*)integer_overflow_exception, 0);
         c.bind(l_noexception);
         if (rt) {
             Gp ht = GetDirtyGpr(rt);
@@ -133,7 +133,7 @@ struct RecompilerX64 : public Recompiler<GprInt, PcInt, RegisterAllocator> {
         c.mov(rax, hs);
         c.add(rax, ht);
         c.jno(l_noexception);
-        block_epilog_with_pc_flush_and_jmp(integer_overflow_exception, 0);
+        block_epilog_with_pc_flush_and_jmp((void*)integer_overflow_exception, 0);
         c.bind(l_noexception);
         if (rd) c.mov(GetDirtyGpr(rd), rax);
     }
@@ -146,7 +146,7 @@ struct RecompilerX64 : public Recompiler<GprInt, PcInt, RegisterAllocator> {
         c.mov(rax, hs);
         c.add(rax, imm);
         c.jno(l_noexception);
-        block_epilog_with_pc_flush_and_jmp(integer_overflow_exception, 0);
+        block_epilog_with_pc_flush_and_jmp((void*)integer_overflow_exception, 0);
         c.bind(l_noexception);
         if (rt) c.mov(GetDirtyGpr(rt), rax);
     }
@@ -253,7 +253,7 @@ struct RecompilerX64 : public Recompiler<GprInt, PcInt, RegisterAllocator> {
         c.mov(rax, hs);
         c.sub(rax, ht);
         c.jno(l_noexception);
-        block_epilog_with_pc_flush_and_jmp(integer_overflow_exception, 0);
+        block_epilog_with_pc_flush_and_jmp((void*)integer_overflow_exception, 0);
         c.bind(l_noexception);
         if (rd) c.mov(GetDirtyGpr(rd), rax);
     }
@@ -474,7 +474,7 @@ struct RecompilerX64 : public Recompiler<GprInt, PcInt, RegisterAllocator> {
         c.mov(eax, hs);
         c.sub(eax, ht);
         c.jno(l_noexception);
-        block_epilog_with_pc_flush_and_jmp(integer_overflow_exception, 0);
+        block_epilog_with_pc_flush_and_jmp((void*)integer_overflow_exception, 0);
         c.bind(l_noexception);
         if (rd) {
             Gp hd = GetDirtyGpr(rd);
@@ -606,7 +606,7 @@ protected:
         if constexpr (cc == Cond::Lt) c.jge(l_end);
         if constexpr (cc == Cond::Ltu) c.jae(l_end);
         if constexpr (cc == Cond::Ne) c.je(l_end);
-        block_epilog_with_pc_flush_and_jmp(trap_exception, 0);
+        block_epilog_with_pc_flush_and_jmp((void*)trap_exception, 0);
         c.bind(l_end);
         branched = true;
     }

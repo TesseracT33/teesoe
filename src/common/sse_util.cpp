@@ -1,6 +1,6 @@
 #include "sse_util.hpp"
 
-#if X64
+#if PLATFORM_X64
 
 __m128i _mm_cmpge_epi16(__m128i a, __m128i b)
 {

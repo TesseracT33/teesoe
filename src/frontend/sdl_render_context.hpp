@@ -2,7 +2,7 @@
 
 #include "numtypes.hpp"
 #include "render_context.hpp"
-#include "SDL.h"
+#include "SDL3/SDL.h"
 
 #include <chrono>
 #include <memory>
@@ -38,7 +38,7 @@ private:
         u8 const* ptr;
         uint width, height, pitch;
         uint bytes_per_pixel;
-        uint pixel_format;
+        SDL_PixelFormat pixel_format;
     } framebuffer{};
 
     struct Window {

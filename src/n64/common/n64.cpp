@@ -28,7 +28,7 @@ void N64::ApplyConfig(CoreConfiguration config)
     if (running && (cpu_impl != prev_cpu_impl || rsp_impl != prev_rsp_impl)) {
         /*Stop();
         Run();*/
-        throw std::exception("Unhandled");
+        throw std::runtime_error("Unhandled");
     }
 }
 

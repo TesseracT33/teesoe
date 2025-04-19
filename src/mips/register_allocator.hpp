@@ -3,7 +3,7 @@
 #include "always_false.hpp"
 #include "asmjit/a64.h"
 #include "asmjit/x86.h"
-#include "jit_util.hpp"
+#include "jit_common.hpp"
 #include "mips/disassembler.hpp"
 #include "numtypes.hpp"
 #include "platform.hpp"
@@ -35,7 +35,7 @@ struct RegisterAllocatorState {
         bool Occupied() const { return guest.has_value(); }
     };
 
-    RegisterAllocatorState(AsmjitCompiler& compiler,
+    RegisterAllocatorState(JitCompiler& compiler,
       std::span<HostReg const, num_volatile_regs> volatile_regs,
       std::span<HostReg const, num_nonvolatile_regs> nonvolatile_regs,
       HostGpr guest_reg_pointer_gpr)
@@ -57,7 +57,7 @@ struct RegisterAllocatorState {
             // assert(std::ranges::find(nonvolatile_regs, [](HostReg const& reg) {
             //     return reg.id() == guest_reg_pointer_gpr.id();
             // }) == nonvolatile_regs.end());
-            if constexpr (arch.x64) {
+            if constexpr (platform.x64) {
                 assert(std::ranges::find(nonvolatile_regs, x86::rsp) == nonvolatile_regs.end());
             }
         }
@@ -69,7 +69,7 @@ struct RegisterAllocatorState {
         });
     }
 
-    AsmjitCompiler& c;
+    JitCompiler& c;
     std::array<Binding, num_volatile_regs + num_nonvolatile_regs> bindings;
     std::array<Binding*, num_guest_regs> guest_to_host;
     u64 host_access_index;
@@ -92,7 +92,7 @@ struct RegisterAllocatorState {
     {
         std::string used_str, free_str;
         for (Binding const& b : bindings) {
-            auto host_reg_str{ JitRegToStr(b.host) };
+            auto host_reg_str{ HostRegToStr(b.host) };
             if (b.Occupied()) {
                 u32 guest = b.guest.value();
                 std::string guest_reg_str =
@@ -119,12 +119,12 @@ struct RegisterAllocatorState {
     void MoveHost(HostReg dst, HostReg src) const
     {
         if constexpr (std::same_as<HostReg, HostGpr>) {
-            if constexpr (arch.a64) {
+            if constexpr (platform.a64) {
             } else {
                 c.mov(dst, src);
             }
         } else if constexpr (std::same_as<HostReg, HostVpr128>) {
-            if constexpr (arch.a64) {
+            if constexpr (platform.a64) {
             } else {
                 c.vmovaps(dst, src);
             }
@@ -224,7 +224,7 @@ public:
       std::span<HostGpr const, num_volatile_gprs> volatile_gprs,
       std::span<HostGpr const, num_nonvolatile_gprs> nonvolatile_gprs,
       HostGpr guest_gprs_pointer_reg,
-      AsmjitCompiler& compiler)
+      JitCompiler& compiler)
       : c{ compiler },
         guest_gprs(guest_gprs),
         guest_gprs_pointer_reg{ guest_gprs_pointer_reg },
@@ -238,7 +238,7 @@ public:
         if (!IsVolatile(guest_gprs_pointer_reg)) {
             RestoreHost(guest_gprs_pointer_reg);
         }
-        if constexpr (arch.a64) {
+        if constexpr (platform.a64) {
         } else {
             c.add(x86::rsp, register_stack_space);
             c.ret();
@@ -251,7 +251,7 @@ public:
         if (!IsVolatile(guest_gprs_pointer_reg)) {
             RestoreHost(guest_gprs_pointer_reg);
         }
-        if constexpr (arch.a64) {
+        if constexpr (platform.a64) {
         } else {
             c.add(x86::rsp, register_stack_space);
             c.jmp(func);
@@ -261,7 +261,7 @@ public:
     void BlockProlog()
     {
         state.Reset();
-        if constexpr (arch.a64) {
+        if constexpr (platform.a64) {
         } else {
             c.sub(x86::rsp, register_stack_space);
             if (!IsVolatile(guest_gprs_pointer_reg)) {
@@ -277,9 +277,9 @@ public:
           register_stack_space % 16 == 8); // Given this, the stack should already be aligned with the CALL, unless an
                                            // instruction impl used PUSH. TODO: make this more robust
         FlushAndDestroyAllVolatile();
-        if constexpr (arch.a64) {
+        if constexpr (platform.a64) {
         } else {
-            jit_x86_call_no_stack_alignment(c, func);
+            jit_call_no_stack_alignment(c, func);
         }
         if (IsVolatile(guest_gprs_pointer_reg)) {
             c.mov(guest_gprs_pointer_reg, guest_gprs.data());
@@ -289,9 +289,9 @@ public:
     void CallWithStackAlignment(auto func)
     {
         FlushAndDestroyAllVolatile();
-        if constexpr (arch.a64) {
+        if constexpr (platform.a64) {
         } else {
-            jit_x64_call_with_stack_alignment(c, func);
+            jit_call_with_stack_alignment(c, func);
         }
         if (IsVolatile(guest_gprs_pointer_reg)) {
             c.mov(guest_gprs_pointer_reg, guest_gprs.data());
@@ -382,7 +382,7 @@ public:
 
     void RestoreHost(HostGpr gpr) const
     {
-        if constexpr (arch.a64) {
+        if constexpr (platform.a64) {
         } else {
             c.mov(gpr.r64(), qword_ptr(x86::rsp, 8 * gpr.id()));
         }
@@ -390,7 +390,7 @@ public:
 
     void SaveHost(HostGpr gpr) const
     {
-        if constexpr (arch.a64) {
+        if constexpr (platform.a64) {
         } else {
             c.mov(qword_ptr(x86::rsp, 8 * gpr.id()), gpr.r64());
         }
@@ -402,7 +402,7 @@ protected:
     static constexpr bool mips64 = sizeof(GuestInt) == 8;
     static_assert(mips32 || mips64);
 
-    AsmjitCompiler& c;
+    JitCompiler& c;
     std::span<GuestInt const, 32> guest_gprs;
     HostGpr guest_gprs_pointer_reg;
     RegisterAllocatorState state;
@@ -411,7 +411,7 @@ protected:
     {
         if (!b.Occupied()) return;
         if (b.dirty) {
-            if constexpr (arch.a64) {
+            if constexpr (platform.a64) {
             } else {
                 if constexpr (mips32) {
                     c.mov(dword_ptr(guest_gprs_pointer_reg, 4 * b.guest.value()), b.host.r32());
@@ -511,7 +511,7 @@ protected:
             SaveHost(binding.host);
         }
         u32 guest = binding.guest.value();
-        if constexpr (arch.a64) {
+        if constexpr (platform.a64) {
         } else {
             if (guest == 0) {
                 c.xor_(binding.host.r32(), binding.host.r32());

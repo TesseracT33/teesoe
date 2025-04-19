@@ -29,7 +29,7 @@
         LOG(instr, __VA_ARGS__);                          \
         if constexpr (cpu_impl == CpuImpl::Interpreter) { \
             cpu_interpreter.instr(__VA_ARGS__);           \
-        } else if constexpr (arch.a64) {                  \
+        } else if constexpr (platform.a64) {              \
             /*a64::cpu_recompiler.instr(__VA_ARGS__);*/   \
         } else {                                          \
             /*x64::cpu_recompiler.instr(__VA_ARGS__);*/   \
@@ -41,7 +41,7 @@
         LOG(instr, __VA_ARGS__);                          \
         if constexpr (cpu_impl == CpuImpl::Interpreter) { \
             instr(__VA_ARGS__);                           \
-        } else if constexpr (arch.a64) {                  \
+        } else if constexpr (platform.a64) {              \
             /*a64::instr(__VA_ARGS__);*/                  \
         } else {                                          \
             /*x64::instr(__VA_ARGS__);*/                  \
