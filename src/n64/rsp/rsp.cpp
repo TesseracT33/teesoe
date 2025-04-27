@@ -186,12 +186,12 @@ void Link(u32 reg)
 
 void NotifyIllegalInstr(std::string_view instr)
 {
-    LogError("Illegal RSP instruction {} encountered.\n", instr);
+    LogError("Illegal RSP instruction {} encountered", instr);
 }
 
 void NotifyIllegalInstrCode(u32 instr_code)
 {
-    LogError("Illegal RSP instruction code {:08X} encountered.\n", instr_code);
+    LogError("Illegal RSP instruction code {:08X} encountered", instr_code);
 }
 
 void OnDmaFinish()

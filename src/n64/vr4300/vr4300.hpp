@@ -30,7 +30,7 @@ void SetInterruptPending(ExternalInterruptSource);
 void SignalInterruptFalse();
 
 inline mips::Gpr<s64> gpr;
-inline mips::BranchState branch_state;
+inline mips::BranchState branch_state{ mips::BranchState::NoBranch };
 inline u64 pc;
 inline u64 jump_addr;
 inline s64 lo;
@@ -39,6 +39,7 @@ inline u32 cycle_counter;
 inline mips::OperatingMode operating_mode;
 inline bool ll_bit;
 inline bool last_instr_was_load;
+inline bool last_instr_was_branch;
 
 inline CpuImpl cpu_impl;
 

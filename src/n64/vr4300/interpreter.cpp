@@ -8,10 +8,6 @@
 #include <array>
 #include <limits>
 
-#if defined _MSC_VER && !defined __clang__
-#    include <intrin.h>
-#endif
-
 using mips::BranchState;
 
 namespace n64::vr4300 {
@@ -29,6 +25,7 @@ void Link(u32 reg)
 
 void OnBranchNotTaken()
 {
+    last_instr_was_branch = true;
     branch_state = BranchState::DelaySlotNotTaken;
 }
 
@@ -43,15 +40,20 @@ u32 RunInterpreter(u32 cpu_cycles)
     while (cycle_counter < cpu_cycles) {
         AdvancePipeline(1);
         exception_occurred = false;
+        last_instr_was_branch = false;
         u32 instr = FetchInstruction(pc);
         if (exception_occurred) continue;
         decoder::exec_cpu<CpuImpl::Interpreter>(instr);
         if (exception_occurred) continue;
-        if (branch_state == BranchState::Perform) {
-            PerformBranch();
-        } else {
-            branch_state = branch_state == BranchState::DelaySlotTaken ? BranchState::Perform : BranchState::NoBranch;
+        if (last_instr_was_branch) {
             pc += 4;
+        } else {
+            if (branch_state == BranchState::DelaySlotTaken) {
+                PerformBranch();
+            } else {
+                branch_state = BranchState::NoBranch;
+                pc += 4;
+            }
         }
     }
     return cycle_counter - cpu_cycles;
@@ -59,6 +61,7 @@ u32 RunInterpreter(u32 cpu_cycles)
 
 void TakeBranch(u64 target_address)
 {
+    last_instr_was_branch = true;
     branch_state = BranchState::DelaySlotTaken;
     jump_addr = target_address;
 }

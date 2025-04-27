@@ -158,7 +158,7 @@ compile_end:
 void EmitBranchCheck()
 {
     Label l_nobranch = c.newLabel();
-    c.cmp(JitPtr(branch_state), std::to_underlying(mips::BranchState::DelaySlotTaken));
+    c.cmp(JitPtr(branch_state), std::to_underlying(mips::BranchState::Perform));
     c.jne(l_nobranch);
     BlockEpilogWithJmp((void*)PerformBranch);
     c.bind(l_nobranch);
@@ -262,18 +262,22 @@ Status InitRecompiler()
 
 void Invalidate(u32 paddr)
 {
-    assert(paddr < pool_max_addr_excl);
-    ResetPool(pools[paddr >> 8 & (num_pools - 1)]); // each pool 6 bits, each instruction 2 bits
+    if (cpu_impl == CpuImpl::Recompiler) {
+        assert(paddr < pool_max_addr_excl);
+        ResetPool(pools[paddr >> 8 & (num_pools - 1)]); // each pool 6 bits, each instruction 2 bits
+    }
 }
 
 void InvalidateRange(u32 paddr_lo, u32 paddr_hi)
 {
-    assert(paddr_lo <= paddr_hi);
-    assert(paddr_hi < pool_max_addr_excl);
-    u32 pool_lo = paddr_lo >> 8;
-    u32 pool_hi = paddr_hi >> 8;
-    for (u32 i = pool_lo; i <= pool_hi; ++i) {
-        ResetPool(pools[i]);
+    if (cpu_impl == CpuImpl::Recompiler) {
+        assert(paddr_lo <= paddr_hi);
+        assert(paddr_hi < pool_max_addr_excl);
+        u32 pool_lo = paddr_lo >> 8;
+        u32 pool_hi = paddr_hi >> 8;
+        for (u32 i = pool_lo; i <= pool_hi; ++i) {
+            ResetPool(pools[i]);
+        }
     }
 }
 

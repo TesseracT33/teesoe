@@ -57,7 +57,6 @@ inline mips::RegisterAllocator<s64, reg_alloc_volatile_gprs.size(), reg_alloc_no
   reg_alloc{ gpr.view(), reg_alloc_volatile_gprs, reg_alloc_nonvolatile_gprs, guest_gpr_base_ptr_reg, c };
 inline u64 jit_pc;
 inline u32 block_cycles;
-inline bool last_instr_was_branch;
 inline bool branched;
 
 inline ptrdiff_t get_offset_to_guest_gpr_base_ptr(void const* obj)

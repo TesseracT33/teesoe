@@ -210,19 +210,23 @@ Status InitRecompiler()
 
 void Invalidate(u32 addr)
 {
-    assert(addr < 0x1000);
-    Pool*& pool = pools[addr >> 8]; // each pool 6 bits, each instruction 2 bits
-    ResetPool(pool);
+    if (cpu_impl == CpuImpl::Recompiler) {
+        assert(addr < 0x1000);
+        Pool*& pool = pools[addr >> 8]; // each pool 6 bits, each instruction 2 bits
+        ResetPool(pool);
+    }
 }
 
 void InvalidateRange(u32 addr_lo, u32 addr_hi)
 {
-    assert(addr_lo <= addr_hi);
-    assert(addr_hi <= 0x1000);
-    u32 pool_lo = addr_lo >> 8;
-    u32 pool_hi = addr_lo >> 8;
-    for (u32 i = pool_lo; i <= pool_hi; ++i) {
-        ResetPool(pools[i]);
+    if (cpu_impl == CpuImpl::Recompiler) {
+        assert(addr_lo <= addr_hi);
+        assert(addr_hi <= 0x1000);
+        u32 pool_lo = addr_lo >> 8;
+        u32 pool_hi = addr_lo >> 8;
+        for (u32 i = pool_lo; i <= pool_hi; ++i) {
+            ResetPool(pools[i]);
+        }
     }
 }
 
