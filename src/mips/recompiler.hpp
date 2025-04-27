@@ -14,14 +14,14 @@ template<std::signed_integral GprInt, std::integral PcInt, typename RegisterAllo
     using CheckCanExecDwordInstrHandler = bool (*)();
     using ExceptionHandler = void (*)();
     using GetLoHiPtrHandler = std::conditional_t<platform.a64, asmjit::a64::Mem, asmjit::x86::Mem> (*)();
-    using IndirectJumpHandler = void (*)(asmjit::x86::Gpd target);
+    using IndirectJumpHandler = void (*)(asmjit::x86::Gpq target);
     using LinkHandler = void (*)(u32 reg);
     using TakeBranchHandler = void (*)(PcInt target);
 
     consteval Recompiler(JitCompiler& compiler,
       RegisterAllocator& reg_alloc,
       PcInt& jit_pc,
-      bool& branch_hit,
+      bool& last_instr_was_branch,
       bool& branched,
       GetLoHiPtrHandler get_lo_ptr_handler,
       GetLoHiPtrHandler get_hi_ptr_handler,
@@ -36,7 +36,7 @@ template<std::signed_integral GprInt, std::integral PcInt, typename RegisterAllo
       : c(compiler),
         reg_alloc(reg_alloc),
         jit_pc(jit_pc),
-        branch_hit(branch_hit),
+        last_instr_was_branch(last_instr_was_branch),
         branched(branched),
         get_lo_ptr(get_lo_ptr_handler),
         get_hi_ptr(get_hi_ptr_handler),
@@ -53,7 +53,7 @@ template<std::signed_integral GprInt, std::integral PcInt, typename RegisterAllo
     JitCompiler& c;
     RegisterAllocator& reg_alloc;
     PcInt& jit_pc;
-    bool& branch_hit;
+    bool& last_instr_was_branch;
     bool& branched;
     GetLoHiPtrHandler const get_lo_ptr, get_hi_ptr;
     TakeBranchHandler const take_branch;

@@ -2,6 +2,7 @@
 
 #include "vr4300/cop0.hpp"
 #include "vr4300/cop2.hpp"
+#include "vr4300/exceptions.hpp"
 #include "vr4300/recompiler.hpp"
 
 namespace n64::vr4300::x64 {
@@ -31,7 +32,7 @@ void cop2_reserved()
 {
     Cop2Prolog();
     BlockEpilogWithPcFlushAndJmp((void*)ReservedInstructionCop2Exception);
-    compiler_exception_occurred = true;
+    // compiler_exception_occurred = true; // TODO
 }
 
 void ctc2(u32 rt)

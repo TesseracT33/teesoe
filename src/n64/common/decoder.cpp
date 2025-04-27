@@ -45,18 +45,18 @@
 #define LOG_RSP(instr, ...)                                             \
     do {                                                                \
         if constexpr (cpu == Cpu::RSP && log_rsp_instructions) {        \
-            Log(std::format("${:03X}  {}",                              \
+            LogInfo("${:03X}  {}",                                      \
               cpu_impl == CpuImpl::Interpreter ? rsp::pc : rsp::jit_pc, \
-              rsp::disassembler.instr(__VA_ARGS__)));                   \
+              rsp::disassembler.instr(__VA_ARGS__));                    \
         }                                                               \
     } while (0)
 
 #define LOG_VR4300(instr, ...)                                                \
     do {                                                                      \
         if constexpr (cpu == Cpu::VR4300 && log_cpu_instructions) {           \
-            Log(std::format("${:016X}  {}",                                   \
+            LogInfo("${:016X}  {}",                                           \
               cpu_impl == CpuImpl::Interpreter ? vr4300::pc : vr4300::jit_pc, \
-              vr4300::disassembler.instr(__VA_ARGS__)));                      \
+              vr4300::disassembler.instr(__VA_ARGS__));                       \
         }                                                                     \
     } while (0)
 
@@ -360,7 +360,6 @@ template<Cpu cpu, CpuImpl cpu_impl, bool make_string> void cop3(u32 instr)
             if constexpr (cpu_impl == CpuImpl::Interpreter) {
                 vr4300::cop0.status.cu3 ? ReservedInstructionException() : CoprocessorUnusableException(3);
             } else {
-                auto& c = compiler;
                 asmjit::Label l0 = c.newLabel();
                 reg_alloc.ReserveArgs(1);
                 c.bt(JitPtr(vr4300::cop0.status), 31); // cu3
@@ -369,7 +368,7 @@ template<Cpu cpu, CpuImpl cpu_impl, bool make_string> void cop3(u32 instr)
                 BlockEpilogWithPcFlushAndJmp((void*)CoprocessorUnusableException);
                 c.bind(l0);
                 BlockEpilogWithPcFlushAndJmp((void*)ReservedInstructionException);
-                compiler_exception_occurred = true;
+                // compiler_exception_occurred = true; // TODO
             }
         } else { // MFC3
             reserved_instruction<cpu, cpu_impl, make_string>(instr);
@@ -513,7 +512,7 @@ template<Cpu cpu, CpuImpl cpu_impl, bool make_string> void reserved_instruction(
             ReservedInstructionException();
         } else {
             BlockEpilogWithPcFlushAndJmp((void*)ReservedInstructionException);
-            compiler_exception_occurred = true;
+            // compiler_exception_occurred = true; // TODO
         }
     } else {
         rsp::NotifyIllegalInstrCode(instr);

@@ -3,7 +3,6 @@
 #include <format>
 #include <fstream>
 #include <iterator>
-#include <string>
 
 std::expected<std::vector<u8>, std::string> OpenFile(std::filesystem::path const& path, size_t expected_size)
 {

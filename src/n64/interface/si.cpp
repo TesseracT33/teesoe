@@ -7,11 +7,8 @@
 #include "scheduler.hpp"
 #include "vr4300/recompiler.hpp"
 
-#include <bit>
 #include <cstring>
-#include <format>
 #include <string_view>
-#include <utility>
 
 namespace n64::si {
 
@@ -52,7 +49,7 @@ template<DmaType type> void InitDma()
     si.status.dma_busy = 1;
     if constexpr (type == DmaType::PifToRdram) {
         if constexpr (log_dma) {
-            Log(std::format("DMA: from PIF ${:X} to RDRAM ${:X}: ${:X} bytes", si.pif_addr_rd64b, si.dram_addr, 64));
+            LogInfo("DMA: from PIF ${:X} to RDRAM ${:X}: ${:X} bytes", si.pif_addr_rd64b, si.dram_addr, 64);
         }
         auto dram_start = si.dram_addr;
         for (int i = 0; i < 16; ++i) {
@@ -63,7 +60,7 @@ template<DmaType type> void InitDma()
         vr4300::InvalidateRange(dram_start, si.dram_addr);
     } else { /* RDRAM to PIF */
         if constexpr (log_dma) {
-            Log(std::format("DMA: from RDRAM ${:X} to PIF ${:X}: ${:X} bytes", si.dram_addr, si.pif_addr_wr64b, 64));
+            LogInfo("DMA: from RDRAM ${:X} to PIF ${:X}: ${:X} bytes", si.dram_addr, si.pif_addr_wr64b, 64);
         }
         for (int i = 0; i < 16; ++i) {
             pif::WriteMemory<4>(si.pif_addr_wr64b, rdram::Read<s32>(si.dram_addr));
@@ -93,7 +90,7 @@ u32 ReadReg(u32 addr)
     u32 ret;
     std::memcpy(&ret, (u32*)(&si) + offset, 4);
     if constexpr (log_io_si) {
-        Log(std::format("SI: {} => ${:08X}", RegOffsetToStr(offset), ret));
+        LogInfo("SI: {} => ${:08X}", RegOffsetToStr(offset), ret);
     }
     return ret;
 }
@@ -116,7 +113,7 @@ void WriteReg(u32 addr, u32 data)
     static_assert(sizeof(si) >> 2 == 8);
     u32 offset = addr >> 2 & 7;
     if constexpr (log_io_si) {
-        Log(std::format("SI: {} <= ${:08X}", RegOffsetToStr(offset), data));
+        LogInfo("SI: {} <= ${:08X}", RegOffsetToStr(offset), data);
     }
 
     switch (offset) {
@@ -151,7 +148,7 @@ void WriteReg(u32 addr, u32 data)
         mi::ClearInterrupt(mi::InterruptType::SI);
         break;
 
-    default: LogWarn(std::format("Unexpected write made to SI register at address ${:08X}", addr));
+    default: LogWarn("Unexpected write made to SI register at address ${:08X}", addr);
     }
 }
 } // namespace n64::si

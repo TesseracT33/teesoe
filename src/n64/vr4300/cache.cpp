@@ -3,20 +3,15 @@
 #include "cop0.hpp"
 #include "exceptions.hpp"
 #include "log.hpp"
-#include "memory/memory.hpp"
 #include "memory/rdram.hpp"
 #include "mmu.hpp"
 #include "n64_build_options.hpp"
 #include "recompiler.hpp"
-
 #include "vr4300.hpp"
 
-#include <algorithm>
 #include <array>
 #include <bit>
-#include <concepts>
 #include <cstring>
-#include <format>
 
 namespace n64::vr4300 {
 
@@ -156,7 +151,7 @@ void FillCacheLine(auto& cache_line, u32 paddr)
     https://discord.com/channels/465585922579103744/600463718924681232/1034605516900544582 */
     auto rdram_offset = paddr & ~(sizeof(cache_line.data) - 1);
     if (rdram_offset >= rdram::GetSize()) {
-        LogWarn(std::format("Attempted to fill cache line from physical addr ${:08X} (beyond RDRAM)", rdram_offset));
+        LogWarn("Attempted to fill cache line from physical addr ${:08X} (beyond RDRAM)", rdram_offset);
     }
     std::memcpy(cache_line.data, rdram_ptr + rdram_offset, sizeof(cache_line.data));
     cache_line.ptag = paddr & ~0xFFF;
@@ -286,4 +281,5 @@ template void WriteCacheableArea<4>(u32, s64);
 template void WriteCacheableArea<8>(u32, s64);
 template void WriteCacheableArea<4, u32>(u32, s64, u32);
 template void WriteCacheableArea<8, u64>(u32, s64, u64);
+
 } // namespace n64::vr4300

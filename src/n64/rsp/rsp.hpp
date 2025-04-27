@@ -46,17 +46,18 @@ void WriteReg(u32 addr, u32 data);
 
 inline constexpr bool can_execute_dword_instrs_dummy{};
 
-inline bool in_branch_delay_slot;
-inline bool jump_is_pending;
+inline mips::Gpr<s32> gpr;
 inline u32 pc;
 inline u32 jump_addr;
 inline u32 cycle_counter;
 inline s32 lo_dummy, hi_dummy;
-inline mips::Gpr<s32> gpr;
+inline bool in_branch_delay_slot;
+inline bool jump_is_pending;
+
 inline CpuImpl cpu_impl;
 
-alignas(
-  16) inline constinit std::array<u8, 0x2000> mem{}; /* 0 - $FFF: data memory; $1000 - $1FFF: instruction memory */
+/* 0 - $FFF: data memory; $1000 - $1FFF: instruction memory */
+alignas(16) inline constinit std::array<u8, 0x2000> mem{};
 
 inline constinit u8* const dmem = mem.data();
 inline constinit u8* const imem = mem.data() + 0x1000;

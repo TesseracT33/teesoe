@@ -2,15 +2,12 @@
 #include "cache.hpp"
 #include "cop0.hpp"
 #include "cop1.hpp"
-#include "decoder.hpp"
 #include "exceptions.hpp"
 #include "log.hpp"
 #include "mmu.hpp"
 #include "n64_build_options.hpp"
 #include "recompiler.hpp"
 
-#include <bit>
-#include <format>
 #include <utility>
 
 namespace n64::vr4300 {
@@ -36,8 +33,7 @@ void CheckInterrupts()
     interrupt = cop0.status.ie & !cop0.status.exl & !cop0.status.erl & bool(cop0.cause.ip & cop0.status.im);
     if (interrupt && !prev_interrupt) {
         if constexpr (log_interrupts) {
-            Log(
-              std::format("INTERRUPT; cause.ip = ${:02X}; status.im = ${:02X}", u8(cop0.cause.ip), u8(cop0.status.im)));
+            LogInfo("INTERRUPT; cause.ip = ${:02X}; status.im = ${:02X}", u8(cop0.cause.ip), u8(cop0.status.im));
         }
         InterruptException();
     }
@@ -95,20 +91,18 @@ void InitRun(bool hle_pif)
 
 void NotifyIllegalInstrCode(u32 instr_code)
 {
-    LogError(std::format("Illegal CPU instruction code {:08X} encountered.\n", instr_code));
+    LogError("Illegal CPU instruction code {:08X} encountered.\n", instr_code);
 }
 
 void PerformBranch()
 {
-    in_branch_delay_slot_taken = false;
     branch_state = mips::BranchState::NoBranch;
     pc = jump_addr;
-    if (pc & 3) {
-        AddressErrorException<MemOp::InstrFetch>(pc);
-    }
     if constexpr (log_cpu_branches) {
-        Log(
-          std::format("CPU branch to 0x{:016X}; RA = 0x{:016X}; SP = 0x{:016X}", u64(pc), u64(gpr[31]), u64(gpr[29])));
+        LogInfo("CPU branch to 0x{:016X}; RA = 0x{:016X}; SP = 0x{:016X}", u64(pc), u64(gpr[31]), u64(gpr[29]));
+    }
+    if (pc & 3) [[unlikely]] {
+        AddressErrorException(pc, MemOp::InstrFetch);
     }
 }
 
@@ -124,7 +118,6 @@ void PowerOn()
 void Reset()
 {
     exception_occurred = false;
-    in_branch_delay_slot_taken = in_branch_delay_slot_not_taken = false;
     branch_state = mips::BranchState::NoBranch;
     SoftResetException();
 }

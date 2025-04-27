@@ -13,7 +13,6 @@
 #include <cassert>
 #include <concepts>
 #include <expected>
-#include <format>
 #include <limits>
 #include <string>
 #include <type_traits>
@@ -37,7 +36,7 @@ template<> struct SizeToHostReg<8> {
 struct AsmjitLogErrorHandler : public asmjit::ErrorHandler {
     void handleError(asmjit::Error err, char const* message, asmjit::BaseEmitter* /*origin*/) override
     {
-        LogError(std::format("AsmJit error {}: {}", err, message));
+        LogError("AsmJit error {}: {}", err, message);
     }
 };
 

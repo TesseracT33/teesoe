@@ -11,19 +11,8 @@ using s32 = std::int32_t;
 using u32 = std::uint32_t;
 using s64 = std::int64_t;
 using u64 = std::uint64_t;
-
-#ifdef __SIZEOF_INT128__
-#define INT128_AVAILABLE 1
 using s128 = __int128_t;
 using u128 = __uint128_t;
-#else
-struct s128 {
-    s64 lo, hi;
-};
-struct u128 {
-    u64 lo, hi;
-};
-#endif
 
 using uint = unsigned;
 

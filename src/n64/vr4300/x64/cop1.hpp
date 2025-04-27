@@ -1,7 +1,9 @@
 #pragma once
 
 #include "algorithm.hpp"
+#include "vr4300/cop0.hpp"
 #include "vr4300/cop1.hpp"
+#include "vr4300/exceptions.hpp"
 #include "vr4300/recompiler.hpp"
 
 namespace n64::vr4300::x64 {
@@ -73,12 +75,12 @@ template<bool cond, bool likely> void Cop1Branch(s16 imm)
     Label l_branch = c.newLabel(), l_end = c.newLabel();
     c.bt(JitPtr(fcr31), FCR31BitIndex::Condition);
     cond ? c.jc(l_branch) : c.jnc(l_branch);
-    likely ? DiscardBranchJit() : OnBranchNotTakenJit();
+    likely ? EmitBranchDiscarded() : EmitBranchNotTaken();
     c.jmp(l_end);
     c.bind(l_branch);
-    TakeBranchJit(jit_pc + 4 + (imm << 2));
+    EmitBranchTaken(jit_pc + 4 + (imm << 2));
     c.bind(l_end);
-    branch_hit = true;
+    last_instr_was_branch = true;
 }
 
 Gpq GetGpr(u32 idx)

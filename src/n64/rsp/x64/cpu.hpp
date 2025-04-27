@@ -34,15 +34,15 @@ struct Recompiler : public mips::RecompilerX64<s32, u32, RegisterAllocator> {
 
     void j(u32 instr) const
     {
-        TakeBranchJit(instr << 2 & 0xFFF);
-        branch_hit = true;
+        EmitBranchTaken(instr << 2 & 0xFFF);
+        last_instr_was_branch = true;
     }
 
     void jal(u32 instr) const
     {
-        TakeBranchJit(instr << 2 & 0xFFF);
-        LinkJit(31);
-        branch_hit = true;
+        EmitBranchTaken(instr << 2 & 0xFFF);
+        EmitLink(31);
+        last_instr_was_branch = true;
     }
 
     void lb(u32 rs, u32 rt, s16 imm) const
@@ -257,18 +257,16 @@ struct Recompiler : public mips::RecompilerX64<s32, u32, RegisterAllocator> {
     }
 
 } inline constexpr cpu_recompiler{
-    compiler,
+    c,
     reg_alloc,
     jit_pc,
-    branch_hit,
+    last_instr_was_branch,
     branched,
     [] { return JitPtr(lo_dummy); },
     [] { return JitPtr(hi_dummy); },
-    [](u32 target) { TakeBranchJit(target); },
-    [](Gpd target) {
-        TakeBranchJit(target); /* TODO: param was previously Gp*/
-    },
-    LinkJit,
+    [](u32 target) { EmitBranchTaken(target); },
+    [](Gpq target) { EmitBranchTaken(target.r32()); },
+    EmitLink,
 };
 
 } // namespace n64::rsp::x64

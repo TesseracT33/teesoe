@@ -4,13 +4,13 @@
 #include "memory/rdram.hpp"
 #include "mi.hpp"
 #include "n64_build_options.hpp"
+#include "numtypes.hpp"
 #include "scheduler.hpp"
 #include "vr4300/recompiler.hpp"
 
 #include <algorithm>
 #include <cassert>
 #include <cstring>
-#include <format>
 #include <string_view>
 #include <utility>
 
@@ -67,8 +67,7 @@ template<DmaType type> void InitDma()
     u32 dma_len = pi.wr_len + 1;
     if constexpr (type == DmaType::CartToRdram) {
         if constexpr (log_dma) {
-            Log(
-              std::format("DMA: from cart ROM ${:X} to RDRAM ${:X}: ${:X} bytes", pi.cart_addr, pi.dram_addr, dma_len));
+            LogInfo("DMA: from cart ROM ${:X} to RDRAM ${:X}: ${:X} bytes", pi.cart_addr, pi.dram_addr, dma_len);
         }
 
         u32 cart_addr = pi.cart_addr;
@@ -149,7 +148,7 @@ u32 ReadReg(u32 addr)
         std::memcpy(&ret, (u32*)(&pi) + offset, 4);
     }
     if constexpr (log_io_pi) {
-        Log(std::format("PI: {} => ${:08X}", RegOffsetToStr(offset), ret));
+        LogInfo("PI: {} => ${:08X}", RegOffsetToStr(offset), ret);
     }
     return ret;
 }
@@ -197,7 +196,7 @@ void WriteReg(u32 addr, u32 data)
     static_assert(sizeof(pi) >> 2 == 0x10);
     u32 offset = addr >> 2 & 0xF;
     if constexpr (log_io_pi) {
-        Log(std::format("PI: {} <= ${:08X}", RegOffsetToStr(offset), data));
+        LogInfo("PI: {} <= ${:08X}", RegOffsetToStr(offset), data);
     }
 
     switch (offset) {
@@ -240,7 +239,7 @@ void WriteReg(u32 addr, u32 data)
     case Register::BsdDom2Pgs: pi.bsd_dom2_pgs = data; break;
     case Register::BsdDom2Rls: pi.bsd_dom2_rls = data; break;
 
-    default: LogWarn(std::format("Unexpected write made to PI register at address ${:08X}", addr));
+    default: LogWarn("Unexpected write made to PI register at address ${:08X}", addr);
     }
 }
 

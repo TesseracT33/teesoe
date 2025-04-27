@@ -6,12 +6,10 @@
 #include <algorithm>
 #include <array>
 #include <bit>
-#include <cassert>
-#include <concepts>
 #include <cstring>
 
 #if PLATFORM_X64
-#include "sse_util.hpp"
+#    include "sse_util.hpp"
 #endif
 
 #define vco ctrl_reg[0]

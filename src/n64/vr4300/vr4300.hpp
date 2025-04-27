@@ -29,16 +29,17 @@ void SetActiveCpuImpl(CpuImpl cpu_impl);
 void SetInterruptPending(ExternalInterruptSource);
 void SignalInterruptFalse();
 
-inline bool in_branch_delay_slot_taken, in_branch_delay_slot_not_taken;
-inline bool ll_bit; /* Read from / written to by load linked and store conditional instructions. */
-inline bool last_instr_was_load;
-inline u64 jump_addr;
-inline u64 pc;
-inline s64 lo, hi; /* Contain the result of a double-word multiplication or division. */
-inline u32 cycle_counter;
-inline mips::BranchState branch_state{ mips::BranchState::NoBranch };
 inline mips::Gpr<s64> gpr;
+inline mips::BranchState branch_state;
+inline u64 pc;
+inline u64 jump_addr;
+inline s64 lo;
+inline s64 hi;
+inline u32 cycle_counter;
 inline mips::OperatingMode operating_mode;
+inline bool ll_bit;
+inline bool last_instr_was_load;
+
 inline CpuImpl cpu_impl;
 
 } // namespace n64::vr4300

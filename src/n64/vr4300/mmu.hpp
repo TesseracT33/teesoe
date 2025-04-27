@@ -11,7 +11,7 @@ using VaddrToPaddrFunc = u32 (*)(u64 /* in: v_addr */, bool& /* out: cached area
 enum class AddressingMode {
     _32bit,
     _64bit
-} inline addressing_mode;
+};
 
 enum class Alignment {
     Aligned,
@@ -25,8 +25,8 @@ enum class MemOp {
     Write
 };
 
+u32 Devirtualize(u64 vaddr);
 u32 FetchInstruction(u64 vaddr);
-u32 GetPhysicalPC();
 void InitializeMMU();
 template<std::signed_integral Int, Alignment alignment = Alignment::Aligned, MemOp mem_op = MemOp::Read>
 Int ReadVirtual(u64 vaddr);
@@ -38,6 +38,7 @@ void tlbwi();
 void tlbwr();
 void tlbp();
 
+inline AddressingMode addressing_mode;
 inline VaddrToPaddrFunc vaddr_to_paddr_read_func;
 inline VaddrToPaddrFunc vaddr_to_paddr_write_func;
 

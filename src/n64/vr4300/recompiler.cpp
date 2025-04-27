@@ -7,17 +7,16 @@
 #include "cop0.hpp"
 #include "decoder.hpp"
 #include "exceptions.hpp"
+#include "fatal_error.hpp"
 #include "frontend/message.hpp"
 #include "jit_common.hpp"
 #include "mmu.hpp"
 #include "n64_build_options.hpp"
-
 #include "vr4300.hpp"
 
-#include <algorithm>
 #include <array>
 #include <bit>
-#include <type_traits>
+#include <cassert>
 #include <utility>
 #include <vector>
 
@@ -26,32 +25,17 @@ using namespace asmjit::x86;
 
 namespace n64::vr4300 {
 
-using mips::BranchState;
-
-constexpr u32 pool_size = 0x100;
-constexpr u32 instructions_per_pool = pool_size / 4;
-constexpr u32 num_pools = 0x80'0000;
-constexpr u32 pool_max_addr_excl = (num_pools * pool_size);
+constexpr u32 bytes_per_pool = 0x100;
+constexpr u32 instructions_per_pool = bytes_per_pool / 4;
+constexpr u32 num_pools = 0x80'0000; // 32 bits (address range) - 8 (bits per pool)
+constexpr u32 pool_max_addr_excl = (num_pools * bytes_per_pool);
 static_assert(std::has_single_bit(pool_max_addr_excl));
 
-struct Block {
-    void (*func)();
-    void operator()() const { func(); }
-};
-
-// Permute on (dword ops enabled) x (cop0 enabled) x (cop1 enabled) x (cop1 fr bit set)
-// 2 x 2 x 3 (cop1 disabled, cop1 enabled + fr = 0, cop1 enabled + fr = 1)
-using BlockPack = std::array<Block*, 16>;
+using Block = void (*)();
 
 struct Pool {
-    std::array<BlockPack*, instructions_per_pool> blocks;
+    std::array<Block, instructions_per_pool> blocks;
 };
-
-static void EmitInstruction();
-static void ExecuteBlock(Block* block);
-static std::pair<Block*, bool> GetBlock(u32 virt_addr);
-static void ResetPool(Pool*& pool);
-static void UpdateBranchStateJit();
 
 static BumpAllocator allocator;
 static asmjit::CodeHolder code_holder;
@@ -60,19 +44,25 @@ static asmjit::JitRuntime jit_runtime;
 static std::vector<Pool*> pools;
 static bool block_has_branch_instr;
 
-static JitCompiler& c = compiler;
+static void Compile(Block& block);
+static void EmitBranchCheck();
+static bool EmitInstruction();
+static void FinalizeBlock(Block& block);
+static Block& GetBlock(u32 paddr);
+static void RecordBlockCycles();
+static void ResetPool(Pool*& pool);
 
 void BlockEpilog()
 {
-    BlockRecordCycles();
+    RecordBlockCycles();
     reg_alloc.BlockEpilog();
     c.ret();
 }
 
 void BlockEpilogWithJmp(void* func)
 {
-    BlockRecordCycles();
-    reg_alloc.BlockEpilogWithJmp((void*)func);
+    RecordBlockCycles();
+    reg_alloc.BlockEpilogWithJmp(func);
 }
 
 void BlockEpilogWithPcFlushAndJmp(void* func, int pc_offset)
@@ -92,15 +82,14 @@ void BlockProlog()
     code_holder.reset();
     asmjit::Error err = code_holder.init(jit_runtime.environment(), jit_runtime.cpuFeatures());
     if (err) {
-        LogError(std::format("Failed to init asmjit code holder; returned {}", asmjit::DebugUtils::errorAsString(err)));
+        FATAL("Failed to init asmjit code holder; returned {}", asmjit::DebugUtils::errorAsString(err));
     }
-    err = code_holder.attach(&compiler);
+    err = code_holder.attach(&c);
     if (err) {
-        LogError(std::format("Failed to attach asmjit compiler to code holder; returned {}",
-          asmjit::DebugUtils::errorAsString(err)));
+        FATAL("Failed to attach asmjit compiler to code holder; returned {}", asmjit::DebugUtils::errorAsString(err));
     }
     if constexpr (enable_cpu_jit_error_handler) {
-        static AsmjitLogErrorHandler asmjit_log_error_handler{};
+        static AsmjitLogErrorHandler asmjit_log_error_handler;
         code_holder.setErrorHandler(&asmjit_log_error_handler);
     }
     if constexpr (log_cpu_jit_blocks) {
@@ -108,20 +97,10 @@ void BlockProlog()
         code_holder.setLogger(&jit_logger);
         jit_logger.log("======== CPU BLOCK BEGIN ========\n");
     }
-    c.addFunc(FuncSignatureT<void>());
+    FuncNode* func_node = c.addFunc(FuncSignatureT<void>());
+    func_node->frame().setAvxEnabled();
+    func_node->frame().setAvxCleanup();
     reg_alloc.BlockProlog();
-}
-
-void BlockRecordCycles()
-{
-    assert(block_cycles > 0);
-    if (block_cycles == 1) {
-        c.inc(JitPtr(cycle_counter));
-        c.inc(JitPtr(cop0.count));
-    } else {
-        c.add(JitPtr(cycle_counter), block_cycles);
-        c.add(JitPtr(cop0.count), block_cycles);
-    }
 }
 
 bool CheckDwordOpCondJit()
@@ -135,86 +114,143 @@ bool CheckDwordOpCondJit()
     }
 }
 
-void DiscardBranchJit()
+void Compile(Block& block)
 {
-    c.mov(JitPtr(in_branch_delay_slot_taken), 0);
-    c.mov(JitPtr(in_branch_delay_slot_not_taken), 0);
-    c.mov(JitPtr(branch_state), std::to_underlying(BranchState::NoBranch));
+    branched = block_has_branch_instr = false;
+    block_cycles = 0;
+    jit_pc = pc;
+
+    BlockProlog();
+
+    bool got_exception = EmitInstruction();
+
+    if (got_exception) {
+        BlockEpilog();
+        goto compile_end;
+    }
+
+    // If the previously executed block ended with a branch instruction, meaning that the branch delay
+    // slot did not fit, execute only the first instruction in this block, before jumping.
+    // The jump can be cancelled if the first instruction is also a branch.
+    if (!last_instr_was_branch) {
+        EmitBranchCheck();
+    }
+
+    while (!branched && !got_exception && (jit_pc & 255)) {
+        branched |= last_instr_was_branch; // If the branch delay slot instruction fits within the block boundary,
+                                           // include it before stopping
+        got_exception = EmitInstruction();
+    }
+
+    if (got_exception) {
+        BlockEpilog();
+    } else {
+        if (!last_instr_was_branch && block_has_branch_instr) {
+            EmitBranchCheck();
+        }
+        BlockEpilogWithPcFlush(0);
+    }
+
+compile_end:
+    FinalizeBlock(block);
+}
+
+void EmitBranchCheck()
+{
+    Label l_nobranch = c.newLabel();
+    c.cmp(JitPtr(branch_state), std::to_underlying(mips::BranchState::DelaySlotTaken));
+    c.jne(l_nobranch);
+    BlockEpilogWithJmp((void*)PerformBranch);
+    c.bind(l_nobranch);
+    c.mov(JitPtr(branch_state), std::to_underlying(mips::BranchState::NoBranch));
+}
+
+void EmitBranchDiscarded()
+{
+    c.mov(JitPtr(branch_state), std::to_underlying(mips::BranchState::NoBranch));
     BlockEpilogWithPcFlush(8);
 }
 
-void EmitInstruction()
+void EmitBranchNotTaken()
+{
+    c.mov(JitPtr(branch_state), std::to_underlying(mips::BranchState::DelaySlotNotTaken));
+}
+
+void EmitBranchTaken(u64 target)
+{
+    c.mov(JitPtr(branch_state), std::to_underlying(mips::BranchState::DelaySlotTaken));
+    c.mov(rax, target);
+    c.mov(JitPtr(jump_addr), rax);
+}
+
+void EmitBranchTaken(HostGpr64 target)
+{
+    c.mov(JitPtr(branch_state), std::to_underlying(mips::BranchState::DelaySlotTaken));
+    c.mov(JitPtr(jump_addr), target);
+}
+
+bool EmitInstruction()
 {
     block_cycles++;
-    branch_hit = compiler_exception_occurred = false;
+    last_instr_was_branch = false;
+    bool got_exception = false; // TODO
     u32 instr = FetchInstruction(jit_pc);
-    if (compiler_exception_occurred) {
-        return; // todo: handle this. need to compile exception handling
+    if (got_exception) {
+        return got_exception; // todo: handle this. need to compile exception handling
     }
     decoder::exec_cpu<CpuImpl::Recompiler>(instr);
-    if (compiler_exception_occurred) {
-        return;
+    if (got_exception) {
+        return got_exception;
     }
     jit_pc += 4;
-    block_has_branch_instr |= branch_hit;
+    block_has_branch_instr |= last_instr_was_branch;
     if constexpr (log_cpu_jit_register_status) {
         jit_logger.log(reg_alloc.GetStatusString().c_str());
     }
+    return got_exception;
 }
 
-void ExecuteBlock(Block* block)
+void EmitLink(u32 reg)
 {
-    (*block)();
+    Gpq gp = reg_alloc.GetHostGprMarkDirty(reg);
+    c.mov(gp, jit_pc + 8);
 }
 
-void FinalizeAndExecuteBlock(Block*& block)
+void FinalizeBlock(Block& block)
 {
     c.endFunc();
     asmjit::Error err = c.finalize();
     if (err) {
-        message::Error(
-          std::format("Failed to finalize code block; returned {}", asmjit::DebugUtils::errorAsString(err)));
+        FATAL("Failed to finalize code block; returned {}", asmjit::DebugUtils::errorAsString(err));
     }
-    err = jit_runtime.add(&block->func, &code_holder);
+    err = jit_runtime.add(&block, &code_holder);
     if (err) {
-        message::Error(std::format("Failed to add code to asmjit runtime! Returned error code {}.", err));
+        FATAL("Failed to add code to asmjit runtime! Returned {}", err);
     }
-
-    ExecuteBlock(block);
 }
 
 void FlushPc(int pc_offset)
 {
-    c.mov(rax, jit_pc + pc_offset);
-    c.mov(JitPtr(pc), rax);
+    // Todo:no need to flush pc if jumping to exception handler. check uses
+    u64 new_pc = jit_pc + pc_offset;
+    s64 new_pc_diff = new_pc - pc;
+    if (std::in_range<s32>(new_pc_diff)) {
+        c.add(JitPtr(pc), new_pc_diff);
+    } else {
+        c.mov(rax, new_pc);
+        c.mov(JitPtr(pc), rax);
+    }
 }
 
-std::pair<Block*, bool> GetBlock(u32 virt_addr)
+Block& GetBlock(u32 paddr)
 {
     static_assert(std::has_single_bit(num_pools));
-acquire:
-    Pool*& pool = pools[virt_addr >> 8 & (num_pools - 1)]; // each pool 6 bits, each instruction 2 bits
+    Pool*& pool = pools[paddr >> 8 & (num_pools - 1)]; // each pool 6 bits, each instruction 2 bits
     if (!pool) {
-        pool = reinterpret_cast<Pool*>(allocator.acquire(sizeof(Pool)));
+        pool = allocator.acquire<Pool>(); // TODO: check if OOM
     }
     assert(pool);
-    BlockPack*& block_pack = pool->blocks[virt_addr >> 2 & 63];
-    if (!block_pack) {
-        block_pack = reinterpret_cast<BlockPack*>(allocator.acquire(sizeof(BlockPack)));
-        if (allocator.ran_out_of_memory_on_last_acquire()) {
-            goto acquire;
-        }
-    }
-    int block_perm_idx = can_execute_dword_instrs + 2 * can_exec_cop0_instrs + 4 * cop0.status.cu1 + 8 * cop0.status.fr;
-    Block*& block = (*block_pack)[block_perm_idx];
-    bool compiled = block != nullptr;
-    if (!compiled) {
-        block = reinterpret_cast<Block*>(allocator.acquire(sizeof(Block)));
-        if (allocator.ran_out_of_memory_on_last_acquire()) {
-            goto acquire;
-        }
-    }
-    return { block, compiled };
+    return pool->blocks[paddr >> 2 & 63];
 }
 
 Status InitRecompiler()
@@ -224,122 +260,60 @@ Status InitRecompiler()
     return OkStatus();
 }
 
-void Invalidate(u32 addr)
+void Invalidate(u32 paddr)
 {
-    if (cpu_impl == CpuImpl::Recompiler) {
-        assert(addr < pool_max_addr_excl);
-        Pool*& pool = pools[addr >> 8 & (num_pools - 1)]; // each pool 6 bits, each instruction 2 bits
-        ResetPool(pool);
+    assert(paddr < pool_max_addr_excl);
+    ResetPool(pools[paddr >> 8 & (num_pools - 1)]); // each pool 6 bits, each instruction 2 bits
+}
+
+void InvalidateRange(u32 paddr_lo, u32 paddr_hi)
+{
+    assert(paddr_lo <= paddr_hi);
+    assert(paddr_hi < pool_max_addr_excl);
+    u32 pool_lo = paddr_lo >> 8;
+    u32 pool_hi = paddr_hi >> 8;
+    for (u32 i = pool_lo; i <= pool_hi; ++i) {
+        ResetPool(pools[i]);
     }
 }
 
-void InvalidateRange(u32 addr_lo, u32 addr_hi)
+void RecordBlockCycles()
 {
-    if (cpu_impl == CpuImpl::Recompiler) {
-        assert(addr_hi <= pool_max_addr_excl);
-        addr_lo = std::min(addr_lo, pool_max_addr_excl - 1);
-        addr_hi = std::min(addr_hi, pool_max_addr_excl - 1);
-        addr_lo >>= 8;
-        addr_hi >>= 8;
-        std::for_each(pools.begin() + addr_lo, pools.begin() + addr_hi + 1, [](Pool*& pool) { ResetPool(pool); });
-    }
-}
-
-void LinkJit(u32 reg)
-{
-    c.mov(reg_alloc.GetHostGprMarkDirty(reg), jit_pc + 8);
-}
-
-void OnBranchNotTakenJit()
-{
-    c.mov(JitPtr(in_branch_delay_slot_taken), 0);
-    c.mov(JitPtr(in_branch_delay_slot_not_taken), 1);
-    c.mov(JitPtr(branch_state), std::to_underlying(BranchState::NoBranch));
+    assert(block_cycles > 0);
+    c.add(JitPtr(cycle_counter), block_cycles);
+    c.add(JitPtr(cop0.count), block_cycles);
 }
 
 void ResetPool(Pool*& pool)
 {
-    if (!pool) return;
-    for (BlockPack*& block_pack : pool->blocks) {
-        if (!block_pack) continue;
-        for (Block*& block : *block_pack) {
+    if (pool) {
+        for (Block block : pool->blocks) {
             if (block) {
-                jit_runtime.release(block->func);
-                block = nullptr;
+                jit_runtime.release(block);
             }
         }
-        block_pack = nullptr;
+        pool = nullptr;
     }
-    pool = nullptr;
 }
 
-u32 RunRecompiler(u32 cpu_cycles)
+u32 RunRecompiler(u32 cycles)
 {
     cycle_counter = 0;
-    while (cycle_counter < cpu_cycles) {
+    while (cycle_counter < cycles) {
         exception_occurred = false;
-
-        auto [block, compiled] = GetBlock(GetPhysicalPC());
-        assert(block);
-        if (compiled) {
-            ExecuteBlock(block);
-        } else {
-            branched = block_has_branch_instr = false;
-            block_cycles = 0;
-            jit_pc = pc;
-
-            BlockProlog();
-
-            EmitInstruction();
-
-            if (compiler_exception_occurred) {
-                BlockEpilog();
-                FinalizeAndExecuteBlock(block);
-                continue;
-            }
-
-            // If the previously executed block ended with a branch instruction, meaning that the branch delay
-            // slot did not fit, execute only the first instruction in this block, before jumping.
-            // The jump can be cancelled if the first instruction is also a branch.
-            if (!branch_hit) {
-                UpdateBranchStateJit();
-            }
-
-            while (!branched && !compiler_exception_occurred && (jit_pc & 255)) {
-                branched |= branch_hit; // If the branch delay slot instruction fits within the block boundary,
-                                        // include it before stopping
-                EmitInstruction();
-            }
-
-            if (compiler_exception_occurred) {
-                BlockEpilog();
-            } else {
-                if (!branch_hit && block_has_branch_instr) {
-                    UpdateBranchStateJit();
-                }
-                BlockEpilogWithPcFlush(0);
-            }
-
-            FinalizeAndExecuteBlock(block);
+        Block& block = GetBlock(Devirtualize(pc));
+        if (!block) {
+            Compile(block);
         }
+        block();
     }
-    return cycle_counter - cpu_cycles;
+    return cycle_counter - cycles;
 }
 
 void TearDownRecompiler()
 {
     allocator.deallocate();
     pools.clear();
-}
-
-void UpdateBranchStateJit()
-{
-    Label l_nobranch = c.newLabel();
-    c.cmp(JitPtr(branch_state), std::to_underlying(BranchState::Perform));
-    c.jne(l_nobranch);
-    BlockEpilogWithJmp((void*)PerformBranch);
-    c.bind(l_nobranch);
-    c.mov(JitPtr(in_branch_delay_slot_not_taken), 0);
 }
 
 } // namespace n64::vr4300

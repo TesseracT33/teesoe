@@ -435,7 +435,7 @@ SDL_Window* GetSdlWindow()
     if (!sdl_window) {
         Status status = InitSdl();
         if (!status.Ok()) {
-            LogFatal(std::format("Failed to init SDL; {}", status.Message()));
+            LogFatal("Failed to init SDL; {}", status.Message());
             exit(1);
         }
     }
@@ -478,7 +478,7 @@ Status Init(fs::path work_path)
         return status;
     }
     if (Status status = message::Init(GetSdlWindow()); !status.Ok()) {
-        LogError(std::format("Failed to initialize user message system; {}", status.Message()));
+        LogError("Failed to initialize user message system; {}", status.Message());
     }
     if (Status status = audio::Init(); !status.Ok()) {
         message::Error(std::format("Failed to init audio system; {}", status.Message()));

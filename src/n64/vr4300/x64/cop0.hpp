@@ -1,16 +1,18 @@
 #pragma once
 
+#include "jit_common.hpp"
+#include "vr4300/cache.hpp"
 #include "vr4300/cop0.hpp"
+#include "vr4300/exceptions.hpp"
 #include "vr4300/recompiler.hpp"
 
 #include <concepts>
+#include <utility>
 
 namespace n64::vr4300::x64 {
 
 using namespace asmjit;
 using namespace asmjit::x86;
-
-inline JitCompiler& c = compiler;
 
 u32 ReadRandomJit();
 
@@ -266,12 +268,12 @@ inline void eret()
         c.and_(eax, 3);
         c.jz(l2);
         FlushPc();
-        reg_alloc.Call(AddressErrorException<MemOp::InstrFetch>);
+        c.mov(host_gpr_arg[0].r64(), jit_pc);
+        c.mov(host_gpr_arg[1].r32(), std::to_underlying(MemOp::InstrFetch));
+        reg_alloc.Call(AddressErrorException);
         c.jmp(l3);
 
         c.bind(l2);
-        c.mov(JitPtr(in_branch_delay_slot_taken), 0);
-        c.mov(JitPtr(in_branch_delay_slot_not_taken), 0);
         c.mov(JitPtr(branch_state), std::to_underlying(mips::BranchState::NoBranch));
 
         c.bind(l3);
