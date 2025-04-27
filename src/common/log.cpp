@@ -44,13 +44,15 @@ void SetLogModeFile(std::filesystem::path const& path)
     if (std::exchange(log_mode, LogMode::File) == LogMode::File) {
         fclose(stream);
     }
-    stream = fopen(path.c_str(), "w");
+    // TODO: Use fstream instead, and fstream::native_handle () to get the FILE* handle
+    char const* cstr = path.string().c_str();
+    stream = fopen(cstr, "w");
     if (stream) {
         log_mode = LogMode::File;
     } else {
         log_mode = LogMode::Console;
         stream = stdout;
-        LogError("Failed to open log file at {}", path.c_str());
+        LogError("Failed to open log file at {}", cstr);
     }
 }
 
