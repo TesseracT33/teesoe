@@ -21,6 +21,8 @@ template<typename R, typename... P> class InplaceFunction<R(P...)> {
     R (*invoke_)(void const*, P...);
 
 public:
+    InplaceFunction() = default;
+
     template<typename F>
     InplaceFunction(F&& f)
         requires(sizeof(F) <= kCapacity && std::invocable<F, P...> && std::same_as<R, std::invoke_result_t<F, P...>>

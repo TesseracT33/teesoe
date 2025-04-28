@@ -107,6 +107,7 @@ static bool start_game;
 static int window_height, window_width;
 
 static std::function<void()> pending_gui_action;
+static InplaceFunction<void(fs::path)> dialog_callback;
 
 static fs::path exe_path;
 static fs::path bios_path;
@@ -415,7 +416,7 @@ Status EnableFullscreen(bool enable)
 
 static void FileDialog(InplaceFunction<void(fs::path)> on_file_selected)
 {
-    thread_local InplaceFunction<void(fs::path)> callback = on_file_selected;
+    dialog_callback = on_file_selected;
 
     SDL_ShowOpenFileDialog(
       [](void* /* userdata */, char const* const* filelist, int /* filter */) {
@@ -424,20 +425,20 @@ static void FileDialog(InplaceFunction<void(fs::path)> on_file_selected)
           } else if (!*filelist) {
               LogDebug("SDL_ShowOpenFileDialog: The user did not select any file.");
           } else {
-              callback(*filelist);
+              dialog_callback(*filelist);
           }
       },
       nullptr,
       sdl_window,
       nullptr,
       0,
-      fs::current_path().c_str(),
+      fs::current_path().string().c_str(),
       false);
 }
 
 static void FolderDialog(InplaceFunction<void(fs::path)> on_folder_selected)
 {
-    thread_local InplaceFunction<void(fs::path)> callback = on_folder_selected;
+    dialog_callback = on_folder_selected;
 
     SDL_ShowOpenFolderDialog(
       [](void* /* userdata */, char const* const* filelist, int /* filter */) {
@@ -446,12 +447,12 @@ static void FolderDialog(InplaceFunction<void(fs::path)> on_folder_selected)
           } else if (!*filelist) {
               LogDebug("SDL_ShowOpenFolderDialog: The user did not select any file.");
           } else {
-              callback(*filelist);
+              dialog_callback(*filelist);
           }
       },
       nullptr,
       sdl_window,
-      fs::current_path().c_str(),
+      fs::current_path().string().c_str(),
       false);
 }
 
