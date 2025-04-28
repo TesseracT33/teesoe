@@ -1,4 +1,4 @@
-#include "vulkan_headers.hpp"
+#include "vulkan_headers.hpp" // must be included first
 
 #include "audio.hpp"
 #include "config.hpp"
@@ -7,19 +7,18 @@
 #include "gui.hpp"
 #include "imgui.h"
 #include "imgui_impl_sdl3.h"
+#include "inplace_function.hpp"
 #include "input.hpp"
 #include "loader.hpp"
 #include "log.hpp"
-#include "nfd.h"
+#include "platform.hpp"
 #include "render_context.hpp"
 #include "sdl_render_context.hpp"
-#include "serializer.hpp"
 #include "vulkan_render_context.hpp"
 
 #include <algorithm>
 #include <array>
 #include <cassert>
-#include <chrono>
 #include <filesystem>
 #include <format>
 #include <functional>
@@ -58,8 +57,8 @@ static void DrawGameSelectionWindow();
 static void DrawInputBindingsWindow();
 static void DrawMenu();
 static Status EnableFullscreen(bool enable);
-static std::optional<fs::path> FileDialog();
-static std::optional<fs::path> FolderDialog();
+static void FileDialog(InplaceFunction<void(fs::path)> on_file_selected);
+static void FolderDialog(InplaceFunction<void(fs::path)> on_folder_selected);
 static Status InitGraphics();
 static Status InitSdl();
 static void LoadSelectedBios();
@@ -177,16 +176,22 @@ void DrawCoreSettingsWindow()
 void DrawGameSelectionWindow()
 {
     auto DrawCoreList = [](System system) {
-        GameList& game_list = game_lists[system];
         if (ImGui::Button("Set game directory")) {
-            std::optional<fs::path> dir = FolderDialog();
-            if (dir) {
-                game_list.directory = std::move(dir.value());
-                RefreshGameList(system);
-                config::SetGamePath(system, game_list.directory);
-            }
+            FolderDialog([system](fs::path dir) {
+                pending_gui_action = std::bind(
+                  [system](fs::path dir) {
+                      if (std::to_underlying(system) < game_lists.size()) {
+                          GameList& game_list = game_lists[system];
+                          game_list.directory = std::move(dir);
+                          RefreshGameList(system);
+                          config::SetGamePath(system, game_list.directory);
+                      }
+                  },
+                  std::move(dir));
+            });
         }
         ImGui::SameLine();
+        GameList& game_list = game_lists[system];
         if (ImGui::Checkbox("Filter to common file types", &game_list.apply_filter)) {
             RefreshGameList(system);
             config::SetFilterGameList(system, game_list.apply_filter);
@@ -194,9 +199,15 @@ void DrawGameSelectionWindow()
         if (game_list.directory.empty()) {
             ImGui::Text("No directory set!");
         } else {
-            // TODO: see if conversion to char* which ImGui::Gui requires can be done in a better way.
-            // On Windows: directories containing non-ASCII characters display incorrectly
+// TODO: see if conversion to char* which ImGui::Gui requires can be done in a better way.
+// On Windows: directories containing non-ASCII characters display incorrectly
+#if PLATFORM_LINUX
+            ImGui::Text(game_list.directory.c_str());
+#elif PLATFORM_WINDOWS
             ImGui::Text(game_list.directory.string().c_str());
+#else
+#    error "Unknown platform"
+#endif
         }
         if (ImGui::BeginListBox("Game selection")) {
             static size_t item_current_idx = 0; // Here we store our selection data as an index.
@@ -402,32 +413,46 @@ Status EnableFullscreen(bool enable)
     }
 }
 
-std::optional<fs::path> FileDialog()
+static void FileDialog(InplaceFunction<void(fs::path)> on_file_selected)
 {
-    nfdnchar_t* path{};
-    nfdresult_t result = NFD_OpenDialogN(&path, nullptr, 0, fs::current_path().c_str());
-    if (result == NFD_OKAY) {
-        fs::path fs_path{ path };
-        NFD_FreePathN(path);
-        return fs_path;
-    } else if (result == NFD_ERROR) {
-        message::Error("nativefiledialog returned NFD_ERROR for NFD_OpenDialogN");
-    }
-    return {};
+    thread_local InplaceFunction<void(fs::path)> callback = on_file_selected;
+
+    SDL_ShowOpenFileDialog(
+      [](void* /* userdata */, char const* const* filelist, int /* filter */) {
+          if (!filelist) {
+              LogError("SDL_ShowOpenFileDialog: An error occured: {}", SDL_GetError());
+          } else if (!*filelist) {
+              LogDebug("SDL_ShowOpenFileDialog: The user did not select any file.");
+          } else {
+              callback(*filelist);
+          }
+      },
+      nullptr,
+      sdl_window,
+      nullptr,
+      0,
+      fs::current_path().c_str(),
+      false);
 }
 
-std::optional<fs::path> FolderDialog()
+static void FolderDialog(InplaceFunction<void(fs::path)> on_folder_selected)
 {
-    nfdnchar_t* path{};
-    nfdresult_t result = NFD_PickFolderN(&path, fs::current_path().c_str());
-    if (result == NFD_OKAY) {
-        fs::path fs_path{ path };
-        NFD_FreePathN(path);
-        return fs_path;
-    } else if (result == NFD_ERROR) {
-        message::Error("nativefiledialog returned NFD_ERROR for NFD_PickFolderN");
-    }
-    return {};
+    thread_local InplaceFunction<void(fs::path)> callback = on_folder_selected;
+
+    SDL_ShowOpenFolderDialog(
+      [](void* /* userdata */, char const* const* filelist, int /* filter */) {
+          if (!filelist) {
+              LogError("SDL_ShowOpenFolderDialog: An error occured: {}", SDL_GetError());
+          } else if (!*filelist) {
+              LogDebug("SDL_ShowOpenFolderDialog: The user did not select any file.");
+          } else {
+              callback(*filelist);
+          }
+      },
+      nullptr,
+      sdl_window,
+      fs::current_path().c_str(),
+      false);
 }
 
 SDL_Window* GetSdlWindow()
@@ -485,10 +510,6 @@ Status Init(fs::path work_path)
     }
     if (Status status = input::Init(); !status.Ok()) {
         message::Error("Failed to init input system!");
-    }
-    if (nfdresult_t result = NFD_Init(); result != NFD_OKAY) {
-        message::Error(
-          std::format("Failed to init nativefiledialog; NFD_Init returned {}", std::to_underlying(result)));
     }
     UpdateWindowTitle();
 
@@ -605,7 +626,6 @@ void OnExit()
 {
     StopGame();
     render_context = {};
-    NFD_Quit();
     SDL_Quit();
 }
 
@@ -683,8 +703,7 @@ void OnMenuLoadState()
 
 void OnMenuOpen()
 {
-    std::optional<fs::path> path = FileDialog();
-    if (path) {
+    FileDialog([](fs::path path) {
         pending_gui_action = std::bind(
           [](fs::path path) {
               Status status = LoadCoreAndGame(path);
@@ -694,19 +713,18 @@ void OnMenuOpen()
                   message::Error(status.Message());
               }
           },
-          path.value());
-    }
+          std::move(path));
+    });
 }
 
 void OnMenuOpenBios()
 {
-    std::optional<fs::path> path = FileDialog();
-    if (path) {
-        bios_path = std::move(path.value());
+    FileDialog([](fs::path path) {
+        bios_path = std::move(path);
         if (core) {
             LoadSelectedBios();
         }
-    }
+    });
 }
 
 void OnMenuOpenRecent()

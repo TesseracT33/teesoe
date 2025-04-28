@@ -1,6 +1,7 @@
 #include "log.hpp"
 #include "numtypes.hpp"
 
+#include <array>
 #include <cstdio>
 #include <print>
 
@@ -26,7 +27,7 @@ void DoLog(std::string_view output, LogLevel level)
             output_repeat_count = 0;
         }
         prev_output = output;
-        static constexpr std::string_view log_level_str[] = { "[FATAL]", "[ERROR]", "[WARN]", "[INFO]", "[DEBUG]" };
+        static constexpr std::array log_level_str = { "[FATAL]", "[ERROR]", "[WARN]", "[INFO]", "[DEBUG]" };
         std::println(stream, "{} {}", log_level_str[std::to_underlying(level)], output);
     }
 }
