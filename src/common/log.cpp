@@ -1,145 +1,65 @@
 #include "log.hpp"
-#include "build_options.hpp"
 #include "numtypes.hpp"
-#include "status.hpp"
 
-#include <algorithm>
-#include <format>
-#include <fstream>
-#include <iostream>
-#include <string>
-#include <string_view>
-#include <vector>
+#include <array>
+#include <cstdio>
+#include <print>
 
-static void FileOut(std::string_view output);
-static void StdOut(std::string_view output);
+enum class LogMode {
+    Console,
+    File,
+};
 
-static std::ofstream file_log;
-[[maybe_unused]] static u64 file_output_repeat_counter;
-[[maybe_unused]] static u32 loop_index;
-static std::string prev_file_output;
-static std::vector<std::string> file_output_loop;
+static FILE* stream = stdout;
+static LogMode log_mode = LogMode::Console;
 
-void FileOut(std::string_view output)
+void DoLog(std::string_view output, LogLevel level)
 {
-    if constexpr (enable_file_logging) {
-        if (!file_log.is_open()) {
-            return;
-        }
-        /*auto NewLoop = [=] {
-            file_output_loop.clear();
-            file_output_loop.emplace_back(output);
-            loop_index = 0;
-            file_log << output << '\n';
-        };
-        auto OnLoopClosed = [=] {
-            if (file_output_repeat_counter > 0) {
-                file_log << std::format("<<< {} line(s) repeated {} time(s) >>>\n",
-                  file_output_loop.size(),
-                  file_output_repeat_counter);
-                file_output_repeat_counter = 0;
-            }
-            NewLoop();
-        };
-        if (file_output_loop.empty()) {
-            NewLoop();
-        } else {
-            auto it = std::ranges::find(file_output_loop, output);
-            if (it == file_output_loop.end()) {
-                if (file_output_loop.size() < 8) {
-                    file_output_loop.emplace_back(output);
-                    file_log << output << '\n';
-                } else {
-                    OnLoopClosed();
-                }
-            } else if (std::distance(file_output_loop.begin(), it) == loop_index) {
-                loop_index = (loop_index + 1) % file_output_loop.size();
-                if (loop_index == 0) {
-                    file_output_repeat_counter++;
-                }
-            } else {
-                if (loop_index == 0) {
-                    OnLoopClosed();
-                } else {
+    static u64 output_repeat_count;
+    static std::string prev_output;
 
-                }
-
-            }
-        }*/
-        if (output == prev_file_output) {
-            ++file_output_repeat_counter;
-        } else {
-            if (file_output_repeat_counter > 0) {
-                file_log << "<<< Repeated " << file_output_repeat_counter << " time(s). >>>\n";
-                file_output_repeat_counter = 0;
-            }
-            prev_file_output = output;
-            file_log << output << std::endl;
-        }
-    }
-}
-
-Status InitFileLog()
-{
-    if constexpr (enable_file_logging) {
-        file_log.open(log_path.data());
-        return file_log.is_open() ? OkStatus() : FailureStatus("Failed to open log file");
+    // todo: also handle small loops
+    if (output == prev_output) {
+        output_repeat_count++;
     } else {
-        return OkStatus();
+        if (output_repeat_count > 0) {
+            std::println(stream, "<<< Repeated {} time(s) >>>", output_repeat_count);
+            output_repeat_count = 0;
+        }
+        prev_output = output;
+        static constexpr std::array log_level_str = { "[FATAL]", "[ERROR]", "[WARN]", "[INFO]", "[DEBUG]" };
+        std::println(stream, "{} {}", log_level_str[std::to_underlying(level)], output);
     }
 }
 
-void Log(std::string_view output)
+void SetLogModeConsole()
 {
-    StdOut(output);
-    FileOut(output);
+    if (std::exchange(log_mode, LogMode::Console) == LogMode::File) {
+        fclose(stream);
+    }
+    stream = stdout;
 }
 
-void LogError(std::string_view output)
+void SetLogModeFile(std::filesystem::path const& path)
 {
-    std::string shown_output = std::format("[ERROR] {}", output);
-    StdOut(shown_output);
-    FileOut(shown_output);
-}
-
-// TODO: std::source_location not working with clang-cl for some obscure reason
-void LogFatal(std::string_view output /*, std::source_location loc*/)
-{
-    // std::string shown_output = std::format("[FATAL] {}({}:{}), function {}: {}",
-    //   loc.file_name(),
-    //   loc.line(),
-    //   loc.column(),
-    //   loc.function_name(),
-    //   output);
-    std::string shown_output = std::format("[FATAL] {}", output);
-    StdOut(shown_output);
-    FileOut(shown_output);
-}
-
-void LogInfo(std::string_view output)
-{
-    std::string shown_output = std::format("[INFO] {}", output);
-    StdOut(shown_output);
-    FileOut(shown_output);
-}
-
-void LogWarn(std::string_view output)
-{
-    std::string shown_output = std::format("[WARN] {}", output);
-    StdOut(shown_output);
-    FileOut(shown_output);
-}
-
-void StdOut(std::string_view output)
-{
-    if constexpr (enable_console_logging) {
-        std::cout << output << '\n';
+    if (std::exchange(log_mode, LogMode::File) == LogMode::File) {
+        fclose(stream);
+    }
+    // TODO: Use fstream instead, and fstream::native_handle () to get the FILE* handle
+    char const* cstr = path.string().c_str();
+    stream = fopen(cstr, "w");
+    if (stream) {
+        log_mode = LogMode::File;
+    } else {
+        log_mode = LogMode::Console;
+        stream = stdout;
+        LogError("Failed to open log file at {}", cstr);
     }
 }
 
 void TearDownLog()
 {
-    if (file_log) {
-        std::flush(file_log);
+    if (log_mode == LogMode::File) {
+        fclose(stream);
     }
 }

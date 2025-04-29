@@ -15,7 +15,6 @@ struct RecompilerA64 : public Recompiler<GprInt, PcInt, RegisterAllocator> {
     using Base = Recompiler<GprInt, PcInt, RegisterAllocator>;
     using Base::Base;
     using Base::block_epilog_with_pc_flush_and_jmp_and_pc_flush;
-    using Base::branch_hit;
     using Base::branched;
     using Base::c;
     using Base::check_can_exec_dword_instr;
@@ -28,6 +27,7 @@ struct RecompilerA64 : public Recompiler<GprInt, PcInt, RegisterAllocator> {
     using Base::indirect_jump;
     using Base::integer_overflow_exception;
     using Base::jit_pc;
+    using Base::last_instr_was_branch;
     using Base::link;
     using Base::mips32;
     using Base::mips64;
@@ -283,27 +283,27 @@ struct RecompilerA64 : public Recompiler<GprInt, PcInt, RegisterAllocator> {
     void j(u32 instr) const
     {
         take_branch((jit_pc + 4) & ~PcInt(0xFFF'FFFF) | instr << 2 & 0xFFF'FFFF);
-        branch_hit = true;
+        last_instr_was_branch = true;
     }
 
     void jal(u32 instr) const
     {
         take_branch((jit_pc + 4) & ~PcInt(0xFFF'FFFF) | instr << 2 & 0xFFF'FFFF);
         link(31);
-        branch_hit = true;
+        last_instr_was_branch = true;
     }
 
     void jalr(u32 rs, u32 rd) const
     {
         indirect_jump(GetGpr(rs));
         link(rd);
-        branch_hit = true;
+        last_instr_was_branch = true;
     }
 
     void jr(u32 rs) const
     {
         indirect_jump(GetGpr(rs));
-        branch_hit = true;
+        last_instr_was_branch = true;
     }
 
     void lui(u32 rt, s16 imm) const
@@ -558,7 +558,7 @@ protected:
         if constexpr (cc == Cond::Ne) c.je(l_nobranch);
         take_branch(jit_pc + 4 + (imm << 2));
         c.bind(l_nobranch);
-        branch_hit = true;
+        last_instr_was_branch = true;
     }
 
     template<Cond cc> void branch(u32 rs, s16 imm) const
@@ -572,7 +572,7 @@ protected:
         if constexpr (cc == Cond::Lt) c.jns(l_nobranch);
         take_branch(jit_pc + 4 + (imm << 2));
         c.bind(l_nobranch);
-        branch_hit = true;
+        last_instr_was_branch = true;
     }
 
     template<Cond cc> void branch_and_link(auto... args) const

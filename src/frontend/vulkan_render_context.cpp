@@ -3,12 +3,10 @@
 #include "imgui.h"
 #include "imgui_impl_sdl3.h"
 #include "imgui_impl_vulkan.h"
+#include "log.hpp"
 #include "SDL3/SDL.h"
 
-#include "log.hpp"
-
 #include <cstdlib>
-#include <print>
 #include <utility>
 
 VkInstance vk_instance;
@@ -43,25 +41,25 @@ VulkanRenderContext::~VulkanRenderContext()
 std::unique_ptr<VulkanRenderContext> VulkanRenderContext::Create(UpdateGuiCallback update_gui)
 {
     if (!update_gui) {
-        std::println("null gui update callbackprovided to vulkan render context");
+        LogFatal("null gui update callbackprovided to vulkan render context");
         return {};
     }
 
     if (!SDL_Init(SDL_INIT_VIDEO)) {
-        std::println("Failed call to SDL_Init: {}", SDL_GetError());
+        LogFatal("Failed call to SDL_Init: {}", SDL_GetError());
         return {};
     }
 
     SDL_Window* sdl_window =
       SDL_CreateWindow("teesoe", 1280, 960, SDL_WINDOW_VULKAN | SDL_WINDOW_INPUT_FOCUS | SDL_WINDOW_RESIZABLE);
     if (!sdl_window) {
-        std::println("Failed call to SDL_CreateWindow: {}", SDL_GetError());
+        LogFatal("Failed call to SDL_CreateWindow: {}", SDL_GetError());
         return {};
     }
 
     std::unique_ptr<n64::rdp::ParallelRdpWrapper> parallel_rdp = n64::rdp::ParallelRdpWrapper::Create(sdl_window);
     if (!parallel_rdp) {
-        std::println("Failed to create ParallelRdpWrapper object!");
+        LogError("Failed to create ParallelRdpWrapper object!");
         return {};
     }
 
@@ -81,7 +79,7 @@ std::unique_ptr<VulkanRenderContext> VulkanRenderContext::Create(UpdateGuiCallba
 
     auto CheckVkResult = [](VkResult vk_result) {
         if (vk_result != 0) {
-            LogError(std::format("[vulkan]: Error: VkResult = {}", std::to_underlying(vk_result)));
+            LogError("[vulkan]: Error: VkResult = {}", std::to_underlying(vk_result));
         }
     };
 

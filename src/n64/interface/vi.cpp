@@ -8,7 +8,6 @@
 
 #include <bit>
 #include <cstring>
-#include <format>
 #include <string_view>
 #include <utility>
 
@@ -79,7 +78,7 @@ u32 ReadReg(u32 addr)
     u32 offset = addr >> 2 & 0xF;
     u32 ret = std::bit_cast<std::array<u32, 16>>(vi)[offset];
     if constexpr (log_io_vi) {
-        Log(std::format("VI: {} => ${:08X}", RegOffsetToStr(offset), ret));
+        LogInfo("VI: {} => ${:08X}", RegOffsetToStr(offset), ret);
     }
     return ret;
 }
@@ -112,7 +111,7 @@ void WriteReg(u32 addr, u32 data)
     static_assert(sizeof(vi) >> 2 == 0x10);
     u32 offset = addr >> 2 & 0xF;
     if constexpr (log_io_vi) {
-        Log(std::format("VI: {} <= ${:08X}", RegOffsetToStr(offset), data));
+        LogInfo("VI: {} <= ${:08X}", RegOffsetToStr(offset), data);
     }
 
     switch (offset) {

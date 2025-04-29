@@ -526,6 +526,6 @@ private:
             }
         }
     }
-} inline reg_alloc{ compiler };
+} inline reg_alloc{ c };
 
 } // namespace n64::rsp

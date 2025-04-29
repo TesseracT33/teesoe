@@ -2,21 +2,18 @@
 #include "cop0.hpp"
 #include "interpreter.hpp"
 #include "log.hpp"
+#include "mips/types.hpp"
 #include "n64_build_options.hpp"
-#include "recompiler.hpp"
-
 #include "vr4300.hpp"
-
-#include <format>
 
 namespace n64::vr4300 {
 
 static u64 GetCommonExceptionVector();
 static void HandleException();
 
-template<MemOp mem_op> void AddressErrorException(u64 bad_vaddr)
+void AddressErrorException(u64 bad_vaddr, MemOp mem_op)
 {
-    if constexpr (log_exceptions) Log(std::format("EXCEPTION: Address Error; vaddr {:016X}", bad_vaddr));
+    if constexpr (log_exceptions) LogInfo("EXCEPTION: Address Error; vaddr {:016X}", bad_vaddr);
     HandleException();
     pc = GetCommonExceptionVector();
     cop0.cause.exc_code = mem_op == MemOp::Write ? 5 : 4;
@@ -28,16 +25,16 @@ template<MemOp mem_op> void AddressErrorException(u64 bad_vaddr)
 
 void BreakpointException()
 {
-    if constexpr (log_exceptions) Log("EXCEPTION: Breakpoint");
+    if constexpr (log_exceptions) LogInfo("EXCEPTION: Breakpoint");
     HandleException();
     pc = GetCommonExceptionVector();
     cop0.cause.exc_code = 9;
     cop0.cause.ce = 0;
 }
 
-template<MemOp mem_op> void BusErrorException()
+void BusErrorException(MemOp mem_op)
 {
-    if constexpr (log_exceptions) Log("EXCEPTION: Bus Error");
+    if constexpr (log_exceptions) LogInfo("EXCEPTION: Bus Error");
     HandleException();
     pc = GetCommonExceptionVector();
     cop0.cause.exc_code = mem_op == MemOp::InstrFetch ? 6 : 7;
@@ -46,7 +43,7 @@ template<MemOp mem_op> void BusErrorException()
 
 void ColdResetException()
 {
-    if constexpr (log_exceptions) Log("EXCEPTION: Cold Reset");
+    if constexpr (log_exceptions) LogInfo("EXCEPTION: Cold Reset");
     HandleException();
     pc = 0xFFFF'FFFF'BFC0'0000;
     cop0.status.rp = cop0.status.sr = cop0.status.ts = 0;
@@ -59,7 +56,7 @@ void ColdResetException()
 
 void CoprocessorUnusableException(int cop)
 {
-    if constexpr (log_exceptions) Log(std::format("EXCEPTION: Cop{} Unusable", cop));
+    if constexpr (log_exceptions) LogInfo("EXCEPTION: Cop{} Unusable", cop);
     HandleException();
     pc = GetCommonExceptionVector();
     cop0.cause.exc_code = 11;
@@ -68,7 +65,7 @@ void CoprocessorUnusableException(int cop)
 
 void FloatingPointException()
 {
-    if constexpr (log_exceptions) Log("EXCEPTION: Floating-point");
+    if constexpr (log_exceptions) LogInfo("EXCEPTION: Floating-point");
     HandleException();
     pc = GetCommonExceptionVector();
     cop0.cause.exc_code = 15;
@@ -82,7 +79,7 @@ u64 GetCommonExceptionVector()
 
 void IntegerOverflowException()
 {
-    if constexpr (log_exceptions) Log("EXCEPTION: Integer Overflow");
+    if constexpr (log_exceptions) LogInfo("EXCEPTION: Integer Overflow");
     HandleException();
     pc = GetCommonExceptionVector();
     cop0.cause.exc_code = 12;
@@ -91,7 +88,7 @@ void IntegerOverflowException()
 
 void InterruptException()
 {
-    if constexpr (log_exceptions) Log("EXCEPTION: Interrupt");
+    if constexpr (log_exceptions) LogInfo("EXCEPTION: Interrupt");
     HandleException();
     pc = GetCommonExceptionVector();
     cop0.cause.exc_code = 0;
@@ -102,10 +99,13 @@ void HandleException()
 {
     exception_occurred = true;
     if (!cop0.status.exl) {
-        bool in_delay_slot = in_branch_delay_slot_taken | in_branch_delay_slot_not_taken;
+        bool in_delay_slot =
+          branch_state == mips::BranchState::DelaySlotTaken || branch_state == mips::BranchState::DelaySlotNotTaken;
         cop0.cause.bd = in_delay_slot;
         cop0.epc = pc;
-        if (in_delay_slot) cop0.epc -= 4;
+        if (in_delay_slot) {
+            cop0.epc -= 4;
+        }
         cop0.status.exl = 1;
         SignalInterruptFalse();
         SetVaddrToPaddrFuncs();
@@ -115,7 +115,7 @@ void HandleException()
 
 void NmiException()
 {
-    if constexpr (log_exceptions) Log("EXCEPTION: NMI");
+    if constexpr (log_exceptions) LogInfo("EXCEPTION: NMI");
     HandleException();
     pc = cop0.error_epc; // TODO: not 0xFFFF'FFFF'BFC0'0000?
     cop0.status.ts = 0;
@@ -125,7 +125,7 @@ void NmiException()
 
 void ReservedInstructionException()
 {
-    if constexpr (log_exceptions) Log("EXCEPTION: Reserved Instruction");
+    if constexpr (log_exceptions) LogInfo("EXCEPTION: Reserved Instruction");
     HandleException();
     pc = GetCommonExceptionVector();
     cop0.cause.exc_code = 10;
@@ -134,7 +134,7 @@ void ReservedInstructionException()
 
 void ReservedInstructionCop2Exception()
 {
-    if constexpr (log_exceptions) Log("EXCEPTION: Reserved Instruction");
+    if constexpr (log_exceptions) LogInfo("EXCEPTION: Reserved Instruction");
     HandleException();
     pc = GetCommonExceptionVector();
     cop0.cause.exc_code = 10;
@@ -143,7 +143,7 @@ void ReservedInstructionCop2Exception()
 
 void SoftResetException()
 {
-    if constexpr (log_exceptions) Log("EXCEPTION: Soft Reset");
+    if constexpr (log_exceptions) LogInfo("EXCEPTION: Soft Reset");
     HandleException();
     pc = cop0.status.erl ? 0xFFFF'FFFF'BFC0'0000 : cop0.error_epc;
     cop0.status.rp = cop0.status.ts = 0;
@@ -152,16 +152,16 @@ void SoftResetException()
 
 void SyscallException()
 {
-    if constexpr (log_exceptions) Log("EXCEPTION: Syscall");
+    if constexpr (log_exceptions) LogInfo("EXCEPTION: Syscall");
     HandleException();
     pc = GetCommonExceptionVector();
     cop0.cause.exc_code = 8;
     cop0.cause.ce = 0;
 }
 
-template<MemOp mem_op> void TlbInvalidException(u64 bad_vaddr)
+void TlbInvalidException(u64 bad_vaddr, MemOp mem_op)
 {
-    if constexpr (log_exceptions) Log(std::format("EXCEPTION: TLB Invalid; vaddr {:016X}", bad_vaddr));
+    if constexpr (log_exceptions) LogInfo("EXCEPTION: TLB Invalid; vaddr {:016X}", bad_vaddr);
     HandleException();
     pc = GetCommonExceptionVector();
     cop0.cause.exc_code = mem_op == MemOp::Write ? 3 : 2;
@@ -170,9 +170,9 @@ template<MemOp mem_op> void TlbInvalidException(u64 bad_vaddr)
     cop0.cause.ce = 0;
 }
 
-template<MemOp mem_op> void TlbMissException(u64 bad_vaddr)
+void TlbMissException(u64 bad_vaddr, MemOp mem_op)
 {
-    if constexpr (log_exceptions) Log(std::format("EXCEPTION: TLB Miss; vaddr {:016X}", bad_vaddr));
+    if constexpr (log_exceptions) LogInfo("EXCEPTION: TLB Miss; vaddr {:016X}", bad_vaddr);
     static constexpr s32 base_addr[2][2] = {
         0x8000'0000_s32,
         0x8000'0180_s32,
@@ -190,7 +190,7 @@ template<MemOp mem_op> void TlbMissException(u64 bad_vaddr)
 
 void TlbModificationException(u64 bad_vaddr)
 {
-    if constexpr (log_exceptions) Log(std::format("EXCEPTION: TLB Modification; vaddr {:016X}", bad_vaddr));
+    if constexpr (log_exceptions) LogInfo("EXCEPTION: TLB Modification; vaddr {:016X}", bad_vaddr);
     HandleException();
     pc = GetCommonExceptionVector();
     cop0.cause.exc_code = 1;
@@ -201,7 +201,7 @@ void TlbModificationException(u64 bad_vaddr)
 
 void TrapException()
 {
-    if constexpr (log_exceptions) Log("EXCEPTION: Trap");
+    if constexpr (log_exceptions) LogInfo("EXCEPTION: Trap");
     HandleException();
     pc = GetCommonExceptionVector();
     cop0.cause.exc_code = 13;
@@ -210,16 +210,16 @@ void TrapException()
 
 void WatchException()
 {
-    if constexpr (log_exceptions) Log("EXCEPTION: Watch");
+    if constexpr (log_exceptions) LogInfo("EXCEPTION: Watch");
     HandleException();
     pc = GetCommonExceptionVector();
     cop0.cause.exc_code = 23;
     cop0.cause.ce = 0;
 }
 
-template<MemOp mem_op> void XtlbMissException(u64 bad_vaddr)
+void XtlbMissException(u64 bad_vaddr, MemOp mem_op)
 {
-    if constexpr (log_exceptions) Log(std::format("EXCEPTION: XTLB Miss; vaddr {:016X}", bad_vaddr));
+    if constexpr (log_exceptions) LogInfo("EXCEPTION: XTLB Miss; vaddr {:016X}", bad_vaddr);
     static constexpr s32 base_addr[2][2] = {
         0x8000'0080_s32,
         0x8000'0180_s32,
@@ -235,21 +235,5 @@ template<MemOp mem_op> void XtlbMissException(u64 bad_vaddr)
     cop0.entry_hi.r = cop0.x_context.r = bad_vaddr >> 62;
     cop0.cause.ce = 0;
 }
-
-template void AddressErrorException<MemOp::InstrFetch>(u64);
-template void AddressErrorException<MemOp::Read>(u64);
-template void AddressErrorException<MemOp::Write>(u64);
-
-template void TlbInvalidException<MemOp::InstrFetch>(u64);
-template void TlbInvalidException<MemOp::Read>(u64);
-template void TlbInvalidException<MemOp::Write>(u64);
-
-template void TlbMissException<MemOp::InstrFetch>(u64);
-template void TlbMissException<MemOp::Read>(u64);
-template void TlbMissException<MemOp::Write>(u64);
-
-template void XtlbMissException<MemOp::InstrFetch>(u64);
-template void XtlbMissException<MemOp::Read>(u64);
-template void XtlbMissException<MemOp::Write>(u64);
 
 } // namespace n64::vr4300

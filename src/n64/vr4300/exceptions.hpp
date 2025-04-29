@@ -5,9 +5,9 @@
 
 namespace n64::vr4300 {
 
-template<MemOp> void AddressErrorException(u64 bad_vaddr);
+void AddressErrorException(u64 bad_vaddr, MemOp mem_op);
 void BreakpointException();
-template<MemOp> void BusErrorException();
+void BusErrorException(MemOp mem_op);
 void ColdResetException();
 void CoprocessorUnusableException(int cop);
 void FloatingPointException();
@@ -18,12 +18,12 @@ void ReservedInstructionException();
 void ReservedInstructionCop2Exception();
 void SoftResetException();
 void SyscallException();
-template<MemOp> void TlbInvalidException(u64 bad_vaddr);
-template<MemOp> void TlbMissException(u64 bad_vaddr);
+void TlbInvalidException(u64 bad_vaddr, MemOp mem_op);
+void TlbMissException(u64 bad_vaddr, MemOp mem_op);
 void TlbModificationException(u64 bad_vaddr);
 void TrapException();
 void WatchException();
-template<MemOp> void XtlbMissException(u64 bad_vaddr);
+void XtlbMissException(u64 bad_vaddr, MemOp mem_op);
 
 inline bool exception_occurred;
 

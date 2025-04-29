@@ -1,3 +1,4 @@
+#include "build_options.hpp"
 #include "frontend/gui.hpp"
 #include "frontend/loader.hpp"
 #include "frontend/message.hpp"
@@ -6,17 +7,16 @@
 
 #include <cstdlib>
 #include <filesystem>
-#include <string_view>
-
-namespace fs = std::filesystem;
 
 int main(int argc, char* argv[])
 {
-    if (Status status = InitFileLog(); !status.Ok()) {
-        LogWarn(status.Message());
+    if constexpr (enable_file_logging) {
+        SetLogModeFile(log_path);
+    } else if constexpr (enable_console_logging) {
+        SetLogModeConsole();
     }
 
-    if (Status status = frontend::gui::Init(fs::current_path()); !status.Ok()) {
+    if (Status status = frontend::gui::Init(std::filesystem::current_path()); !status.Ok()) {
         LogFatal(status.Message());
         return EXIT_FAILURE;
     }

@@ -1,17 +1,12 @@
 #include "cop0.hpp"
 #include "always_false.hpp"
-#include "cop1.hpp"
 #include "exceptions.hpp"
-#include "memory/memory.hpp"
 #include "mmu.hpp"
-#include "n64_build_options.hpp"
 #include "scheduler.hpp"
-
 #include "vr4300.hpp"
 #include "vr4300/interpreter.hpp"
 
 #include <bit>
-#include <cassert>
 #include <cstring>
 
 using mips::OperatingMode;
@@ -280,7 +275,7 @@ void eret()
        Then, there is no need to check if the pc is misaligned every time an instruction is fetched
        (this is one of the few places where the pc can be set to a misaligned value). */
     if (pc & 3) {
-        AddressErrorException<MemOp::InstrFetch>(pc);
+        AddressErrorException(pc, MemOp::InstrFetch);
     } else {
         ResetBranch();
         exception_occurred = true; // stop pc from being incremented by 4 directly after.

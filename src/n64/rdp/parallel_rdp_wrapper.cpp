@@ -1,24 +1,15 @@
 #include "parallel_rdp_wrapper.hpp"
 #include "frontend/gui.hpp"
-#include "frontend/message.hpp"
 #include "interface/vi.hpp"
 #include "log.hpp"
 #include "memory/rdram.hpp"
 #include "n64/rdp/rdp.hpp"
 #include "rdp.hpp"
-#include "SDL3/SDL.h"
 #include "SDL3/SDL_vulkan.h"
-#include "status.hpp"
 #include "volk/volk.h"
 
-#include <algorithm>
-#include <array>
-#include <cassert>
 #include <cstring>
-#include <format>
 #include <memory>
-#include <optional>
-#include <print>
 #include <vector>
 
 namespace n64::rdp {
@@ -157,17 +148,17 @@ ParallelRdpWrapper::~ParallelRdpWrapper()
 std::unique_ptr<ParallelRdpWrapper> ParallelRdpWrapper::Create(SDL_Window* sdl_window)
 {
     if (!sdl_window) {
-        std::println("null SDL_Window provided to ParallelRdpWrapper");
+        LogError("null SDL_Window provided to ParallelRdpWrapper");
         return {};
     }
 
     if (!(SDL_GetWindowFlags(sdl_window) & SDL_WINDOW_VULKAN)) {
-        std::println("SDL_Window provided to ParallelRdpWrapper not created with SDL_WINDOW_VULKAN window flag!");
+        LogError("SDL_Window provided to ParallelRdpWrapper not created with SDL_WINDOW_VULKAN window flag!");
         return {};
     }
 
     if (volkInitialize() != VK_SUCCESS) {
-        std::println("Failed to initialize volk.");
+        LogError("Failed to initialize volk.");
         return {};
     }
 
@@ -178,7 +169,7 @@ std::unique_ptr<ParallelRdpWrapper> ParallelRdpWrapper::Create(SDL_Window* sdl_w
     wsi->set_present_mode(Vulkan::PresentMode::UnlockedMaybeTear);
     Vulkan::Context::SystemHandles handles{};
     if (!wsi->init_simple(1, handles)) {
-        std::println("Failed to init ParallelRDP wsi");
+        LogError("Failed to init ParallelRDP wsi");
         return {};
     }
 
@@ -195,7 +186,7 @@ std::unique_ptr<ParallelRdpWrapper> ParallelRdpWrapper::Create(SDL_Window* sdl_w
       hidden_rdram_size,
       flags);
     if (!cmd_processor->device_is_supported()) {
-        std::println("Vulkan device not supported.");
+        LogError("Vulkan device not supported.");
         return {};
     }
 
@@ -252,7 +243,7 @@ VkQueue ParallelRdpWrapper::GetVkQueue()
 void ParallelRdpWrapper::SetRenderCallback(RenderCallback render)
 {
     if (!render) {
-        std::println("null render callback provided to ParallelRdpWrapper");
+        LogError("null render callback provided to ParallelRdpWrapper");
     }
     render_ = render;
 }
@@ -364,7 +355,7 @@ VkSurfaceKHR ParallelRdpWrapper::SDLWSIPlatform::create_surface(VkInstance insta
 {
     VkSurfaceKHR vk_surface = VK_NULL_HANDLE;
     if (!SDL_Vulkan_CreateSurface(sdl_window, instance, nullptr, &vk_surface)) {
-        LogError(std::format("Failed to create Vulkan surface: {}", SDL_GetError()));
+        LogError("Failed to create Vulkan surface: {}", SDL_GetError());
         return VK_NULL_HANDLE;
     }
     return vk_surface;

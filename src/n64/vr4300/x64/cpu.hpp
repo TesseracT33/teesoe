@@ -1,7 +1,12 @@
 #pragma once
 
 #include "mips/recompiler_x64.hpp"
+#include "mips/types.hpp"
+#include "vr4300/cop0.hpp"
+#include "vr4300/exceptions.hpp"
 #include "vr4300/recompiler.hpp"
+#include "vr4300/vr4300.hpp"
+#include <utility>
 
 namespace n64::vr4300::x64 {
 
@@ -22,21 +27,23 @@ struct Recompiler : public mips::RecompilerX64<s64, u64, RegAllocator> {
     void bgezal(u32 rs, s16 imm) const
     {
         Label l_branch = c.newLabel(), l_link = c.newLabel(), l_no_delay_slot = c.newLabel(), l_end = c.newLabel();
-        reg_alloc.Reserve(rcx);
         Gpq hs = GetGpr(rs), h31 = GetDirtyGpr(31);
-        c.mov(cl, JitPtr(in_branch_delay_slot_taken));
-        c.or_(cl, JitPtr(in_branch_delay_slot_not_taken));
+        c.mov(al, JitPtr(branch_state));
+        c.push(rax);
         c.test(hs, hs);
         c.jns(l_branch);
-        OnBranchNotTakenJit();
+        EmitBranchNotTaken();
         c.jmp(l_link);
 
         c.bind(l_branch);
-        c.mov(rax, jit_pc + 4 + (imm << 2));
-        TakeBranchJit(rax);
+        EmitBranchTaken(jit_pc + 4 + (imm << 2));
 
         c.bind(l_link);
-        c.test(cl, cl);
+        // TODO: not correct
+        c.pop(rax);
+        c.cmp(al,
+          std::to_underlying(mips::BranchState::DelaySlotTaken)
+            | std::to_underlying(mips::BranchState::DelaySlotNotTaken));
         c.je(l_no_delay_slot);
         c.mov(h31.r32(), 4);
         c.add(h31, JitPtr(jump_addr));
@@ -47,8 +54,7 @@ struct Recompiler : public mips::RecompilerX64<s64, u64, RegAllocator> {
 
         c.bind(l_end);
 
-        branch_hit = true;
-        reg_alloc.Free(rcx);
+        last_instr_was_branch = true;
     }
 
     void bgezall(u32 rs, s16 imm) const { branch_and_link<mips::Cond::Ge, true>(rs, imm); }
@@ -230,38 +236,38 @@ struct Recompiler : public mips::RecompilerX64<s64, u64, RegAllocator> {
     void j(u32 instr) const
     {
         Label l_end = c.newLabel();
-        c.cmp(JitPtr(in_branch_delay_slot_taken), 1);
+        c.cmp(JitPtr(branch_state), std::to_underlying(mips::BranchState::DelaySlotTaken));
         c.je(l_end);
-        TakeBranchJit((jit_pc + 4) & 0xFFFF'FFFF'F000'0000 | instr << 2 & 0xFFF'FFFF);
+        EmitBranchTaken((jit_pc + 4) & 0xFFFF'FFFF'F000'0000 | instr << 2 & 0xFFF'FFFF);
 
         c.bind(l_end);
-        branch_hit = true;
+        last_instr_was_branch = true;
     }
 
     void jal(u32 instr) const
     {
         Label l_jump = c.newLabel(), l_end = c.newLabel();
         Gpq h31 = GetDirtyGpr(31);
-        c.cmp(JitPtr(in_branch_delay_slot_taken), 0);
-        c.je(l_jump);
+        c.cmp(JitPtr(branch_state), std::to_underlying(mips::BranchState::DelaySlotTaken));
+        c.jne(l_jump);
         c.mov(h31.r32(), 4);
         c.add(h31, JitPtr(jump_addr));
         c.jmp(l_end);
 
         c.bind(l_jump);
         c.mov(h31, jit_pc + 8);
-        TakeBranchJit((jit_pc + 4) & 0xFFFF'FFFF'F000'0000 | instr << 2 & 0xFFF'FFFF);
+        EmitBranchTaken((jit_pc + 4) & 0xFFFF'FFFF'F000'0000 | instr << 2 & 0xFFF'FFFF);
 
         c.bind(l_end);
-        branch_hit = true;
+        last_instr_was_branch = true;
     }
 
     void jalr(u32 rs, u32 rd) const
     {
         Label l_jump = c.newLabel(), l_end = c.newLabel();
         Gpq hd = GetDirtyGpr(rd), hs = GetGpr(rs);
-        c.cmp(JitPtr(in_branch_delay_slot_taken), 0);
-        c.je(l_jump);
+        c.cmp(JitPtr(branch_state), std::to_underlying(mips::BranchState::DelaySlotTaken));
+        c.jne(l_jump);
         c.mov(hd.r32(), 4);
         c.add(hd, JitPtr(jump_addr));
         c.jmp(l_end);
@@ -270,26 +276,26 @@ struct Recompiler : public mips::RecompilerX64<s64, u64, RegAllocator> {
         if (rs == rd) {
             c.mov(rax, hs);
             c.mov(hd, jit_pc + 8);
-            TakeBranchJit(rax);
+            EmitBranchTaken(rax);
         } else {
             c.mov(hd, jit_pc + 8);
-            TakeBranchJit(hs);
+            EmitBranchTaken(hs);
         }
 
         c.bind(l_end);
-        branch_hit = true;
+        last_instr_was_branch = true;
     }
 
     void jr(u32 rs) const
     {
         Label l_end = c.newLabel();
         Gpq hs = GetGpr(rs);
-        c.cmp(JitPtr(in_branch_delay_slot_taken), 1);
+        c.cmp(JitPtr(branch_state), std::to_underlying(mips::BranchState::DelaySlotTaken));
         c.je(l_end);
-        TakeBranchJit(hs);
+        EmitBranchTaken(hs);
 
         c.bind(l_end);
-        branch_hit = true;
+        last_instr_was_branch = true;
     }
 
     void lb(u32 rs, u32 rt, s16 imm) const { load<s8, false>(rs, rt, imm); }
@@ -577,30 +583,25 @@ struct Recompiler : public mips::RecompilerX64<s64, u64, RegAllocator> {
 private:
     template<mips::Cond cc, bool likely> void branch(u32 rs, u32 rt, s16 imm) const
     {
-        if (!rs && !rt) {
-            if constexpr (cc == mips::Cond::Eq) TakeBranchJit(jit_pc + 4 + (imm << 2));
-            if constexpr (cc == mips::Cond::Ne) likely ? DiscardBranchJit() : OnBranchNotTakenJit();
+        Label l_branch = c.newLabel(), l_end = c.newLabel();
+        if (!rs) {
+            Gp ht = GetGpr(rt);
+            c.test(ht, ht);
+        } else if (!rt) {
+            Gp hs = GetGpr(rs);
+            c.test(hs, hs);
         } else {
-            Label l_branch = c.newLabel(), l_end = c.newLabel();
-            if (!rs) {
-                Gp ht = GetGpr(rt);
-                c.test(ht, ht);
-            } else if (!rt) {
-                Gp hs = GetGpr(rs);
-                c.test(hs, hs);
-            } else {
-                Gp hs = GetGpr(rs), ht = GetGpr(rt);
-                c.cmp(hs, ht);
-            }
-            if constexpr (cc == mips::Cond::Eq) c.je(l_branch);
-            if constexpr (cc == mips::Cond::Ne) c.jne(l_branch);
-            likely ? DiscardBranchJit() : OnBranchNotTakenJit();
-            c.jmp(l_end);
-            c.bind(l_branch);
-            TakeBranchJit(jit_pc + 4 + (imm << 2));
-            c.bind(l_end);
+            Gp hs = GetGpr(rs), ht = GetGpr(rt);
+            c.cmp(hs, ht);
         }
-        branch_hit = true;
+        if constexpr (cc == mips::Cond::Eq) c.je(l_branch);
+        if constexpr (cc == mips::Cond::Ne) c.jne(l_branch);
+        likely ? EmitBranchDiscarded() : EmitBranchNotTaken();
+        c.jmp(l_end);
+        c.bind(l_branch);
+        EmitBranchTaken(jit_pc + 4 + (imm << 2));
+        c.bind(l_end);
+        last_instr_was_branch = true;
     }
 
     template<mips::Cond cc, bool likely> void branch(u32 rs, s16 imm) const
@@ -612,17 +613,17 @@ private:
         if constexpr (cc == mips::Cond::Gt) c.jg(l_branch);
         if constexpr (cc == mips::Cond::Le) c.jle(l_branch);
         if constexpr (cc == mips::Cond::Lt) c.js(l_branch);
-        likely ? DiscardBranchJit() : OnBranchNotTakenJit();
+        likely ? EmitBranchDiscarded() : EmitBranchNotTaken();
         c.jmp(l_end);
         c.bind(l_branch);
-        TakeBranchJit(jit_pc + 4 + (imm << 2));
+        EmitBranchTaken(jit_pc + 4 + (imm << 2));
         c.bind(l_end);
-        branch_hit = true;
+        last_instr_was_branch = true;
     }
 
     template<mips::Cond cc, bool likely> void branch_and_link(auto... args) const
     {
-        LinkJit(31);
+        EmitLink(31);
         branch<cc, likely>(args...);
     }
 
@@ -726,16 +727,16 @@ private:
         c.bind(l_end);
     }
 } inline constexpr cpu_recompiler{
-    compiler,
+    c,
     reg_alloc,
     jit_pc,
-    branch_hit,
+    last_instr_was_branch,
     branched,
     [] { return JitPtr(lo); },
     [] { return JitPtr(hi); },
-    [](u64 target) { TakeBranchJit(target); },
-    [](HostGpr32 target) { TakeBranchJit(target); },
-    LinkJit,
+    [](u64 target) { EmitBranchTaken(target); },
+    [](HostGpr64 target) { EmitBranchTaken(target); },
+    EmitLink,
     BlockEpilogWithPcFlushAndJmp,
     IntegerOverflowException,
     TrapException,

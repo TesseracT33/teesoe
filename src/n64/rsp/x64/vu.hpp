@@ -2,6 +2,7 @@
 
 #include "jit_common.hpp"
 #include "rsp/recompiler.hpp"
+#include "rsp/register_allocator.hpp"
 #include "rsp/rsp.hpp"
 #include "rsp/vu.hpp"
 #include "sse_util.hpp"
@@ -16,8 +17,6 @@ namespace n64::rsp::x64 {
 
 using namespace asmjit;
 using namespace asmjit::x86;
-
-JitCompiler& c = compiler;
 
 static Xmm GetVpr(u32 idx)
 {

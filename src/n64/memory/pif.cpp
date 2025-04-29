@@ -221,7 +221,7 @@ void RunJoybusProtocol()
             ControllerId(result);
             ++channel;
             break;
-        default: LogWarn(std::format("Unexpected joybus command {} encountered.", cmd));
+        default: LogWarn("Unexpected joybus command {} encountered.", cmd);
         }
     }
 }
@@ -245,29 +245,30 @@ template<size_t access_size> void WriteMemory(u32 addr, s64 data)
     std::memcpy(&mem.ram[addr], &to_write, 4);
 
     if (addr == command_byte_index - 3) {
-        if (mem.ram[command_byte_index] & 1) {
+        u8* cmd_byte = &mem.ram[command_byte_index];
+        if (*cmd_byte & 1) {
             RunJoybusProtocol();
-            mem.ram[command_byte_index] &= ~1;
+            *cmd_byte &= ~1;
         }
-        if (mem.ram[command_byte_index] & 2) {
+        if (*cmd_byte & 2) {
             ChallengeProtection();
-            mem.ram[command_byte_index] &= ~2;
+            *cmd_byte &= ~2;
         }
-        if (mem.ram[command_byte_index] & 8) {
+        if (*cmd_byte & 8) {
             TerminateBootProcess();
-            mem.ram[command_byte_index] &= ~8;
+            *cmd_byte &= ~8;
         }
-        if (mem.ram[command_byte_index] & 16) {
+        if (*cmd_byte & 16) {
             RomLockout();
-            mem.ram[command_byte_index] &= ~16;
+            *cmd_byte &= ~16;
         }
-        if (mem.ram[command_byte_index] & 32) {
+        if (*cmd_byte & 32) {
             ChecksumVerification();
-            mem.ram[command_byte_index] &= ~32;
+            *cmd_byte &= ~32;
         }
-        if (mem.ram[command_byte_index] & 64) {
+        if (*cmd_byte & 64) {
             mem.ram = {};
-            mem.ram[command_byte_index] &= ~64;
+            *cmd_byte &= ~64;
         }
     }
 }

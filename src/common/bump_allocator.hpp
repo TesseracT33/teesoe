@@ -1,42 +1,64 @@
 #pragma once
 
+#include <algorithm>
+#include <cassert>
+#include <type_traits>
+#include <utility>
+#include <vector>
+
 #include "log.hpp"
 #include "numtypes.hpp"
 
-#include <algorithm>
-#include <vector>
-
 class BumpAllocator {
-public:
-    BumpAllocator(size_t size = 0) : memory_{}, index_{}, ran_out_of_memory_on_last_acquire_{} { allocate(size); }
+    std::vector<u8> storage_;
+    size_t index_;
+    bool out_of_memory_;
 
-    u8* acquire(size_t size)
+public:
+    BumpAllocator(size_t size = 0) : storage_{}, index_{}, out_of_memory_{} { allocate(size); }
+
+    template<typename T>
+    T* acquire()
+        requires(std::is_default_constructible_v<T> && std::is_trivially_destructible_v<T>)
     {
-        if (index_ + size >= memory_.size()) {
-            LogWarn("Bump allocator ran out of memory; resetting all available memory.");
-            std::ranges::fill(memory_, 0);
-            index_ = 0;
-            ran_out_of_memory_on_last_acquire_ = true;
-        } else {
-            ran_out_of_memory_on_last_acquire_ = false;
+        assert(!storage_.empty());
+        if constexpr (alignof(T) > 1) {
+            size_t align_rem = index_ % alignof(T);
+            if (align_rem) {
+                index_ += alignof(T) - align_rem;
+            }
         }
-        u8* alloc = &memory_[index_];
-        index_ += size;
-        return alloc;
+        if (index_ + sizeof(T) > storage_.size()) [[unlikely]] {
+            if (!std::exchange(out_of_memory_, true)) {
+                LogWarn("Bump allocator ran out of memory ({} bytes)", storage_.size());
+            }
+            return nullptr;
+        }
+        T* obj = ::new (static_cast<void*>(&storage_[index_])) T{};
+        index_ += sizeof(T);
+        return obj;
     }
 
     void allocate(size_t size)
     {
-        memory_.resize(size, 0);
+        storage_.resize(size, 0);
         index_ = 0;
+        out_of_memory_ = false;
     }
 
-    void deallocate() { memory_.clear(); }
+    void deallocate()
+    {
+        storage_ = {};
+        index_ = 0;
+        out_of_memory_ = false;
+    }
 
-    bool ran_out_of_memory_on_last_acquire() const { return ran_out_of_memory_on_last_acquire_; }
+    bool out_of_memory() const { return out_of_memory_; }
 
-private:
-    std::vector<u8> memory_;
-    size_t index_;
-    bool ran_out_of_memory_on_last_acquire_;
+    void reset()
+    {
+        std::ranges::fill(storage_, 0);
+        index_ = 0;
+        out_of_memory_ = false;
+    }
 };

@@ -40,7 +40,7 @@ static std::optional<fs::path> ExtractArchive(fs::path const& path)
         extractor.extract(path.generic_string(), out_path.generic_string());
         return out_path;
     } catch (bit7z::BitException const& e) {
-        LogWarn(std::format("Failed to extract archive; caught bit7z exception: {}", e.what()));
+        LogWarn("Failed to extract archive; caught bit7z exception: {}", e.what());
         return {};
     }
 }

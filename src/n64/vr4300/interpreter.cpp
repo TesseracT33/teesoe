@@ -8,10 +8,6 @@
 #include <array>
 #include <limits>
 
-#if defined _MSC_VER && !defined __clang__
-#include <intrin.h>
-#endif
-
 using mips::BranchState;
 
 namespace n64::vr4300 {
@@ -19,7 +15,6 @@ namespace n64::vr4300 {
 void DiscardBranch()
 {
     pc += 4;
-    in_branch_delay_slot_taken = in_branch_delay_slot_not_taken = false;
     branch_state = BranchState::NoBranch;
 }
 
@@ -30,14 +25,12 @@ void Link(u32 reg)
 
 void OnBranchNotTaken()
 {
-    in_branch_delay_slot_not_taken = true;
-    in_branch_delay_slot_taken = false;
+    last_instr_was_branch = true;
     branch_state = BranchState::DelaySlotNotTaken;
 }
 
 void ResetBranch()
 {
-    in_branch_delay_slot_taken = in_branch_delay_slot_not_taken = false;
     branch_state = BranchState::NoBranch;
 }
 
@@ -47,16 +40,20 @@ u32 RunInterpreter(u32 cpu_cycles)
     while (cycle_counter < cpu_cycles) {
         AdvancePipeline(1);
         exception_occurred = false;
+        last_instr_was_branch = false;
         u32 instr = FetchInstruction(pc);
         if (exception_occurred) continue;
         decoder::exec_cpu<CpuImpl::Interpreter>(instr);
         if (exception_occurred) continue;
-        if (branch_state == BranchState::Perform) {
-            PerformBranch();
-        } else {
-            in_branch_delay_slot_not_taken &= branch_state != BranchState::NoBranch;
-            branch_state = branch_state == BranchState::DelaySlotTaken ? BranchState::Perform : BranchState::NoBranch;
+        if (last_instr_was_branch) {
             pc += 4;
+        } else {
+            if (branch_state == BranchState::DelaySlotTaken) {
+                PerformBranch();
+            } else {
+                branch_state = BranchState::NoBranch;
+                pc += 4;
+            }
         }
     }
     return cycle_counter - cpu_cycles;
@@ -64,8 +61,7 @@ u32 RunInterpreter(u32 cpu_cycles)
 
 void TakeBranch(u64 target_address)
 {
-    in_branch_delay_slot_taken = true;
-    in_branch_delay_slot_not_taken = false;
+    last_instr_was_branch = true;
     branch_state = BranchState::DelaySlotTaken;
     jump_addr = target_address;
 }
@@ -99,7 +95,7 @@ void Interpreter::bgez(u32 rs, s16 imm) const
 
 void Interpreter::bgezal(u32 rs, s16 imm) const
 {
-    bool in_delay_slot = in_branch_delay_slot_taken || in_branch_delay_slot_not_taken;
+    bool in_delay_slot = branch_state == BranchState::DelaySlotTaken || branch_state == BranchState::DelaySlotNotTaken;
     if (gpr[rs] >= 0) {
         TakeBranch(pc + 4 + (imm << 2));
     } else {
@@ -291,43 +287,31 @@ void Interpreter::divu(u32 rs, u32 rt) const
 void Interpreter::dmult(u32 rs, u32 rt) const
 {
     if (!can_execute_dword_instrs) return ReservedInstructionException();
-#if INT128_AVAILABLE
     s128 prod = s128(gpr[rs]) * s128(gpr[rt]);
     lo = s64(prod);
     hi = prod >> 64;
-#elif defined _MSC_VER
-    lo = _mul128(gpr[rs], gpr[rt], &hi);
-#else
-#error DMULT unimplemented on targets where INT128 or MSVC _mul128 is unavailable
-#endif
     AdvancePipeline(7);
 }
 
 void Interpreter::dmultu(u32 rs, u32 rt) const
 {
     if (!can_execute_dword_instrs) return ReservedInstructionException();
-#if INT128_AVAILABLE
     u128 prod = u128(gpr[rs]) * u128(gpr[rt]);
     lo = s64(prod);
     hi = prod >> 64;
-#elif defined _MSC_VER
-    lo = _umul128(gpr[rs], gpr[rt], reinterpret_cast<u64*>(&hi));
-#else
-#error DMULTU unimplemented on targets where UINT128 or MSVC _umul128 is unavailable
-#endif
     AdvancePipeline(7);
 }
 
 void Interpreter::j(u32 instr) const
 {
-    if (!in_branch_delay_slot_taken) {
+    if (branch_state != BranchState::DelaySlotTaken) {
         TakeBranch((pc + 4) & 0xFFFF'FFFF'F000'0000 | instr << 2 & 0xFFF'FFFF);
     }
 }
 
 void Interpreter::jal(u32 instr) const
 {
-    if (in_branch_delay_slot_taken) {
+    if (branch_state == BranchState::DelaySlotTaken) {
         gpr.set(31, jump_addr + 4);
     } else {
         gpr.set(31, pc + 8);
@@ -337,7 +321,7 @@ void Interpreter::jal(u32 instr) const
 
 void Interpreter::jalr(u32 rs, u32 rd) const
 {
-    if (in_branch_delay_slot_taken) {
+    if (branch_state == BranchState::DelaySlotTaken) {
         gpr.set(rd, jump_addr + 4);
     } else {
         s64 target = gpr[rs];
@@ -348,7 +332,7 @@ void Interpreter::jalr(u32 rs, u32 rd) const
 
 void Interpreter::jr(u32 rs) const
 {
-    if (!in_branch_delay_slot_taken) {
+    if (branch_state != BranchState::DelaySlotTaken) {
         TakeBranch(gpr[rs]);
     }
 }

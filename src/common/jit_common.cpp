@@ -5,7 +5,7 @@
 
 void AsmjitLogErrorHandler::handleError(asmjit::Error err, char const* message, asmjit::BaseEmitter* /*origin*/)
 {
-    LogError(std::format("AsmJit error {}: {}", err, message));
+    LogError("AsmJit error {}: {}", err, message);
 }
 
 std::string HostRegToStr(asmjit::a64::Vec reg)

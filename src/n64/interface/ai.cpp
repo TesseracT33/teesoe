@@ -1,5 +1,4 @@
 #include "frontend/audio.hpp"
-#include "frontend/message.hpp"
 #include "interface/mi.hpp"
 #include "log.hpp"
 #include "memory/memory.hpp"
@@ -8,8 +7,6 @@
 
 #include <algorithm>
 #include <array>
-#include <cstring>
-#include <format>
 #include <string_view>
 
 namespace n64::ai {
@@ -52,7 +49,7 @@ u32 ReadReg(u32 addr)
         ret = dma_len[0];
     }
     if constexpr (log_io_ai) {
-        Log(std::format("AI: {} => ${:08X}", RegOffsetToStr(addr >> 2 & 7), ret));
+        LogInfo("AI: {} => ${:08X}", RegOffsetToStr(addr >> 2 & 7), ret);
     }
     return ret;
 }
@@ -108,7 +105,7 @@ void WriteReg(u32 addr, u32 data)
 {
     u32 offset = addr >> 2 & 7;
     if constexpr (log_io_ai) {
-        Log(std::format("AI: {} <= ${:08X}", RegOffsetToStr(offset), data));
+        LogInfo("AI: {} <= ${:08X}", RegOffsetToStr(offset), data);
     }
 
     switch (offset) {
@@ -143,7 +140,7 @@ void WriteReg(u32 addr, u32 data)
 
     case Register::Bitrate: break;
 
-    default: LogWarn(std::format("Unexpected write made to AI register at address ${:08X}", addr));
+    default: LogWarn("Unexpected write made to AI register at address ${:08X}", addr);
     }
 }
 

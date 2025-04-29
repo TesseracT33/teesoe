@@ -40,11 +40,6 @@ target_compile_definitions(imgui PUBLIC VK_NO_PROTOTYPES)
 target_compile_options(imgui PRIVATE -w) # disable warnings
 target_link_libraries(${CMAKE_PROJECT_NAME} imgui)
 
-##### nativefiledialog-extended #########################
-add_subdirectory(nativefiledialog-extended)
-target_compile_options(nfd PRIVATE -w) # disable warnings
-target_link_libraries(${CMAKE_PROJECT_NAME} nfd)
-
 ##### parallel-rdp-standalone #########################
 # Do not use vulkan/device_fossilize.cpp
 add_library(parallel-rdp-standalone STATIC
@@ -122,7 +117,7 @@ target_compile_options(yaml-cpp PRIVATE -w) # disable warnings
 
 ##### General #################
 set_target_properties(
-	asmjit bit7z64 imgui nfd parallel-rdp-standalone SDL3-static yaml-cpp
+	asmjit bit7z64 imgui parallel-rdp-standalone SDL3-static yaml-cpp
 	PROPERTIES
 	SYSTEM TRUE
 )

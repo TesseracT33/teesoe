@@ -3,7 +3,6 @@
 #include "yaml-cpp/yaml.h"
 
 #include <cassert>
-#include <format>
 #include <fstream>
 #include <string_view>
 
@@ -43,7 +42,7 @@ void EmitN64(YAML::Emitter& out)
     out << YAML::EndMap;
     out << YAML::EndMap;
     if (!out.good()) {
-        LogError(std::format("yaml emitter error: {}", out.GetLastError()));
+        LogError("yaml emitter error: {}", out.GetLastError());
     }
 }
 

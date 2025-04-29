@@ -13,7 +13,6 @@ struct RecompilerX64 : public Recompiler<GprInt, PcInt, RegisterAllocator> {
     using Base = Recompiler<GprInt, PcInt, RegisterAllocator>;
     using Base::Base;
     using Base::block_epilog_with_pc_flush_and_jmp;
-    using Base::branch_hit;
     using Base::branched;
     using Base::c;
     using Base::check_can_exec_dword_instr;
@@ -26,6 +25,7 @@ struct RecompilerX64 : public Recompiler<GprInt, PcInt, RegisterAllocator> {
     using Base::indirect_jump;
     using Base::integer_overflow_exception;
     using Base::jit_pc;
+    using Base::last_instr_was_branch;
     using Base::link;
     using Base::mips32;
     using Base::mips64;
@@ -82,31 +82,21 @@ struct RecompilerX64 : public Recompiler<GprInt, PcInt, RegisterAllocator> {
     void and_(u32 rs, u32 rt, u32 rd) const
     {
         if (!rd) return;
-        Gp hd = GetDirtyGpr(rd);
-        if (!rs || !rt) {
-            c.xor_(hd.r32(), hd.r32());
+        Gp hd = GetDirtyGpr(rd), hs = GetGpr(rs), ht = GetGpr(rt);
+        if (rt == rd) {
+            c.and_(hd, hs);
         } else {
-            Gp hs = GetGpr(rs), ht = GetGpr(rt);
-            if (rt == rd) {
-                c.and_(hd, hs);
-            } else {
-                if (rs != rd) c.mov(hd, hs);
-                c.and_(hd, ht);
-            }
+            if (rs != rd) c.mov(hd, hs);
+            c.and_(hd, ht);
         }
     }
 
     void andi(u32 rs, u32 rt, u16 imm) const
     {
         if (!rt) return;
-        Gp ht = GetDirtyGpr(rt);
-        if (!rs) {
-            c.xor_(ht.r32(), ht.r32());
-        } else {
-            Gp hs = GetGpr(rs);
-            if (rs != rt) c.mov(ht, hs);
-            c.and_(ht, imm);
-        }
+        Gp ht = GetDirtyGpr(rt), hs = GetGpr(rs);
+        if (rs != rt) c.mov(ht, hs);
+        c.and_(ht, imm);
     }
 
     void beq(u32 rs, u32 rt, s16 imm) const { branch<Cond::Eq>(rs, rt, imm); }
@@ -263,9 +253,7 @@ struct RecompilerX64 : public Recompiler<GprInt, PcInt, RegisterAllocator> {
         if (!check_can_exec_dword_instr()) return;
         if (!rd) return;
         Gpq hd = GetDirtyGpr(rd), hs = GetGpr(rs), ht = GetGpr(rt);
-        if (rs == rt && rt == rd) {
-            c.xor_(hd.r32(), hd.r32());
-        } else if (rt == rd) {
+        if (rt == rd) {
             c.neg(hd);
             c.add(hd, hs);
         } else {
@@ -277,27 +265,27 @@ struct RecompilerX64 : public Recompiler<GprInt, PcInt, RegisterAllocator> {
     void j(u32 instr) const
     {
         take_branch((jit_pc + 4) & ~PcInt(0xFFF'FFFF) | instr << 2 & 0xFFF'FFFF);
-        branch_hit = true;
+        last_instr_was_branch = true;
     }
 
     void jal(u32 instr) const
     {
         take_branch((jit_pc + 4) & ~PcInt(0xFFF'FFFF) | instr << 2 & 0xFFF'FFFF);
         link(31);
-        branch_hit = true;
+        last_instr_was_branch = true;
     }
 
     void jalr(u32 rs, u32 rd) const
     {
-        indirect_jump(GetGpr(rs));
+        indirect_jump(GetGpr(rs).r64());
         link(rd);
-        branch_hit = true;
+        last_instr_was_branch = true;
     }
 
     void jr(u32 rs) const
     {
-        indirect_jump(GetGpr(rs));
-        branch_hit = true;
+        indirect_jump(GetGpr(rs).r64());
+        last_instr_was_branch = true;
     }
 
     void lui(u32 rt, s16 imm) const
@@ -345,12 +333,9 @@ struct RecompilerX64 : public Recompiler<GprInt, PcInt, RegisterAllocator> {
     {
         if (!rd) return;
         Gp hd = GetDirtyGpr(rd), hs = GetGpr(rs), ht = GetGpr(rt);
-        if (rt == rd) {
-            c.or_(hd, hs);
-        } else {
-            if (rs != rd) c.mov(hd, hs);
-            c.or_(hd, ht);
-        }
+        if (rs != rd) c.mov(hd, hs);
+        c.or_(hd, ht);
+
         c.not_(hd);
     }
 
@@ -358,12 +343,8 @@ struct RecompilerX64 : public Recompiler<GprInt, PcInt, RegisterAllocator> {
     {
         if (!rd) return;
         Gp hd = GetDirtyGpr(rd), hs = GetGpr(rs), ht = GetGpr(rt);
-        if (rt == rd) {
-            c.or_(hd, hs);
-        } else {
-            if (rs != rd) c.mov(hd, hs);
-            c.or_(hd, ht);
-        }
+        if (rs != rd) c.mov(hd, hs);
+        c.or_(hd, ht);
     }
 
     void ori(u32 rs, u32 rt, u16 imm) const
@@ -454,9 +435,19 @@ struct RecompilerX64 : public Recompiler<GprInt, PcInt, RegisterAllocator> {
     {
         if (!rd) return;
         Gpd hd = GetDirtyGpr32(rd), ht = GetGpr32(rt);
-        if (rt != rd) c.mov(hd, ht);
+        if (rt != rd) c.mov(hd, ht); // TODO: on mips64 only, move into eax
         if (sa) c.shr(hd, sa);
         if constexpr (mips64) c.movsxd(hd.r64(), hd);
+        // if constexpr (mips64) {
+        //     if (rt != rd) {
+        //         c.mov(eax, ht);
+        //         c.shr(eax, sa);
+        //         c.movsxd(hd.r64(), eax);
+        //     } else {
+        //         c.shr(hd, sa);
+        //         c.movsxd(hd.r64(), rd);
+        //     }
+        // }
     }
 
     void srlv(u32 rs, u32 rt, u32 rd) const
@@ -486,17 +477,14 @@ struct RecompilerX64 : public Recompiler<GprInt, PcInt, RegisterAllocator> {
     {
         if (!rd) return;
         Gpd hd = GetDirtyGpr32(rd), hs = GetGpr32(rs), ht = GetGpr32(rt);
-        if (rs == rt && rt == rd) {
-            c.xor_(hd, hd);
-        } else if (rt == rd) {
+        if (rt == rd) {
             c.neg(hd);
             c.add(hd, hs);
-            if constexpr (mips64) c.movsxd(hd.r64(), hd);
         } else {
             if (rs != rd) c.mov(hd, hs);
             c.sub(hd, ht);
-            if constexpr (mips64) c.movsxd(hd.r64(), hd);
         }
+        if constexpr (mips64) c.movsxd(hd.r64(), hd);
     }
 
     void teq(u32 rs, u32 rt) const { trap<Cond::Eq>(rs, rt); }
@@ -526,18 +514,9 @@ struct RecompilerX64 : public Recompiler<GprInt, PcInt, RegisterAllocator> {
     void xor_(u32 rs, u32 rt, u32 rd) const
     {
         if (!rd) return;
-        Gp hd = GetDirtyGpr(rd);
-        if (rs == rt) {
-            c.xor_(hd.r32(), hd.r32());
-        } else {
-            Gp hs = GetGpr(rs), ht = GetGpr(rt);
-            if (rt == rd) {
-                c.xor_(hd, hs);
-            } else {
-                if (rs != rd) c.mov(hd, hs);
-                c.xor_(hd, ht);
-            }
-        }
+        Gp hd = GetDirtyGpr(rd), hs = GetGpr(rs), ht = GetGpr(rt);
+        if (rs != rd) c.mov(hd, hs);
+        c.xor_(hd, ht);
     }
 
     void xori(u32 rs, u32 rt, u16 imm) const
@@ -545,32 +524,28 @@ struct RecompilerX64 : public Recompiler<GprInt, PcInt, RegisterAllocator> {
         if (!rt) return;
         Gp ht = GetDirtyGpr(rt), hs = GetGpr(rs);
         if (rs != rt) c.mov(ht, hs);
-        if (imm) c.xor_(ht, imm);
+        c.xor_(ht, imm);
     }
 
 protected:
     template<Cond cc> void branch(u32 rs, u32 rt, s16 imm) const
     {
-        if (!rs && !rt) {
-            if constexpr (cc == mips::Cond::Eq) take_branch(jit_pc + 4 + (imm << 2));
+        Label l_nobranch = c.newLabel();
+        if (!rs) {
+            Gp ht = GetGpr(rt);
+            c.test(ht, ht);
+        } else if (!rt) {
+            Gp hs = GetGpr(rs);
+            c.test(hs, hs);
         } else {
-            Label l_nobranch = c.newLabel();
-            if (!rs) {
-                Gp ht = GetGpr(rt);
-                c.test(ht, ht);
-            } else if (!rt) {
-                Gp hs = GetGpr(rs);
-                c.test(hs, hs);
-            } else {
-                Gp hs = GetGpr(rs), ht = GetGpr(rt);
-                c.cmp(hs, ht);
-            }
-            if constexpr (cc == Cond::Eq) c.jne(l_nobranch);
-            if constexpr (cc == Cond::Ne) c.je(l_nobranch);
-            take_branch(jit_pc + 4 + (imm << 2));
-            c.bind(l_nobranch);
+            Gp hs = GetGpr(rs), ht = GetGpr(rt);
+            c.cmp(hs, ht);
         }
-        branch_hit = true;
+        if constexpr (cc == Cond::Eq) c.jne(l_nobranch);
+        if constexpr (cc == Cond::Ne) c.je(l_nobranch);
+        take_branch(jit_pc + 4 + (imm << 2));
+        c.bind(l_nobranch);
+        last_instr_was_branch = true;
     }
 
     template<Cond cc> void branch(u32 rs, s16 imm) const
@@ -584,7 +559,7 @@ protected:
         if constexpr (cc == Cond::Lt) c.jns(l_nobranch);
         take_branch(jit_pc + 4 + (imm << 2));
         c.bind(l_nobranch);
-        branch_hit = true;
+        last_instr_was_branch = true;
     }
 
     template<Cond cc> void branch_and_link(auto... args) const
@@ -593,21 +568,35 @@ protected:
         link(31);
     }
 
-    template<Cond cc>
-    void trap(u32 rs, auto rt_or_imm) const
-        requires(std::same_as<decltype(rt_or_imm), s16> || std::same_as<decltype(rt_or_imm), u32>)
+    template<Cond cc> void trap(u32 rs, s16 imm) const
     {
-        Label l_end = c.newLabel();
-        if constexpr (sizeof(rt_or_imm) == 2) c.cmp(GetGpr(rs), rt_or_imm);
-        else c.cmp(GetGpr(rs), GetGpr(rt_or_imm));
-        if constexpr (cc == Cond::Eq) c.jne(l_end);
-        if constexpr (cc == Cond::Ge) c.jl(l_end);
-        if constexpr (cc == Cond::Geu) c.jb(l_end);
-        if constexpr (cc == Cond::Lt) c.jge(l_end);
-        if constexpr (cc == Cond::Ltu) c.jae(l_end);
-        if constexpr (cc == Cond::Ne) c.je(l_end);
+        Label l_notrap = c.newLabel();
+        Gp hs = GetGpr(rs);
+        c.cmp(hs, imm);
+        if constexpr (cc == Cond::Eq) c.jne(l_notrap);
+        if constexpr (cc == Cond::Ge) c.jl(l_notrap);
+        if constexpr (cc == Cond::Geu) c.jb(l_notrap);
+        if constexpr (cc == Cond::Lt) c.jge(l_notrap);
+        if constexpr (cc == Cond::Ltu) c.jae(l_notrap);
+        if constexpr (cc == Cond::Ne) c.je(l_notrap);
         block_epilog_with_pc_flush_and_jmp((void*)trap_exception, 0);
-        c.bind(l_end);
+        c.bind(l_notrap);
+        branched = true;
+    }
+
+    template<Cond cc> void trap(u32 rs, u32 rt) const
+    {
+        Label l_notrap = c.newLabel();
+        Gp hs = GetGpr(rs), ht = GetGpr(rt);
+        c.cmp(hs, ht);
+        if constexpr (cc == Cond::Eq) c.jne(l_notrap);
+        if constexpr (cc == Cond::Ge) c.jl(l_notrap);
+        if constexpr (cc == Cond::Geu) c.jb(l_notrap);
+        if constexpr (cc == Cond::Lt) c.jge(l_notrap);
+        if constexpr (cc == Cond::Ltu) c.jae(l_notrap);
+        if constexpr (cc == Cond::Ne) c.je(l_notrap);
+        block_epilog_with_pc_flush_and_jmp((void*)trap_exception, 0);
+        c.bind(l_notrap);
         branched = true;
     }
 };
