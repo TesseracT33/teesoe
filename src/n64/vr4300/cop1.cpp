@@ -429,13 +429,13 @@ void bc1tl(s16 imm)
     }
 }
 
-template<Fmt fmt> void compare(u32 fs, u32 ft, u8 cond)
+template<FpuFmt fmt> void compare(u32 fs, u32 ft, u8 cond)
 {
-    if constexpr (!OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
+    if constexpr (!OneOf(fmt, FpuFmt::Float32, FpuFmt::Float64)) {
         OnInvalidFormat();
     } else {
         if (!FpuUsable()) return;
-        using Float = FmtToType<fmt>::type;
+        using Float = FpuFmtToType<fmt>::type;
         /* See VR4300 User's Manual by NEC, p. 566
             Ordered instructions are: LE, LT, NGE, NGL, NGLE, NGT, SEQ, SF (cond.3 set)
             Unordered: EQ, F, OLE, OLT, UEQ, ULE, ULT, UN (cond.3 clear) */
@@ -576,144 +576,144 @@ void swc1(u32 base, u32 ft, s16 imm)
     }
 }
 
-template<Fmt fmt> void ceil_l(u32 fs, u32 fd)
+template<FpuFmt fmt> void ceil_l(u32 fs, u32 fd)
 {
-    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
-        Round<RoundInstr::CEIL, typename FmtToType<fmt>::type, s64>(fs, fd);
+    if constexpr (OneOf(fmt, FpuFmt::Float32, FpuFmt::Float64)) {
+        Round<RoundInstr::CEIL, typename FpuFmtToType<fmt>::type, s64>(fs, fd);
     } else {
         OnInvalidFormat();
     }
 }
 
-template<Fmt fmt> void ceil_w(u32 fs, u32 fd)
+template<FpuFmt fmt> void ceil_w(u32 fs, u32 fd)
 {
-    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
-        Round<RoundInstr::CEIL, typename FmtToType<fmt>::type, s32>(fs, fd);
+    if constexpr (OneOf(fmt, FpuFmt::Float32, FpuFmt::Float64)) {
+        Round<RoundInstr::CEIL, typename FpuFmtToType<fmt>::type, s32>(fs, fd);
     } else {
         OnInvalidFormat();
     }
 }
 
-template<Fmt fmt> void cvt_d(u32 fs, u32 fd)
+template<FpuFmt fmt> void cvt_d(u32 fs, u32 fd)
 {
-    if constexpr (fmt == Fmt::Invalid) {
+    if constexpr (fmt == FpuFmt::Invalid) {
         OnInvalidFormat();
     } else {
-        Convert<typename FmtToType<fmt>::type, f64>(fs, fd);
+        Convert<typename FpuFmtToType<fmt>::type, f64>(fs, fd);
     }
 }
 
-template<Fmt fmt> void cvt_l(u32 fs, u32 fd)
+template<FpuFmt fmt> void cvt_l(u32 fs, u32 fd)
 {
-    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
-        Convert<typename FmtToType<fmt>::type, s64>(fs, fd);
-    } else {
-        OnInvalidFormat();
-    }
-}
-
-template<Fmt fmt> void cvt_s(u32 fs, u32 fd)
-{
-    if constexpr (fmt == Fmt::Invalid) {
-        OnInvalidFormat();
-    } else {
-        Convert<typename FmtToType<fmt>::type, f32>(fs, fd);
-    }
-}
-
-template<Fmt fmt> void cvt_w(u32 fs, u32 fd)
-{
-    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
-        Convert<typename FmtToType<fmt>::type, s32>(fs, fd);
+    if constexpr (OneOf(fmt, FpuFmt::Float32, FpuFmt::Float64)) {
+        Convert<typename FpuFmtToType<fmt>::type, s64>(fs, fd);
     } else {
         OnInvalidFormat();
     }
 }
 
-template<Fmt fmt> void floor_l(u32 fs, u32 fd)
+template<FpuFmt fmt> void cvt_s(u32 fs, u32 fd)
 {
-    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
-        Round<RoundInstr::FLOOR, typename FmtToType<fmt>::type, s64>(fs, fd);
+    if constexpr (fmt == FpuFmt::Invalid) {
+        OnInvalidFormat();
+    } else {
+        Convert<typename FpuFmtToType<fmt>::type, f32>(fs, fd);
+    }
+}
+
+template<FpuFmt fmt> void cvt_w(u32 fs, u32 fd)
+{
+    if constexpr (OneOf(fmt, FpuFmt::Float32, FpuFmt::Float64)) {
+        Convert<typename FpuFmtToType<fmt>::type, s32>(fs, fd);
     } else {
         OnInvalidFormat();
     }
 }
 
-template<Fmt fmt> void floor_w(u32 fs, u32 fd)
+template<FpuFmt fmt> void floor_l(u32 fs, u32 fd)
 {
-    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
-        Round<RoundInstr::FLOOR, typename FmtToType<fmt>::type, s32>(fs, fd);
+    if constexpr (OneOf(fmt, FpuFmt::Float32, FpuFmt::Float64)) {
+        Round<RoundInstr::FLOOR, typename FpuFmtToType<fmt>::type, s64>(fs, fd);
     } else {
         OnInvalidFormat();
     }
 }
 
-template<Fmt fmt> void round_l(u32 fs, u32 fd)
+template<FpuFmt fmt> void floor_w(u32 fs, u32 fd)
 {
-    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
-        Round<RoundInstr::ROUND, typename FmtToType<fmt>::type, s64>(fs, fd);
+    if constexpr (OneOf(fmt, FpuFmt::Float32, FpuFmt::Float64)) {
+        Round<RoundInstr::FLOOR, typename FpuFmtToType<fmt>::type, s32>(fs, fd);
     } else {
         OnInvalidFormat();
     }
 }
 
-template<Fmt fmt> void round_w(u32 fs, u32 fd)
+template<FpuFmt fmt> void round_l(u32 fs, u32 fd)
 {
-    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
-        Round<RoundInstr::ROUND, typename FmtToType<fmt>::type, s32>(fs, fd);
+    if constexpr (OneOf(fmt, FpuFmt::Float32, FpuFmt::Float64)) {
+        Round<RoundInstr::ROUND, typename FpuFmtToType<fmt>::type, s64>(fs, fd);
     } else {
         OnInvalidFormat();
     }
 }
 
-template<Fmt fmt> void trunc_l(u32 fs, u32 fd)
+template<FpuFmt fmt> void round_w(u32 fs, u32 fd)
 {
-    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
-        Round<RoundInstr::TRUNC, typename FmtToType<fmt>::type, s64>(fs, fd);
+    if constexpr (OneOf(fmt, FpuFmt::Float32, FpuFmt::Float64)) {
+        Round<RoundInstr::ROUND, typename FpuFmtToType<fmt>::type, s32>(fs, fd);
     } else {
         OnInvalidFormat();
     }
 }
 
-template<Fmt fmt> void trunc_w(u32 fs, u32 fd)
+template<FpuFmt fmt> void trunc_l(u32 fs, u32 fd)
 {
-    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
-        Round<RoundInstr::TRUNC, typename FmtToType<fmt>::type, s32>(fs, fd);
+    if constexpr (OneOf(fmt, FpuFmt::Float32, FpuFmt::Float64)) {
+        Round<RoundInstr::TRUNC, typename FpuFmtToType<fmt>::type, s64>(fs, fd);
     } else {
         OnInvalidFormat();
     }
 }
 
-template<Fmt fmt> void abs(u32 fs, u32 fd)
+template<FpuFmt fmt> void trunc_w(u32 fs, u32 fd)
 {
-    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
-        Compute<ComputeInstr1Op::ABS, typename FmtToType<fmt>::type>(fs, fd);
+    if constexpr (OneOf(fmt, FpuFmt::Float32, FpuFmt::Float64)) {
+        Round<RoundInstr::TRUNC, typename FpuFmtToType<fmt>::type, s32>(fs, fd);
     } else {
         OnInvalidFormat();
     }
 }
 
-template<Fmt fmt> void add(u32 fs, u32 ft, u32 fd)
+template<FpuFmt fmt> void abs(u32 fs, u32 fd)
 {
-    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
-        Compute<ComputeInstr2Op::ADD, typename FmtToType<fmt>::type>(fs, ft, fd);
+    if constexpr (OneOf(fmt, FpuFmt::Float32, FpuFmt::Float64)) {
+        Compute<ComputeInstr1Op::ABS, typename FpuFmtToType<fmt>::type>(fs, fd);
     } else {
         OnInvalidFormat();
     }
 }
 
-template<Fmt fmt> void div(u32 fs, u32 ft, u32 fd)
+template<FpuFmt fmt> void add(u32 fs, u32 ft, u32 fd)
 {
-    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
-        Compute<ComputeInstr2Op::DIV, typename FmtToType<fmt>::type>(fs, ft, fd);
+    if constexpr (OneOf(fmt, FpuFmt::Float32, FpuFmt::Float64)) {
+        Compute<ComputeInstr2Op::ADD, typename FpuFmtToType<fmt>::type>(fs, ft, fd);
     } else {
         OnInvalidFormat();
     }
 }
 
-template<Fmt fmt> void mov(u32 fs, u32 fd)
+template<FpuFmt fmt> void div(u32 fs, u32 ft, u32 fd)
 {
-    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
+    if constexpr (OneOf(fmt, FpuFmt::Float32, FpuFmt::Float64)) {
+        Compute<ComputeInstr2Op::DIV, typename FpuFmtToType<fmt>::type>(fs, ft, fd);
+    } else {
+        OnInvalidFormat();
+    }
+}
+
+template<FpuFmt fmt> void mov(u32 fs, u32 fd)
+{
+    if constexpr (OneOf(fmt, FpuFmt::Float32, FpuFmt::Float64)) {
         if (cop0.status.cu1) {
             fpr.Set<f64>(fd, fpr.GetFs<f64>(fs));
         } else {
@@ -724,37 +724,37 @@ template<Fmt fmt> void mov(u32 fs, u32 fd)
     }
 }
 
-template<Fmt fmt> void mul(u32 fs, u32 ft, u32 fd)
+template<FpuFmt fmt> void mul(u32 fs, u32 ft, u32 fd)
 {
-    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
-        Compute<ComputeInstr2Op::MUL, typename FmtToType<fmt>::type>(fs, ft, fd);
+    if constexpr (OneOf(fmt, FpuFmt::Float32, FpuFmt::Float64)) {
+        Compute<ComputeInstr2Op::MUL, typename FpuFmtToType<fmt>::type>(fs, ft, fd);
     } else {
         OnInvalidFormat();
     }
 }
 
-template<Fmt fmt> void neg(u32 fs, u32 fd)
+template<FpuFmt fmt> void neg(u32 fs, u32 fd)
 {
-    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
-        Compute<ComputeInstr1Op::NEG, typename FmtToType<fmt>::type>(fs, fd);
+    if constexpr (OneOf(fmt, FpuFmt::Float32, FpuFmt::Float64)) {
+        Compute<ComputeInstr1Op::NEG, typename FpuFmtToType<fmt>::type>(fs, fd);
     } else {
         OnInvalidFormat();
     }
 }
 
-template<Fmt fmt> void sqrt(u32 fs, u32 fd)
+template<FpuFmt fmt> void sqrt(u32 fs, u32 fd)
 {
-    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
-        Compute<ComputeInstr1Op::SQRT, typename FmtToType<fmt>::type>(fs, fd);
+    if constexpr (OneOf(fmt, FpuFmt::Float32, FpuFmt::Float64)) {
+        Compute<ComputeInstr1Op::SQRT, typename FpuFmtToType<fmt>::type>(fs, fd);
     } else {
         OnInvalidFormat();
     }
 }
 
-template<Fmt fmt> void sub(u32 fs, u32 ft, u32 fd)
+template<FpuFmt fmt> void sub(u32 fs, u32 ft, u32 fd)
 {
-    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
-        Compute<ComputeInstr2Op::SUB, typename FmtToType<fmt>::type>(fs, ft, fd);
+    if constexpr (OneOf(fmt, FpuFmt::Float32, FpuFmt::Float64)) {
+        Compute<ComputeInstr2Op::SUB, typename FpuFmtToType<fmt>::type>(fs, ft, fd);
     } else {
         OnInvalidFormat();
     }
@@ -897,12 +897,12 @@ template<RoundInstr instr, FpuNum From, FpuNum To> void Round(u32 fs, u32 fd)
     fpr.Set<To>(fd, result);
 }
 
-#define INST_FMT_SPEC(instr, ...)                   \
-    template void instr<Fmt::Float32>(__VA_ARGS__); \
-    template void instr<Fmt::Float64>(__VA_ARGS__); \
-    template void instr<Fmt::Int32>(__VA_ARGS__);   \
-    template void instr<Fmt::Int64>(__VA_ARGS__);   \
-    template void instr<Fmt::Invalid>(__VA_ARGS__);
+#define INST_FMT_SPEC(instr, ...)                      \
+    template void instr<FpuFmt::Float32>(__VA_ARGS__); \
+    template void instr<FpuFmt::Float64>(__VA_ARGS__); \
+    template void instr<FpuFmt::Int32>(__VA_ARGS__);   \
+    template void instr<FpuFmt::Int64>(__VA_ARGS__);   \
+    template void instr<FpuFmt::Invalid>(__VA_ARGS__);
 
 INST_FMT_SPEC(compare, u32, u32, u8);
 INST_FMT_SPEC(ceil_l, u32, u32);

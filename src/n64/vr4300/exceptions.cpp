@@ -100,7 +100,7 @@ void HandleException()
     exception_occurred = true;
     if (!cop0.status.exl) {
         bool in_delay_slot =
-          branch_state == mips::BranchState::DelaySlotTaken || branch_state == mips::BranchState::DelaySlotNotTaken;
+          branch_state == BranchState::DelaySlotTaken || branch_state == BranchState::DelaySlotNotTaken;
         cop0.cause.bd = in_delay_slot;
         cop0.epc = pc;
         if (in_delay_slot) {

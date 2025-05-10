@@ -9,8 +9,6 @@
 #include <bit>
 #include <cstring>
 
-using mips::OperatingMode;
-
 namespace n64::vr4300 {
 
 u64 Cop0Registers::Get(size_t reg_index) const
@@ -208,7 +206,7 @@ void OnWriteToCount()
 
 void OnWriteToStatus()
 {
-    can_exec_cop0_instrs = operating_mode == mips::OperatingMode::Kernel || cop0.status.cu0;
+    can_exec_cop0_instrs = operating_mode == OperatingMode::Kernel || cop0.status.cu0;
     SetVaddrToPaddrFuncs();
     CheckInterrupts();
 }
@@ -237,7 +235,7 @@ void dmfc0(u32 rt, u32 rd)
         if (!cop0.status.cu0) {
             return CoprocessorUnusableException(0);
         }
-        if (addressing_mode == AddressingMode::_32bit) {
+        if (addressing_mode == AddressingMode::Word) {
             return ReservedInstructionException();
         }
     }
@@ -250,7 +248,7 @@ void dmtc0(u32 rt, u32 rd)
         if (!cop0.status.cu0) {
             return CoprocessorUnusableException(0);
         }
-        if (addressing_mode == AddressingMode::_32bit) {
+        if (addressing_mode == AddressingMode::Word) {
             return ReservedInstructionException();
         }
     }

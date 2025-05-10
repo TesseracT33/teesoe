@@ -1,39 +1,43 @@
 #pragma once
 
-#include "n64.hpp"
 #include "numtypes.hpp"
 
 #include <array>
-
 #include <immintrin.h>
-
-namespace n64::rsp {
 
 using m128i = __m128i;
 
-struct Accumulator {
-    m128i low;
-    m128i mid;
-    m128i high;
-} inline acc;
+namespace n64::rsp {
+
+union alignas(64) Accumulator {
+    struct {
+        m128i low;
+        m128i mid;
+        m128i high;
+    };
+    m128i elems[3];
+};
 
 struct alignas(32) ControlRegister {
     m128i lo;
     m128i hi;
 };
 
-inline s16 div_out, div_in;
-inline bool div_dp;
-
 inline std::array<m128i, 32> vpr; /* SIMD registers; eight 16-bit lanes */
+inline Accumulator acc;
 inline std::array<ControlRegister, 3> ctrl_reg; /* vco, vcc, vce. vce is actually only 8-bits */
+inline struct alignas(8) Div {
+    s16 out;
+    s16 in;
+    bool dp;
+} div;
 
-inline const m128i byteswap16_mask = _mm_set_epi8(14, 15, 12, 13, 10, 11, 8, 9, 6, 7, 4, 5, 2, 3, 0, 1);
-inline const m128i byteswap16_qword0_mask = _mm_set_epi8(15, 14, 13, 12, 11, 10, 9, 8, 6, 7, 4, 5, 2, 3, 0, 1);
-inline const m128i byteswap16_qword1_mask = _mm_set_epi8(14, 15, 12, 13, 10, 11, 8, 9, 7, 6, 5, 4, 3, 2, 1, 0);
-inline const m128i mask32x8 = _mm_set1_epi16(32);
+inline m128i const byteswap16_mask = _mm_set_epi8(14, 15, 12, 13, 10, 11, 8, 9, 6, 7, 4, 5, 2, 3, 0, 1);
+inline m128i const byteswap16_qword0_mask = _mm_set_epi8(15, 14, 13, 12, 11, 10, 9, 8, 6, 7, 4, 5, 2, 3, 0, 1);
+inline m128i const byteswap16_qword1_mask = _mm_set_epi8(14, 15, 12, 13, 10, 11, 8, 9, 7, 6, 5, 4, 3, 2, 1, 0);
+inline m128i const mask32x8 = _mm_set1_epi16(32);
 
-inline const std::array broadcast_mask = {
+inline std::array const broadcast_mask = {
     _mm_set_epi64x(0x0F'0E'0D'0C'0B'0A'09'08, 0x07'06'05'04'03'02'01'00), /* 0,1,2,3,4,5,6,7 */
     _mm_set_epi64x(0x0F'0E'0D'0C'0B'0A'09'08, 0x07'06'05'04'03'02'01'00), /* 0,1,2,3,4,5,6,7 */
     _mm_set_epi64x(0x0D'0C'0D'0C'09'08'09'08, 0x05'04'05'04'01'00'01'00), /* 0,0,2,2,4,4,6,6 */
@@ -52,7 +56,7 @@ inline const std::array broadcast_mask = {
     _mm_set1_epi16(0x0F'0E), /* 7,7,7,7,7,7,7,7 */
 };
 
-constexpr std::array ctc2_table = {
+inline constexpr std::array ctc2_table = {
     0x0000'0000'0000'0000_s64,
     0x0000'0000'0000'FFFF_s64,
     0x0000'0000'FFFF'0000_s64,
@@ -71,7 +75,7 @@ constexpr std::array ctc2_table = {
     0xFFFF'FFFF'FFFF'FFFF_s64,
 };
 
-constexpr std::array lfv_table{ 0, 6, 1, 7, 2, 4, 3, 5 };
+inline constexpr std::array lfv_table{ 0, 6, 1, 7, 2, 4, 3, 5 };
 
 // clang-format off
 
@@ -149,82 +153,5 @@ inline constexpr std::array<u16, 512> rsq_rom = {
 
 s32 Rcp(s32 input);
 s32 Rsq(s32 input);
-
-void cfc2(u32 rt, u32 vs);
-void ctc2(u32 rt, u32 vs);
-void mfc2(u32 rt, u32 vs, u32 e);
-void mtc2(u32 rt, u32 vs, u32 e);
-
-void lbv(u32 base, u32 vt, u32 e, s32 offset);
-void ldv(u32 base, u32 vt, u32 e, s32 offset);
-void lfv(u32 base, u32 vt, u32 e, s32 offset);
-void lhv(u32 base, u32 vt, u32 e, s32 offset);
-void llv(u32 base, u32 vt, u32 e, s32 offset);
-void lpv(u32 base, u32 vt, u32 e, s32 offset);
-void lqv(u32 base, u32 vt, u32 e, s32 offset);
-void lrv(u32 base, u32 vt, u32 e, s32 offset);
-void lsv(u32 base, u32 vt, u32 e, s32 offset);
-void ltv(u32 base, u32 vt, u32 e, s32 offset);
-void luv(u32 base, u32 vt, u32 e, s32 offset);
-void sbv(u32 base, u32 vt, u32 e, s32 offset);
-void sdv(u32 base, u32 vt, u32 e, s32 offset);
-void sfv(u32 base, u32 vt, u32 e, s32 offset);
-void shv(u32 base, u32 vt, u32 e, s32 offset);
-void slv(u32 base, u32 vt, u32 e, s32 offset);
-void spv(u32 base, u32 vt, u32 e, s32 offset);
-void sqv(u32 base, u32 vt, u32 e, s32 offset);
-void srv(u32 base, u32 vt, u32 e, s32 offset);
-void ssv(u32 base, u32 vt, u32 e, s32 offset);
-void stv(u32 base, u32 vt, u32 e, s32 offset);
-void suv(u32 base, u32 vt, u32 e, s32 offset);
-void swv(u32 base, u32 vt, u32 e, s32 offset);
-
-void vabs(u32 vs, u32 vt, u32 vd, u32 e);
-void vadd(u32 vs, u32 vt, u32 vd, u32 e);
-void vaddc(u32 vs, u32 vt, u32 vd, u32 e);
-//  void vadmh();
-//  void vadmn();
-void vand(u32 vs, u32 vt, u32 vd, u32 e);
-void vch(u32 vs, u32 vt, u32 vd, u32 e);
-void vcl(u32 vs, u32 vt, u32 vd, u32 e);
-void vcr(u32 vs, u32 vt, u32 vd, u32 e);
-void veq(u32 vs, u32 vt, u32 vd, u32 e);
-void vge(u32 vs, u32 vt, u32 vd, u32 e);
-void vlt(u32 vs, u32 vt, u32 vd, u32 e);
-void vmacf(u32 vs, u32 vt, u32 vd, u32 e);
-void vmacq(u32 vd);
-void vmacu(u32 vs, u32 vt, u32 vd, u32 e);
-void vmadh(u32 vs, u32 vt, u32 vd, u32 e);
-void vmadl(u32 vs, u32 vt, u32 vd, u32 e);
-void vmadm(u32 vs, u32 vt, u32 vd, u32 e);
-void vmadn(u32 vs, u32 vt, u32 vd, u32 e);
-void vmov(u32 vt, u32 vt_e, u32 vd, u32 vd_e);
-void vmrg(u32 vs, u32 vt, u32 vd, u32 e);
-void vmudh(u32 vs, u32 vt, u32 vd, u32 e);
-void vmudl(u32 vs, u32 vt, u32 vd, u32 e);
-void vmudm(u32 vs, u32 vt, u32 vd, u32 e);
-void vmudn(u32 vs, u32 vt, u32 vd, u32 e);
-void vmulf(u32 vs, u32 vt, u32 vd, u32 e);
-void vmulq(u32 vs, u32 vt, u32 vd, u32 e);
-void vmulu(u32 vs, u32 vt, u32 vd, u32 e);
-void vnand(u32 vs, u32 vt, u32 vd, u32 e);
-void vne(u32 vs, u32 vt, u32 vd, u32 e);
-void vnop();
-void vnor(u32 vs, u32 vt, u32 vd, u32 e);
-void vnxor(u32 vs, u32 vt, u32 vd, u32 e);
-void vor(u32 vs, u32 vt, u32 vd, u32 e);
-void vrcp(u32 vt, u32 vt_e, u32 vd, u32 vd_e);
-void vrcph(u32 vt, u32 vt_e, u32 vd, u32 vd_e);
-void vrcpl(u32 vt, u32 vt_e, u32 vd, u32 vd_e);
-void vrndn(u32 vt, u32 vt_e, u32 vd, u32 vd_e);
-void vrndp(u32 vt, u32 vt_e, u32 vd, u32 vd_e);
-void vrsq(u32 vt, u32 vt_e, u32 vd, u32 vd_e);
-void vrsqh(u32 vt, u32 vt_e, u32 vd, u32 vd_e);
-void vrsql(u32 vt, u32 vt_e, u32 vd, u32 vd_e);
-void vsar(u32 vd, u32 e);
-void vsub(u32 vs, u32 vt, u32 vd, u32 e);
-void vsubc(u32 vs, u32 vt, u32 vd, u32 e);
-void vxor(u32 vs, u32 vt, u32 vd, u32 e);
-void vzero(u32 vs, u32 vt, u32 vd, u32 e);
 
 } // namespace n64::rsp

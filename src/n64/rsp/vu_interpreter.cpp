@@ -853,27 +853,27 @@ void vrcp(u32 vt, u32 vt_e, u32 vd, u32 vd_e)
     s32 input = _mm_getlane_epi16(&vpr[vt], vt_e & 7);
     s32 result = Rcp(input);
     _mm_setlane_epi16(&vpr[vd], vd_e & 7, s16(result));
-    div_out = u16(result >> 16);
-    div_dp = 0;
+    div.out = u16(result >> 16);
+    div.dp = 0;
 }
 
 void vrcph(u32 vt, u32 vt_e, u32 vd, u32 vd_e)
 {
     acc.low = GetVTBroadcast(vt, vt_e);
-    _mm_setlane_epi16(&vpr[vd], vd_e & 7, div_out);
-    div_in = _mm_getlane_epi16(&vpr[vt], vt_e & 7);
-    div_dp = 1;
+    _mm_setlane_epi16(&vpr[vd], vd_e & 7, div.out);
+    div.in = _mm_getlane_epi16(&vpr[vt], vt_e & 7);
+    div.dp = 1;
 }
 
 void vrcpl(u32 vt, u32 vt_e, u32 vd, u32 vd_e)
 {
     acc.low = GetVTBroadcast(vt, vt_e);
     u16 vte = _mm_getlane_epi16(&vpr[vt], vt_e & 7);
-    s32 input = div_dp ? vte | div_in << 16 : s16(vte);
+    s32 input = div.dp ? vte | div.in << 16 : s16(vte);
     s32 result = Rcp(input);
     _mm_setlane_epi16(&vpr[vd], vd_e & 7, s16(result));
-    div_out = u16(result >> 16);
-    div_in = div_dp = 0;
+    div.out = u16(result >> 16);
+    div.in = div.dp = 0;
 }
 
 template<bool p> void vrnd(u32 vt, u32 vt_e, u32 vd, u32 vd_e)
@@ -911,8 +911,8 @@ void vrsq(u32 vt, u32 vt_e, u32 vd, u32 vd_e)
     s32 input = _mm_getlane_epi16(&vpr[vt], vt_e & 7);
     s32 result = Rsq(input);
     _mm_setlane_epi16(&vpr[vd], vd_e & 7, s16(result));
-    div_out = result >> 16;
-    div_dp = 0;
+    div.out = result >> 16;
+    div.dp = 0;
 }
 
 void vrsqh(u32 vt, u32 vt_e, u32 vd, u32 vd_e)
@@ -924,11 +924,11 @@ void vrsql(u32 vt, u32 vt_e, u32 vd, u32 vd_e)
 {
     acc.low = GetVTBroadcast(vt, vt_e);
     u16 vte = _mm_getlane_epi16(&vpr[vt], vt_e & 7);
-    s32 input = div_dp ? vte | div_in << 16 : s16(vte);
+    s32 input = div.dp ? vte | div.in << 16 : s16(vte);
     s32 result = Rsq(input);
     _mm_setlane_epi16(&vpr[vd], vd_e & 7, s16(result));
-    div_out = u16(result >> 16);
-    div_in = div_dp = 0;
+    div.out = u16(result >> 16);
+    div.in = div.dp = 0;
 }
 
 void vsar(u32 vd, u32 e)

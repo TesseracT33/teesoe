@@ -1,5 +1,3 @@
-#pragma once
-
 #include "vr4300/cop0.hpp"
 #include "vr4300/cop2.hpp"
 #include "vr4300/exceptions.hpp"
@@ -12,20 +10,22 @@ using namespace asmjit::x86;
 
 void Cop2Prolog()
 {
-    Label l_usable = c.newLabel();
+    reg_alloc.DestroyVolatile(host_gpr_arg[0]);
+    Label l_noexception = c.newLabel();
     c.bt(JitPtr(cop0.status), 30); // cu2
-    c.jc(l_usable);
-    reg_alloc.ReserveArgs(1);
+    c.jc(l_noexception);
     c.mov(host_gpr_arg[0].r32(), 2);
     BlockEpilogWithPcFlushAndJmp((void*)CoprocessorUnusableException);
-    c.bind(l_usable);
-    reg_alloc.FreeArgs(1);
+    c.bind(l_noexception);
 }
 
 void cfc2(u32 rt)
 {
     Cop2Prolog();
-    if (rt) c.movsxd(reg_alloc.GetHostGprMarkDirty(rt), JitPtr(cop2_latch, 4));
+    if (rt) {
+        Gp ht = reg_alloc.GetDirtyGpr(rt);
+        c.movsxd(ht, JitPtr(cop2_latch, 4));
+    }
 }
 
 void cop2_reserved()
@@ -38,7 +38,8 @@ void cop2_reserved()
 void ctc2(u32 rt)
 {
     Cop2Prolog();
-    c.mov(JitPtr(cop2_latch), reg_alloc.GetHostGpr(rt));
+    Gp ht = reg_alloc.GetGpr(rt);
+    c.mov(JitPtr(cop2_latch), ht);
 }
 
 void dcfc2()
@@ -56,7 +57,10 @@ void dctc2()
 void dmfc2(u32 rt)
 {
     Cop2Prolog();
-    if (rt) c.mov(reg_alloc.GetHostGprMarkDirty(rt), JitPtr(cop2_latch));
+    if (rt) {
+        Gp ht = reg_alloc.GetDirtyGpr(rt);
+        c.mov(ht, JitPtr(cop2_latch));
+    }
 }
 
 void dmtc2(u32 rt)

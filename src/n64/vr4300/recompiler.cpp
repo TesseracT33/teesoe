@@ -31,7 +31,7 @@ constexpr u32 num_pools = 0x80'0000; // 32 bits (address range) - 8 (bits per po
 constexpr u32 pool_max_addr_excl = (num_pools * bytes_per_pool);
 static_assert(std::has_single_bit(pool_max_addr_excl));
 
-using Block = void (*)();
+using Block = void (*)(s64 const* gpr_mid_ptr);
 
 struct Pool {
     std::array<Block, instructions_per_pool> blocks;
@@ -97,7 +97,7 @@ void BlockProlog()
         code_holder.setLogger(&jit_logger);
         jit_logger.log("======== CPU BLOCK BEGIN ========\n");
     }
-    FuncNode* func_node = c.addFunc(FuncSignatureT<void>());
+    FuncNode* func_node = c.addFunc(FuncSignature::build<void>());
     func_node->frame().setAvxEnabled();
     func_node->frame().setAvxCleanup();
     reg_alloc.BlockProlog();
@@ -155,37 +155,50 @@ compile_end:
     FinalizeBlock(block);
 }
 
+void Cop3Jit()
+{
+    reg_alloc.DestroyVolatile(host_gpr_arg[0]);
+    asmjit::Label l0 = c.newLabel();
+    c.bt(JitPtr(vr4300::cop0.status), 31); // cu3
+    c.jc(l0);
+    c.mov(host_gpr_arg[0].r32(), 3);
+    BlockEpilogWithPcFlushAndJmp((void*)CoprocessorUnusableException);
+    c.bind(l0);
+    BlockEpilogWithPcFlushAndJmp((void*)ReservedInstructionException);
+    // compiler_exception_occurred = true; // TODO
+}
+
 void EmitBranchCheck()
 {
     Label l_nobranch = c.newLabel();
-    c.cmp(JitPtr(branch_state), std::to_underlying(mips::BranchState::Perform));
+    c.cmp(JitPtr(branch_state), BranchState::Perform);
     c.jne(l_nobranch);
     BlockEpilogWithJmp((void*)PerformBranch);
     c.bind(l_nobranch);
-    c.mov(JitPtr(branch_state), std::to_underlying(mips::BranchState::NoBranch));
+    c.mov(JitPtr(branch_state), BranchState::NoBranch);
 }
 
 void EmitBranchDiscarded()
 {
-    c.mov(JitPtr(branch_state), std::to_underlying(mips::BranchState::NoBranch));
+    c.mov(JitPtr(branch_state), BranchState::NoBranch);
     BlockEpilogWithPcFlush(8);
 }
 
 void EmitBranchNotTaken()
 {
-    c.mov(JitPtr(branch_state), std::to_underlying(mips::BranchState::DelaySlotNotTaken));
+    c.mov(JitPtr(branch_state), BranchState::DelaySlotNotTaken);
 }
 
 void EmitBranchTaken(u64 target)
 {
-    c.mov(JitPtr(branch_state), std::to_underlying(mips::BranchState::DelaySlotTaken));
+    c.mov(JitPtr(branch_state), BranchState::DelaySlotTaken);
     c.mov(rax, target);
     c.mov(JitPtr(jump_addr), rax);
 }
 
 void EmitBranchTaken(HostGpr64 target)
 {
-    c.mov(JitPtr(branch_state), std::to_underlying(mips::BranchState::DelaySlotTaken));
+    c.mov(JitPtr(branch_state), BranchState::DelaySlotTaken);
     c.mov(JitPtr(jump_addr), target);
 }
 
@@ -198,21 +211,21 @@ bool EmitInstruction()
     if (got_exception) {
         return got_exception; // todo: handle this. need to compile exception handling
     }
-    decoder::exec_cpu<CpuImpl::Recompiler>(instr);
+    decode_and_emit_cpu(instr);
     if (got_exception) {
         return got_exception;
     }
     jit_pc += 4;
     block_has_branch_instr |= last_instr_was_branch;
     if constexpr (log_cpu_jit_register_status) {
-        jit_logger.log(reg_alloc.GetStatusString().c_str());
+        jit_logger.log(reg_alloc.GetStatus().c_str());
     }
     return got_exception;
 }
 
 void EmitLink(u32 reg)
 {
-    Gpq gp = reg_alloc.GetHostGprMarkDirty(reg);
+    Gpq gp = reg_alloc.GetDirtyGpr(reg);
     c.mov(gp, jit_pc + 8);
 }
 
@@ -231,7 +244,6 @@ void FinalizeBlock(Block& block)
 
 void FlushPc(int pc_offset)
 {
-    // Todo:no need to flush pc if jumping to exception handler. check uses
     u64 new_pc = jit_pc + pc_offset;
     s64 new_pc_diff = new_pc - pc;
     if (std::in_range<s32>(new_pc_diff)) {
@@ -309,9 +321,15 @@ u32 RunRecompiler(u32 cycles)
         if (!block) {
             Compile(block);
         }
-        block();
+        block(gpr.ptr(16));
     }
     return cycle_counter - cycles;
+}
+
+void OnReservedInstruction()
+{
+    BlockEpilogWithPcFlushAndJmp((void*)ReservedInstructionException);
+    // compiler_exception_occurred = true; // TODO
 }
 
 void TearDownRecompiler()

@@ -48,6 +48,7 @@ list(APPEND GNU_FLAGS
 list(APPEND MSVC_FLAGS
 	/fp:precise     # Precise floating-point model
 	/GR             # Enable run-time type information
+	/Gv             # Use __vectorcall calling convention
 	/MP             # Build with multiple processes
 	/permissive-    # Disallow non-standard behaviour
 	/volatile:iso   # Use iso standard for 'volatile'

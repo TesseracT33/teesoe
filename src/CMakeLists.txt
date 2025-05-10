@@ -19,10 +19,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
 	frontend/vulkan_render_context.cpp
 
 	mips/disassembler.hpp
-	mips/interpreter.hpp
-	mips/recompiler.hpp
-	mips/recompiler_x64.hpp
-	mips/register_allocator.hpp
+	mips/register_allocator_state.hpp
 	mips/types.hpp
 )
 

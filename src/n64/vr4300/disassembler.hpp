@@ -1,5 +1,6 @@
 #pragma once
 
+#include "cop1.hpp"
 #include "mips/disassembler.hpp"
 
 namespace n64::vr4300 {
@@ -33,32 +34,32 @@ public:
     auto sdc1(u32 base, u32 ft, u16 imm) { return BaseFtImm("sdc1", base, ft, imm); }
     auto swc1(u32 base, u32 ft, u16 imm) { return BaseFtImm("swc1", base, ft, imm); }
 
-    template<Fmt fmt> auto compare(u32 fs, u32 ft, u8 cond)
+    template<FpuFmt fmt> auto compare(u32 fs, u32 ft, u8 cond)
     {
-        return std::format("c.{}.{} f{}, f{}", compare_cond_to_str[cond], FmtToStr(fmt), fs, ft);
+        return std::format("c.{}.{} f{}, f{}", compare_cond_to_str[cond], FpuFmtToStr(fmt), fs, ft);
     }
 
-    template<Fmt fmt> auto ceil_l(u32 fs, u32 fd) { return FmtInstr("ceil", Fmt::Int64, fmt, fs, fd); }
-    template<Fmt fmt> auto ceil_w(u32 fs, u32 fd) { return FmtInstr("ceil", Fmt::Int32, fmt, fs, fd); }
-    template<Fmt fmt> auto cvt_d(u32 fs, u32 fd) { return FmtInstr("cvt", Fmt::Float64, fmt, fs, fd); }
-    template<Fmt fmt> auto cvt_l(u32 fs, u32 fd) { return FmtInstr("cvt", Fmt::Int64, fmt, fs, fd); }
-    template<Fmt fmt> auto cvt_s(u32 fs, u32 fd) { return FmtInstr("cvt", Fmt::Float32, fmt, fs, fd); }
-    template<Fmt fmt> auto cvt_w(u32 fs, u32 fd) { return FmtInstr("cvt", Fmt::Int32, fmt, fs, fd); }
-    template<Fmt fmt> auto floor_l(u32 fs, u32 fd) { return FmtInstr("floor", Fmt::Int64, fmt, fs, fd); }
-    template<Fmt fmt> auto floor_w(u32 fs, u32 fd) { return FmtInstr("floor", Fmt::Int32, fmt, fs, fd); }
-    template<Fmt fmt> auto round_l(u32 fs, u32 fd) { return FmtInstr("round", Fmt::Int64, fmt, fs, fd); }
-    template<Fmt fmt> auto round_w(u32 fs, u32 fd) { return FmtInstr("round", Fmt::Int32, fmt, fs, fd); }
-    template<Fmt fmt> auto trunc_l(u32 fs, u32 fd) { return FmtInstr("trunc", Fmt::Int64, fmt, fs, fd); }
-    template<Fmt fmt> auto trunc_w(u32 fs, u32 fd) { return FmtInstr("trunc", Fmt::Int32, fmt, fs, fd); }
+    template<FpuFmt fmt> auto ceil_l(u32 fs, u32 fd) { return FmtInstr("ceil", FpuFmt::Int64, fmt, fs, fd); }
+    template<FpuFmt fmt> auto ceil_w(u32 fs, u32 fd) { return FmtInstr("ceil", FpuFmt::Int32, fmt, fs, fd); }
+    template<FpuFmt fmt> auto cvt_d(u32 fs, u32 fd) { return FmtInstr("cvt", FpuFmt::Float64, fmt, fs, fd); }
+    template<FpuFmt fmt> auto cvt_l(u32 fs, u32 fd) { return FmtInstr("cvt", FpuFmt::Int64, fmt, fs, fd); }
+    template<FpuFmt fmt> auto cvt_s(u32 fs, u32 fd) { return FmtInstr("cvt", FpuFmt::Float32, fmt, fs, fd); }
+    template<FpuFmt fmt> auto cvt_w(u32 fs, u32 fd) { return FmtInstr("cvt", FpuFmt::Int32, fmt, fs, fd); }
+    template<FpuFmt fmt> auto floor_l(u32 fs, u32 fd) { return FmtInstr("floor", FpuFmt::Int64, fmt, fs, fd); }
+    template<FpuFmt fmt> auto floor_w(u32 fs, u32 fd) { return FmtInstr("floor", FpuFmt::Int32, fmt, fs, fd); }
+    template<FpuFmt fmt> auto round_l(u32 fs, u32 fd) { return FmtInstr("round", FpuFmt::Int64, fmt, fs, fd); }
+    template<FpuFmt fmt> auto round_w(u32 fs, u32 fd) { return FmtInstr("round", FpuFmt::Int32, fmt, fs, fd); }
+    template<FpuFmt fmt> auto trunc_l(u32 fs, u32 fd) { return FmtInstr("trunc", FpuFmt::Int64, fmt, fs, fd); }
+    template<FpuFmt fmt> auto trunc_w(u32 fs, u32 fd) { return FmtInstr("trunc", FpuFmt::Int32, fmt, fs, fd); }
 
-    template<Fmt fmt> auto abs(u32 fs, u32 fd) { return FmtInstr("abs", fmt, fs, fd); }
-    template<Fmt fmt> auto add(u32 fs, u32 ft, u32 fd) { return FmtInstr("add", fmt, fs, ft, fd); }
-    template<Fmt fmt> auto div(u32 fs, u32 ft, u32 fd) { return FmtInstr("div", fmt, fs, ft, fd); }
-    template<Fmt fmt> auto mov(u32 fs, u32 fd) { return FmtInstr("mov", fmt, fs, fd); }
-    template<Fmt fmt> auto mul(u32 fs, u32 ft, u32 fd) { return FmtInstr("mul", fmt, fs, ft, fd); }
-    template<Fmt fmt> auto neg(u32 fs, u32 fd) { return FmtInstr("neg", fmt, fs, fd); }
-    template<Fmt fmt> auto sqrt(u32 fs, u32 fd) { return FmtInstr("sqrt", fmt, fs, fd); }
-    template<Fmt fmt> auto sub(u32 fs, u32 ft, u32 fd) { return FmtInstr("sub", fmt, fs, ft, fd); }
+    template<FpuFmt fmt> auto abs(u32 fs, u32 fd) { return FmtInstr("abs", fmt, fs, fd); }
+    template<FpuFmt fmt> auto add(u32 fs, u32 ft, u32 fd) { return FmtInstr("add", fmt, fs, ft, fd); }
+    template<FpuFmt fmt> auto div(u32 fs, u32 ft, u32 fd) { return FmtInstr("div", fmt, fs, ft, fd); }
+    template<FpuFmt fmt> auto mov(u32 fs, u32 fd) { return FmtInstr("mov", fmt, fs, fd); }
+    template<FpuFmt fmt> auto mul(u32 fs, u32 ft, u32 fd) { return FmtInstr("mul", fmt, fs, ft, fd); }
+    template<FpuFmt fmt> auto neg(u32 fs, u32 fd) { return FmtInstr("neg", fmt, fs, fd); }
+    template<FpuFmt fmt> auto sqrt(u32 fs, u32 fd) { return FmtInstr("sqrt", fmt, fs, fd); }
+    template<FpuFmt fmt> auto sub(u32 fs, u32 ft, u32 fd) { return FmtInstr("sub", fmt, fs, ft, fd); }
 
     auto cfc2(u32 rt) { return std::format("cfc2 {}", mips::GprIdxToName(rt)); }
     auto ctc2(u32 rt) { return std::format("cfc2 {}", mips::GprIdxToName(rt)); }
@@ -72,30 +73,30 @@ public:
     auto cop2_reserved() { return "COP2 RESERVED"; }
 
 protected:
-    constexpr std::string_view FmtToStr(Fmt fmt)
+    constexpr std::string_view FpuFmtToStr(FpuFmt fmt)
     {
         switch (fmt) {
-        case Fmt::Float32: return "S";
-        case Fmt::Float64: return "D";
-        case Fmt::Int32: return "W";
-        case Fmt::Int64: return "L";
-        case Fmt::Invalid: return "INVALID";
+        case FpuFmt::Float32: return "S";
+        case FpuFmt::Float64: return "D";
+        case FpuFmt::Int32: return "W";
+        case FpuFmt::Int64: return "L";
+        case FpuFmt::Invalid: return "INVALID";
         }
     }
 
-    std::string FmtInstr(std::string_view instr, Fmt fmt_to, Fmt fmt_from, u32 fs, u32 fd)
+    std::string FmtInstr(std::string_view instr, FpuFmt fmt_to, FpuFmt fmt_from, u32 fs, u32 fd)
     {
-        return std::format("{}.{}.{} f{}, f{}", instr, FmtToStr(fmt_to), FmtToStr(fmt_from), fd, fs);
+        return std::format("{}.{}.{} f{}, f{}", instr, FpuFmtToStr(fmt_to), FpuFmtToStr(fmt_from), fd, fs);
     }
 
-    std::string FmtInstr(std::string_view instr, Fmt fmt, u32 fs, u32 fd)
+    std::string FmtInstr(std::string_view instr, FpuFmt fmt, u32 fs, u32 fd)
     {
-        return std::format("{}.{} f{}, f{}", instr, FmtToStr(fmt), fd, fs);
+        return std::format("{}.{} f{}, f{}", instr, FpuFmtToStr(fmt), fd, fs);
     }
 
-    std::string FmtInstr(std::string_view instr, Fmt fmt, u32 fs, u32 ft, u32 fd)
+    std::string FmtInstr(std::string_view instr, FpuFmt fmt, u32 fs, u32 ft, u32 fd)
     {
-        return std::format("{}.{} f{}, f{}, f{}", instr, FmtToStr(fmt), fd, fs, ft);
+        return std::format("{}.{} f{}, f{}, f{}", instr, FpuFmtToStr(fmt), fd, fs, ft);
     }
 
     std::string FsRt(std::string_view instr, u32 fs, u32 rt)

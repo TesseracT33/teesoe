@@ -23,7 +23,7 @@ else()
 	)
 endif()
 
-if (X64)
+if (PLATFORM_X64)
 	list(APPEND GNU_FLAGS -mavx2)
 	list(APPEND MSVC_FLAGS /arch:AVX2)
 endif()

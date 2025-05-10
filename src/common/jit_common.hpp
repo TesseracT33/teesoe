@@ -13,12 +13,21 @@ using HostGpr32 = std::conditional_t<platform.x64, asmjit::x86::Gpd, asmjit::a64
 using HostGpr64 = std::conditional_t<platform.x64, asmjit::x86::Gpq, asmjit::a64::GpX>;
 using HostGpr128 = std::conditional_t<platform.x64, asmjit::x86::Xmm, asmjit::a64::VecV>;
 using HostVpr128 = std::conditional_t<platform.x64, asmjit::x86::Xmm, asmjit::a64::VecV>;
-using HostGpr = HostGpr64;
 using JitCompiler = std::conditional_t<platform.x64, asmjit::x86::Compiler, asmjit::a64::Compiler>;
 
 struct AsmjitLogErrorHandler : public asmjit::ErrorHandler {
     void handleError(asmjit::Error err, char const* message, asmjit::BaseEmitter* /*origin*/) override;
 };
+
+inline constexpr s32 host_num_gprs = [] {
+    if constexpr (platform.a64) return 31;
+    if constexpr (platform.x64) return 16;
+}();
+
+inline constexpr s32 host_num_vprs = [] {
+    if constexpr (platform.a64) return 16;
+    if constexpr (platform.x64) return 16 + (platform.avx512 ? 16 : 0);
+}();
 
 inline constexpr std::array host_gpr_arg = [] {
     if constexpr (platform.a64) {
@@ -36,8 +45,9 @@ inline constexpr std::array host_gpr_arg = [] {
     }
 }();
 
-inline void jit_call_no_stack_alignment(asmjit::x86::Compiler& c, auto func);
-inline void jit_call_with_stack_alignment(asmjit::x86::Compiler& c, auto func);
+void jit_call_no_stack_alignment(asmjit::x86::Compiler& c, void* func);
+void jit_call_with_stack_alignment(asmjit::x86::Compiler& c, void* func);
+[[gnu::const]] std::string HostRegToStr(HostGpr32 reg);
 [[gnu::const]] std::string HostRegToStr(HostGpr64 reg);
 [[gnu::const]] std::string HostRegToStr(HostGpr128 reg);
 [[gnu::const]] constexpr bool IsVolatile(asmjit::a64::Gp reg);
@@ -91,7 +101,7 @@ constexpr bool IsVolatile(asmjit::x86::Gp reg)
             }
         }();
         u32 table{};
-        for (auto reg : volatile_regs) {
+        for (Gpq reg : volatile_regs) {
             table |= 1_u32 << reg.id();
         }
         return table;
