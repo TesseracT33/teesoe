@@ -13,9 +13,9 @@ if (CMAKE_BUILD_TYPE STREQUAL "Debug")
 		/JMC # Just My Code debugging
 	)
 else()
-	list(APPEND GNU_FLAGS
-		-flto
-	)
+	# list(APPEND GNU_FLAGS
+	# 	-flto
+	# )
 	list(APPEND MSVC_FLAGS
 		/GL        # Whole program optimization
 		/Oi        # Generate intrinsic functions
@@ -24,7 +24,10 @@ else()
 endif()
 
 if (PLATFORM_X64)
-	list(APPEND GNU_FLAGS -mavx2)
+	list(APPEND GNU_FLAGS
+		-mavx2
+		-mbmi2
+	)
 	list(APPEND MSVC_FLAGS /arch:AVX2)
 endif()
 
