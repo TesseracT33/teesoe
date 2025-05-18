@@ -300,13 +300,13 @@ template<bool update_flags> bool TestExceptions()
     */
     u32 fcr31_u32 = std::bit_cast<u32>(fcr31);
     u32 enables = fcr31_u32 >> 7 & 31;
-    u32 causes = fcr31_u32 >> 12 & 63;
+    u32 causes = fcr31_u32 >> 12 & 31;
     if constexpr (update_flags) {
-        u32 flags = causes & ~enables & 31;
+        u32 flags = causes & ~enables;
         fcr31_u32 |= flags << 2;
         fcr31 = std::bit_cast<FCR31>(fcr31_u32);
     }
-    if (enables & causes) {
+    if ((enables & causes) || fcr31.cause_unimplemented) {
         FloatingPointException();
         return true;
     } else {
