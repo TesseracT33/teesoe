@@ -9,8 +9,8 @@ namespace n64::vr4300 {
 using VaddrToPaddrFunc = u32 (*)(u64 /* in: v_addr */, bool& /* out: cached area? */);
 
 enum class AddressingMode {
-    _32bit,
-    _64bit
+    Word,
+    Dword
 };
 
 enum class Alignment {
@@ -33,18 +33,11 @@ Int ReadVirtual(u64 vaddr);
 void SetVaddrToPaddrFuncs();
 template<size_t access_size, Alignment alignment = Alignment::Aligned> void WriteVirtual(u64 vaddr, s64 data);
 
-void tlbr();
-void tlbwi();
-void tlbwr();
-void tlbp();
-
 inline AddressingMode addressing_mode;
 inline VaddrToPaddrFunc vaddr_to_paddr_read_func;
 inline VaddrToPaddrFunc vaddr_to_paddr_write_func;
-
-inline bool can_execute_dword_instrs, can_exec_cop0_instrs;
-
 inline u32 last_paddr_on_instr_fetch;
 inline u32 last_paddr_on_load;
+inline bool can_execute_dword_instrs, can_exec_cop0_instrs;
 
 } // namespace n64::vr4300

@@ -57,7 +57,7 @@ inline bool jump_is_pending;
 inline CpuImpl cpu_impl;
 
 /* 0 - $FFF: data memory; $1000 - $1FFF: instruction memory */
-alignas(16) inline constinit std::array<u8, 0x2000> mem{};
+alignas(64) inline constinit std::array<u8, 0x2000> mem{};
 
 inline constinit u8* const dmem = mem.data();
 inline constinit u8* const imem = mem.data() + 0x1000;

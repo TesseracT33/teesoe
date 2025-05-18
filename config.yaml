@@ -1,0 +1,5 @@
+n64:
+  filter_game_list: true
+  rom_path: /home/tesseract/repos/teesoe
+  use_cpu_recompiler: false
+  use_rsp_recompiler: false

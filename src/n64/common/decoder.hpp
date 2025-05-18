@@ -1,15 +1,12 @@
 #pragma once
 
-#include "n64.hpp"
-#include "rsp/rsp.hpp"
 #include "numtypes.hpp"
-#include "vr4300/vr4300.hpp"
 
-#include <string>
+namespace n64 {
 
-namespace n64::decoder {
+void decode_and_emit_cpu(u32 instr);
+void decode_and_emit_rsp(u32 instr);
+void decode_and_interpret_cpu(u32 instr);
+void decode_and_interpret_rsp(u32 instr);
 
-template<CpuImpl> void exec_cpu(u32 instr);
-template<CpuImpl> void exec_rsp(u32 instr);
-
-} // namespace n64::decoder
+} // namespace n64

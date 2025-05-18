@@ -14,8 +14,6 @@
 #include <limits>
 #include <type_traits>
 
-using mips::OperatingMode;
-
 namespace n64::vr4300 {
 
 struct TlbEntry {
@@ -106,7 +104,7 @@ template<std::signed_integral Int, Alignment alignment, MemOp mem_op> Int ReadVi
             vaddr &= ~(sizeof(Int) - 1);
         }
     }
-    if (addressing_mode == AddressingMode::_32bit && u64(s32(vaddr)) != vaddr) {
+    if (addressing_mode == AddressingMode::Word && u64(s32(vaddr)) != vaddr) {
         AddressErrorException(vaddr, mem_op);
         return {};
     }
@@ -135,48 +133,45 @@ template<std::signed_integral Int, Alignment alignment, MemOp mem_op> Int ReadVi
 
 void SetVaddrToPaddrFuncs()
 {
-    using enum AddressingMode;
-    using enum OperatingMode;
-
     if (cop0.status.ksu == 0 || cop0.status.erl == 1 || cop0.status.exl == 1) { /* Kernel mode */
-        operating_mode = Kernel;
+        operating_mode = OperatingMode::Kernel;
         if (cop0.status.kx == 0) {
             vaddr_to_paddr_read_func = VirtualToPhysicalAddressKernelMode32<MemOp::Read>;
             vaddr_to_paddr_write_func = VirtualToPhysicalAddressKernelMode32<MemOp::Write>;
-            addressing_mode = _32bit;
+            addressing_mode = AddressingMode::Word;
         } else {
             vaddr_to_paddr_read_func = VirtualToPhysicalAddressKernelMode64<MemOp::Read>;
             vaddr_to_paddr_write_func = VirtualToPhysicalAddressKernelMode64<MemOp::Write>;
-            addressing_mode = _64bit;
+            addressing_mode = AddressingMode::Dword;
         }
     } else if (cop0.status.ksu == 1) { /* Supervisor mode */
-        operating_mode = Supervisor;
+        operating_mode = OperatingMode::Supervisor;
         if (cop0.status.sx == 0) {
             vaddr_to_paddr_read_func = VirtualToPhysicalAddressSupervisorMode32<MemOp::Read>;
             vaddr_to_paddr_write_func = VirtualToPhysicalAddressSupervisorMode32<MemOp::Write>;
-            addressing_mode = _32bit;
+            addressing_mode = AddressingMode::Word;
         } else {
             vaddr_to_paddr_read_func = VirtualToPhysicalAddressSupervisorMode64<MemOp::Read>;
             vaddr_to_paddr_write_func = VirtualToPhysicalAddressSupervisorMode64<MemOp::Write>;
-            addressing_mode = _64bit;
+            addressing_mode = AddressingMode::Dword;
         }
     } else if (cop0.status.ksu == 2) { /* User mode */
-        operating_mode = User;
+        operating_mode = OperatingMode::User;
         if (cop0.status.ux == 0) {
             vaddr_to_paddr_read_func = VirtualToPhysicalAddressUserMode32<MemOp::Read>;
             vaddr_to_paddr_write_func = VirtualToPhysicalAddressUserMode32<MemOp::Write>;
-            addressing_mode = _32bit;
+            addressing_mode = AddressingMode::Word;
         } else {
             vaddr_to_paddr_read_func = VirtualToPhysicalAddressUserMode64<MemOp::Read>;
             vaddr_to_paddr_write_func = VirtualToPhysicalAddressUserMode64<MemOp::Write>;
-            addressing_mode = _64bit;
+            addressing_mode = AddressingMode::Dword;
         }
     } else { /* Unknown?! */
         LogError("cop0.status.ksu was set to 3.");
         assert(false);
     }
-    can_execute_dword_instrs = operating_mode == Kernel || addressing_mode == _64bit;
-    can_exec_cop0_instrs = operating_mode == Kernel || cop0.status.cu0;
+    can_execute_dword_instrs = operating_mode == OperatingMode::Kernel || addressing_mode == AddressingMode::Dword;
+    can_exec_cop0_instrs = operating_mode == OperatingMode::Kernel || cop0.status.cu0;
 }
 
 template<MemOp mem_op> u32 VirtualToPhysicalAddressUserMode32(u64 vaddr, bool& cacheable_area)
@@ -350,7 +345,7 @@ template<MemOp mem_op> u32 VirtualToPhysicalAddressTlb(u64 vaddr)
         return vaddr & entry.offset_addr_mask | entry_lo.pfn << 12 & ~entry.offset_addr_mask;
     }
     /* TLB miss */
-    addressing_mode == AddressingMode::_32bit ? TlbMissException(vaddr, mem_op) : XtlbMissException(vaddr, mem_op);
+    addressing_mode == AddressingMode::Word ? TlbMissException(vaddr, mem_op) : XtlbMissException(vaddr, mem_op);
     return 0;
 }
 
@@ -365,7 +360,7 @@ template<size_t access_size, Alignment alignment> void WriteVirtual(u64 vaddr, s
             }
         }
     }
-    if (addressing_mode == AddressingMode::_32bit && u64(s32(vaddr)) != vaddr) {
+    if (addressing_mode == AddressingMode::Word && u64(s32(vaddr)) != vaddr) {
         return AddressErrorException(vaddr, MemOp::Write);
     }
     bool cacheable_area;
@@ -397,10 +392,11 @@ template<size_t access_size, Alignment alignment> void WriteVirtual(u64 vaddr, s
     }
 }
 
-void tlbp()
+bool tlbp()
 {
     if (operating_mode != OperatingMode::Kernel && !cop0.status.cu0) {
-        return CoprocessorUnusableException(0);
+        CoprocessorUnusableException(0);
+        return true;
     }
     auto index = std::ranges::find_if(tlb_entries, [](TlbEntry const& entry) {
         u64 vpn2_mask = 0xFF'FFFF'E000 & ~u64(entry.page_mask);
@@ -415,37 +411,44 @@ void tlbp()
         cop0.index.value = 0; /* technically undefined, but n64-systemtest tlb::TLBPMatch seems to prefer this */
     } else {
         cop0.index.p = 0;
-        cop0.index.value = std::distance(tlb_entries.begin(), index);
+        cop0.index.value = (u32)std::distance(tlb_entries.begin(), index);
     }
+    return false;
 }
 
-void tlbr()
+bool tlbr()
 {
     if (operating_mode != OperatingMode::Kernel && !cop0.status.cu0) {
         CoprocessorUnusableException(0);
+        return true;
     } else {
         auto index = cop0.index.value;
         if (index < 32) tlb_entries[index].Read();
+        return false;
     }
 }
 
-void tlbwi()
+bool tlbwi()
 {
     if (operating_mode != OperatingMode::Kernel && !cop0.status.cu0) {
         CoprocessorUnusableException(0);
+        return true;
     } else {
         auto index = cop0.index.value;
         if (index < 32) tlb_entries[index].Write();
+        return false;
     }
 }
 
-void tlbwr()
+bool tlbwr()
 {
     if (operating_mode != OperatingMode::Kernel && !cop0.status.cu0) {
         CoprocessorUnusableException(0);
+        return true;
     } else {
         auto index = random_generator.Generate();
         if (index < 32) tlb_entries[index].Write();
+        return false;
     }
 }
 

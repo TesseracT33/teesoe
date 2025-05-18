@@ -96,7 +96,7 @@ void NotifyIllegalInstrCode(u32 instr_code)
 
 void PerformBranch()
 {
-    branch_state = mips::BranchState::NoBranch;
+    branch_state = BranchState::NoBranch;
     pc = jump_addr;
     if constexpr (log_cpu_branches) {
         LogInfo("CPU branch to 0x{:016X}; RA = 0x{:016X}; SP = 0x{:016X}", u64(pc), u64(gpr[31]), u64(gpr[29]));
@@ -118,7 +118,7 @@ void PowerOn()
 void Reset()
 {
     exception_occurred = false;
-    branch_state = mips::BranchState::NoBranch;
+    branch_state = BranchState::NoBranch;
     SoftResetException();
 }
 

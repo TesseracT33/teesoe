@@ -1,12 +1,13 @@
 #include "decoder.hpp"
 #include "log.hpp"
+#include "n64.hpp"
 #include "n64_build_options.hpp"
 #include "numeric.hpp"
+#include "platform.hpp"
 #include "rsp/disassembler.hpp"
 #include "rsp/interpreter.hpp"
+#include "rsp/recompiler.hpp"
 #include "rsp/vu.hpp"
-#include "rsp/x64/cpu.hpp"
-#include "rsp/x64/vu.hpp"
 #include "vr4300/cache.hpp"
 #include "vr4300/cop0.hpp"
 #include "vr4300/cop1.hpp"
@@ -14,12 +15,22 @@
 #include "vr4300/disassembler.hpp"
 #include "vr4300/exceptions.hpp"
 #include "vr4300/interpreter.hpp"
-#include "vr4300/x64/cop0.hpp"
-#include "vr4300/x64/cop1.hpp"
-#include "vr4300/x64/cop2.hpp"
-#include "vr4300/x64/cpu.hpp"
+#include "vr4300/recompiler.hpp"
 
 #include <utility>
+
+#define RSP_NAMESPACE    n64::rsp
+#define VR4300_NAMESPACE n64::vr4300
+
+#if PLATFORM_A64
+#    define RSP_JIT_NAMESPACE    n64::rsp::a64
+#    define VR4300_JIT_NAMESPACE n64::vr4300::a64
+#elif PLATFORM_X64
+#    define RSP_JIT_NAMESPACE    n64::rsp::x64
+#    define VR4300_JIT_NAMESPACE n64::vr4300::x64
+#else
+#    error "Unrecognized platform"
+#endif
 
 #define IMM7    (SignExtend<s32, 7>(instr & 127))
 #define IMM16   (s16(instr))
@@ -37,17 +48,17 @@
 #define FT      (instr >> 16 & 31)
 #define VT      (instr >> 16 & 31)
 #define ELEM_HI (instr >> 21 & 15)
+#define VT_E    (instr >> 21 & 15)
+#define RS      (instr >> 21 & 31)
+#define BASE    (instr >> 21 & 31)
 // #define VT_E    (vt_e_bug(instr >> 21 & 15, VD_E))
-#define VT_E (instr >> 21 & 15)
-#define RS   (instr >> 21 & 31)
-#define BASE (instr >> 21 & 31)
 
 #define LOG_RSP(instr, ...)                                             \
     do {                                                                \
         if constexpr (cpu == Cpu::RSP && log_rsp_instructions) {        \
             LogInfo("${:03X}  {}",                                      \
               cpu_impl == CpuImpl::Interpreter ? rsp::pc : rsp::jit_pc, \
-              rsp::disassembler.instr(__VA_ARGS__));                    \
+              rsp_disassembler.instr(__VA_ARGS__));                     \
         }                                                               \
     } while (0)
 
@@ -56,7 +67,7 @@
         if constexpr (cpu == Cpu::VR4300 && log_cpu_instructions) {           \
             LogInfo("${:016X}  {}",                                           \
               cpu_impl == CpuImpl::Interpreter ? vr4300::pc : vr4300::jit_pc, \
-              vr4300::disassembler.instr(__VA_ARGS__));                       \
+              vr4300_disassembler.instr(__VA_ARGS__));                        \
         }                                                                     \
     } while (0)
 
@@ -69,45 +80,33 @@
         }                                       \
     } while (0)
 
-#define COP1_FMT_IMPL(instr, fmt, ...)                    \
-    do {                                                  \
-        LOG_VR4300(instr<fmt>, __VA_ARGS__);              \
-        if constexpr (cpu_impl == CpuImpl::Interpreter) { \
-            vr4300::instr<fmt>(__VA_ARGS__);              \
-        } else if constexpr (platform.a64) {              \
-            /* vr4300::a64::instr<fmt>(__VA_ARGS__);*/    \
-        } else {                                          \
-            vr4300::x64::instr<fmt>(__VA_ARGS__);         \
-        }                                                 \
+#define COP1_FMT_IMPL(instr, fmt, ...)                     \
+    do {                                                   \
+        LOG_VR4300(instr<fmt>, __VA_ARGS__);               \
+        if constexpr (cpu_impl == CpuImpl::Interpreter) {  \
+            VR4300_NAMESPACE::instr<fmt>(__VA_ARGS__);     \
+        } else {                                           \
+            VR4300_JIT_NAMESPACE::instr<fmt>(__VA_ARGS__); \
+        }                                                  \
     } while (0)
 
-#define COP1_FMT(instr_name, ...)                                                                                \
-    do {                                                                                                         \
-        switch (instr >> 21 & 31) {                                                                              \
-        case std::to_underlying(vr4300::Fmt::Float32):                                                           \
-            COP1_FMT_IMPL(instr_name, vr4300::Fmt::Float32, __VA_ARGS__);                                        \
-            break;                                                                                               \
-        case std::to_underlying(vr4300::Fmt::Float64):                                                           \
-            COP1_FMT_IMPL(instr_name, vr4300::Fmt::Float64, __VA_ARGS__);                                        \
-            break;                                                                                               \
-        case std::to_underlying(vr4300::Fmt::Int32): COP1_FMT_IMPL(instr_name, vr4300::Fmt::Int32, __VA_ARGS__); \
-          break;                                                                                                 \
-        case std::to_underlying(vr4300::Fmt::Int64): COP1_FMT_IMPL(instr_name, vr4300::Fmt::Int64, __VA_ARGS__); \
-          break;                                                                                                 \
-        default: COP1_FMT_IMPL(instr_name, vr4300::Fmt::Invalid, __VA_ARGS__); break;                            \
-        }                                                                                                        \
-    } while (0)
-
-#define COP_RSP(instr, ...)                               \
-    do {                                                  \
-        LOG_RSP(instr, __VA_ARGS__);                      \
-        if constexpr (cpu_impl == CpuImpl::Interpreter) { \
-            rsp::instr(__VA_ARGS__);                      \
-        } else if constexpr (platform.a64) {              \
-            /* rsp::a64::instr(__VA_ARGS__);*/            \
-        } else {                                          \
-            rsp::x64::instr(__VA_ARGS__);                 \
-        }                                                 \
+#define COP1_FMT(instr_name, ...)                                                                  \
+    do {                                                                                           \
+        switch (instr >> 21 & 31) {                                                                \
+        case std::to_underlying(VR4300_NAMESPACE::FpuFmt::Float32):                                \
+            COP1_FMT_IMPL(instr_name, VR4300_NAMESPACE::FpuFmt::Float32, __VA_ARGS__);             \
+            break;                                                                                 \
+        case std::to_underlying(VR4300_NAMESPACE::FpuFmt::Float64):                                \
+            COP1_FMT_IMPL(instr_name, VR4300_NAMESPACE::FpuFmt::Float64, __VA_ARGS__);             \
+            break;                                                                                 \
+        case std::to_underlying(VR4300_NAMESPACE::FpuFmt::Int32):                                  \
+            COP1_FMT_IMPL(instr_name, VR4300_NAMESPACE::FpuFmt::Int32, __VA_ARGS__);               \
+            break;                                                                                 \
+        case std::to_underlying(VR4300_NAMESPACE::FpuFmt::Int64):                                  \
+            COP1_FMT_IMPL(instr_name, VR4300_NAMESPACE::FpuFmt::Int64, __VA_ARGS__);               \
+            break;                                                                                 \
+        default: COP1_FMT_IMPL(instr_name, VR4300_NAMESPACE::FpuFmt::Invalid, __VA_ARGS__); break; \
+        }                                                                                          \
     } while (0)
 
 #define COP_VR4300(instr, ...)                                \
@@ -115,75 +114,61 @@
         LOG_VR4300(instr, __VA_ARGS__);                       \
         if constexpr (cpu == Cpu::VR4300) {                   \
             if constexpr (cpu_impl == CpuImpl::Interpreter) { \
-                vr4300::instr(__VA_ARGS__);                   \
-            } else if constexpr (platform.a64) {              \
-                /*vr4300::a64::instr(__VA_ARGS__);*/          \
+                VR4300_NAMESPACE::instr(__VA_ARGS__);         \
             } else {                                          \
-                vr4300::x64::instr(__VA_ARGS__);              \
+                VR4300_JIT_NAMESPACE::instr(__VA_ARGS__);     \
             }                                                 \
         } else {                                              \
             rsp::NotifyIllegalInstr(#instr);                  \
         }                                                     \
     } while (0)
 
-#define CPU(instr, ...)                                             \
-    do {                                                            \
-        LOG(instr, __VA_ARGS__);                                    \
-        if constexpr (cpu == Cpu::VR4300) {                         \
-            if constexpr (cpu_impl == CpuImpl::Interpreter) {       \
-                vr4300::cpu_interpreter.instr(__VA_ARGS__);         \
-            } else if constexpr (platform.a64) {                    \
-                /*vr4300::a64::cpu_recompiler.instr(__VA_ARGS__);*/ \
-            } else {                                                \
-                vr4300::x64::cpu_recompiler.instr(__VA_ARGS__);     \
-            }                                                       \
-        } else {                                                    \
-            if constexpr (cpu_impl == CpuImpl::Interpreter) {       \
-                rsp::cpu_interpreter.instr(__VA_ARGS__);            \
-            } else if constexpr (platform.a64) {                    \
-                /*rsp::a64::cpu_recompiler.instr(__VA_ARGS__);*/    \
-            } else {                                                \
-                rsp::x64::cpu_recompiler.instr(__VA_ARGS__);        \
-            }                                                       \
-        }                                                           \
+#define CPU_VR4300(instr, ...)                                \
+    do {                                                      \
+        LOG_VR4300(instr, __VA_ARGS__);                       \
+        if constexpr (cpu == Cpu::VR4300) {                   \
+            if constexpr (cpu_impl == CpuImpl::Interpreter) { \
+                VR4300_NAMESPACE::instr(__VA_ARGS__);         \
+            } else {                                          \
+                VR4300_JIT_NAMESPACE::instr(__VA_ARGS__);     \
+            }                                                 \
+        } else {                                              \
+            RSP_NAMESPACE::NotifyIllegalInstr(#instr);        \
+        }                                                     \
     } while (0)
 
-#define CPU_RSP(instr, ...)                                  \
-    do {                                                     \
-        LOG_RSP(instr, __VA_ARGS__);                         \
-        if constexpr (cpu_impl == CpuImpl::Interpreter) {    \
-            rsp::cpu_interpreter.instr(__VA_ARGS__);         \
-        } else if constexpr (platform.a64) {                 \
-            /*rsp::a64::cpu_recompiler.instr(__VA_ARGS__);*/ \
-        } else {                                             \
-            rsp::x64::cpu_recompiler.instr(__VA_ARGS__);     \
-        }                                                    \
+#define RSP(instr, ...)                                   \
+    do {                                                  \
+        LOG_RSP(instr, __VA_ARGS__);                      \
+        if constexpr (cpu_impl == CpuImpl::Interpreter) { \
+            RSP_NAMESPACE::instr(__VA_ARGS__);            \
+        } else {                                          \
+            RSP_JIT_NAMESPACE::instr(__VA_ARGS__);        \
+        }                                                 \
     } while (0)
 
-#define CPU_VR4300(instr, ...)                                      \
-    do {                                                            \
-        LOG_VR4300(instr, __VA_ARGS__);                             \
-        if constexpr (cpu == Cpu::VR4300) {                         \
-            if constexpr (cpu_impl == CpuImpl::Interpreter) {       \
-                vr4300::cpu_interpreter.instr(__VA_ARGS__);         \
-            } else if constexpr (platform.a64) {                    \
-                /*vr4300::a64::cpu_recompiler.instr(__VA_ARGS__);*/ \
-            } else {                                                \
-                vr4300::x64::cpu_recompiler.instr(__VA_ARGS__);     \
-            }                                                       \
-        } else {                                                    \
-            rsp::NotifyIllegalInstr(#instr);                        \
-        }                                                           \
+#define CPU(instr, ...)                     \
+    do {                                    \
+        LOG(instr, __VA_ARGS__);            \
+        if constexpr (cpu == Cpu::VR4300) { \
+            CPU_VR4300(instr, __VA_ARGS__); \
+        } else {                            \
+            RSP(instr, __VA_ARGS__);        \
+        }                                   \
     } while (0)
 
-namespace n64::decoder {
+namespace n64 {
+
+static rsp::Disassembler rsp_disassembler;
+static vr4300::Disassembler vr4300_disassembler;
 
 template<Cpu cpu, CpuImpl cpu_impl, bool make_string> static void cop0(u32 instr);
 template<Cpu cpu, CpuImpl cpu_impl, bool make_string> static void cop1(u32 instr);
 template<Cpu cpu, CpuImpl cpu_impl, bool make_string> static void cop2(u32 instr);
 template<Cpu cpu, CpuImpl cpu_impl, bool make_string> static void cop3(u32 instr);
+template<Cpu cpu, CpuImpl cpu_impl, bool make_string> static void disassemble(u32 instr);
 template<Cpu cpu, CpuImpl cpu_impl, bool make_string> static void regimm(u32 instr);
-template<Cpu cpu, CpuImpl cpu_impl, bool make_string> static void reserved_instruction(auto instr);
+template<Cpu cpu, CpuImpl cpu_impl, bool make_string> static void reserved_instruction(u32 instr);
 template<Cpu cpu, CpuImpl cpu_impl, bool make_string> static void special(u32 instr);
 u32 vt_e_bug(u32 vt_e, u32 vd_e);
 
@@ -212,8 +197,8 @@ template<Cpu cpu, CpuImpl cpu_impl, bool make_string> void cop0(u32 instr)
         }
     } else {
         switch (instr >> 21 & 31) {
-        case 0: CPU_RSP(mfc0, RT, RD); break;
-        case 4: CPU_RSP(mtc0, RT, RD); break;
+        case 0: RSP(mfc0, RT, RD); break;
+        case 4: RSP(mtc0, RT, RD); break;
         default: rsp::NotifyIllegalInstrCode(instr);
         }
     }
@@ -293,59 +278,59 @@ template<Cpu cpu, CpuImpl cpu_impl, bool make_string> void cop2(u32 instr)
     } else {
         if (instr & 1 << 25) {
             switch (instr & 63) {
-            case 0x00: COP_RSP(vmulf, VS, VT, VD, ELEM_HI); break;
-            case 0x01: COP_RSP(vmulu, VS, VT, VD, ELEM_HI); break;
-            case 0x02: COP_RSP(vrndp, VT, VT_E, VD, VD_E); break;
-            case 0x03: COP_RSP(vmulq, VS, VT, VD, ELEM_HI); break;
-            case 0x04: COP_RSP(vmudl, VS, VT, VD, ELEM_HI); break;
-            case 0x05: COP_RSP(vmudm, VS, VT, VD, ELEM_HI); break;
-            case 0x06: COP_RSP(vmudn, VS, VT, VD, ELEM_HI); break;
-            case 0x07: COP_RSP(vmudh, VS, VT, VD, ELEM_HI); break;
-            case 0x08: COP_RSP(vmacf, VS, VT, VD, ELEM_HI); break;
-            case 0x09: COP_RSP(vmacu, VS, VT, VD, ELEM_HI); break;
-            case 0x0A: COP_RSP(vrndn, VT, VT_E, VD, VD_E); break;
-            case 0x0B: COP_RSP(vmacq, VD); break;
-            case 0x0C: COP_RSP(vmadl, VS, VT, VD, ELEM_HI); break;
-            case 0x0D: COP_RSP(vmadm, VS, VT, VD, ELEM_HI); break;
-            case 0x0E: COP_RSP(vmadn, VS, VT, VD, ELEM_HI); break;
-            case 0x0F: COP_RSP(vmadh, VS, VT, VD, ELEM_HI); break;
-            case 0x10: COP_RSP(vadd, VS, VT, VD, ELEM_HI); break;
-            case 0x11: COP_RSP(vsub, VS, VT, VD, ELEM_HI); break;
-            case 0x13: COP_RSP(vabs, VS, VT, VD, ELEM_HI); break;
-            case 0x14: COP_RSP(vaddc, VS, VT, VD, ELEM_HI); break;
-            case 0x15: COP_RSP(vsubc, VS, VT, VD, ELEM_HI); break;
-            case 0x1D: COP_RSP(vsar, VD, ELEM_HI); break;
-            case 0x20: COP_RSP(vlt, VS, VT, VD, ELEM_HI); break;
-            case 0x21: COP_RSP(veq, VS, VT, VD, ELEM_HI); break;
-            case 0x22: COP_RSP(vne, VS, VT, VD, ELEM_HI); break;
-            case 0x23: COP_RSP(vge, VS, VT, VD, ELEM_HI); break;
-            case 0x24: COP_RSP(vcl, VS, VT, VD, ELEM_HI); break;
-            case 0x25: COP_RSP(vch, VS, VT, VD, ELEM_HI); break;
-            case 0x26: COP_RSP(vcr, VS, VT, VD, ELEM_HI); break;
-            case 0x27: COP_RSP(vmrg, VS, VT, VD, ELEM_HI); break;
-            case 0x28: COP_RSP(vand, VS, VT, VD, ELEM_HI); break;
-            case 0x29: COP_RSP(vnand, VS, VT, VD, ELEM_HI); break;
-            case 0x2A: COP_RSP(vor, VS, VT, VD, ELEM_HI); break;
-            case 0x2B: COP_RSP(vnor, VS, VT, VD, ELEM_HI); break;
-            case 0x2C: COP_RSP(vxor, VS, VT, VD, ELEM_HI); break;
-            case 0x2D: COP_RSP(vnxor, VS, VT, VD, ELEM_HI); break;
-            case 0x30: COP_RSP(vrcp, VT, VT_E, VD, VD_E); break;
-            case 0x31: COP_RSP(vrcpl, VT, VT_E, VD, VD_E); break;
-            case 0x32: COP_RSP(vrcph, VT, VT_E, VD, VD_E); break;
-            case 0x33: COP_RSP(vmov, VT, VT_E, VD, VD_E); break;
-            case 0x34: COP_RSP(vrsq, VT, VT_E, VD, VD_E); break;
-            case 0x35: COP_RSP(vrsql, VT, VT_E, VD, VD_E); break;
-            case 0x36: COP_RSP(vrsqh, VT, VT_E, VD, VD_E); break;
+            case 0x00: RSP(vmulf, VS, VT, VD, ELEM_HI); break;
+            case 0x01: RSP(vmulu, VS, VT, VD, ELEM_HI); break;
+            case 0x02: RSP(vrndp, VT, VT_E, VD, VD_E); break;
+            case 0x03: RSP(vmulq, VS, VT, VD, ELEM_HI); break;
+            case 0x04: RSP(vmudl, VS, VT, VD, ELEM_HI); break;
+            case 0x05: RSP(vmudm, VS, VT, VD, ELEM_HI); break;
+            case 0x06: RSP(vmudn, VS, VT, VD, ELEM_HI); break;
+            case 0x07: RSP(vmudh, VS, VT, VD, ELEM_HI); break;
+            case 0x08: RSP(vmacf, VS, VT, VD, ELEM_HI); break;
+            case 0x09: RSP(vmacu, VS, VT, VD, ELEM_HI); break;
+            case 0x0A: RSP(vrndn, VT, VT_E, VD, VD_E); break;
+            case 0x0B: RSP(vmacq, VD); break;
+            case 0x0C: RSP(vmadl, VS, VT, VD, ELEM_HI); break;
+            case 0x0D: RSP(vmadm, VS, VT, VD, ELEM_HI); break;
+            case 0x0E: RSP(vmadn, VS, VT, VD, ELEM_HI); break;
+            case 0x0F: RSP(vmadh, VS, VT, VD, ELEM_HI); break;
+            case 0x10: RSP(vadd, VS, VT, VD, ELEM_HI); break;
+            case 0x11: RSP(vsub, VS, VT, VD, ELEM_HI); break;
+            case 0x13: RSP(vabs, VS, VT, VD, ELEM_HI); break;
+            case 0x14: RSP(vaddc, VS, VT, VD, ELEM_HI); break;
+            case 0x15: RSP(vsubc, VS, VT, VD, ELEM_HI); break;
+            case 0x1D: RSP(vsar, VD, ELEM_HI); break;
+            case 0x20: RSP(vlt, VS, VT, VD, ELEM_HI); break;
+            case 0x21: RSP(veq, VS, VT, VD, ELEM_HI); break;
+            case 0x22: RSP(vne, VS, VT, VD, ELEM_HI); break;
+            case 0x23: RSP(vge, VS, VT, VD, ELEM_HI); break;
+            case 0x24: RSP(vcl, VS, VT, VD, ELEM_HI); break;
+            case 0x25: RSP(vch, VS, VT, VD, ELEM_HI); break;
+            case 0x26: RSP(vcr, VS, VT, VD, ELEM_HI); break;
+            case 0x27: RSP(vmrg, VS, VT, VD, ELEM_HI); break;
+            case 0x28: RSP(vand, VS, VT, VD, ELEM_HI); break;
+            case 0x29: RSP(vnand, VS, VT, VD, ELEM_HI); break;
+            case 0x2A: RSP(vor, VS, VT, VD, ELEM_HI); break;
+            case 0x2B: RSP(vnor, VS, VT, VD, ELEM_HI); break;
+            case 0x2C: RSP(vxor, VS, VT, VD, ELEM_HI); break;
+            case 0x2D: RSP(vnxor, VS, VT, VD, ELEM_HI); break;
+            case 0x30: RSP(vrcp, VT, VT_E, VD, VD_E); break;
+            case 0x31: RSP(vrcpl, VT, VT_E, VD, VD_E); break;
+            case 0x32: RSP(vrcph, VT, VT_E, VD, VD_E); break;
+            case 0x33: RSP(vmov, VT, VT_E, VD, VD_E); break;
+            case 0x34: RSP(vrsq, VT, VT_E, VD, VD_E); break;
+            case 0x35: RSP(vrsql, VT, VT_E, VD, VD_E); break;
+            case 0x36: RSP(vrsqh, VT, VT_E, VD, VD_E); break;
             case 0x37:
-            case 0x3F: COP_RSP(vnop); break;
-            default: COP_RSP(vzero, VS, VT, VD, ELEM_HI); break;
+            case 0x3F: RSP(vnop); break;
+            default: RSP(vzero, VS, VT, VD, ELEM_HI); break;
             }
         } else {
             switch (instr >> 21 & 31) {
-            case 0: COP_RSP(mfc2, RT, VS, ELEM_LO); break;
-            case 2: COP_RSP(cfc2, RT, VS); break;
-            case 4: COP_RSP(mtc2, RT, VS, ELEM_LO); break;
-            case 6: COP_RSP(ctc2, RT, VS); break;
+            case 0: RSP(mfc2, RT, VS, ELEM_LO); break;
+            case 2: RSP(cfc2, RT, VS); break;
+            case 4: RSP(mtc2, RT, VS, ELEM_LO); break;
+            case 6: RSP(ctc2, RT, VS); break;
             default: rsp::NotifyIllegalInstrCode(instr);
             }
         }
@@ -355,20 +340,11 @@ template<Cpu cpu, CpuImpl cpu_impl, bool make_string> void cop2(u32 instr)
 template<Cpu cpu, CpuImpl cpu_impl, bool make_string> void cop3(u32 instr)
 {
     if constexpr (cpu == Cpu::VR4300) {
-        using namespace vr4300;
         if (instr >> 21 & 31) {
             if constexpr (cpu_impl == CpuImpl::Interpreter) {
-                vr4300::cop0.status.cu3 ? ReservedInstructionException() : CoprocessorUnusableException(3);
+                vr4300::Cop3();
             } else {
-                asmjit::Label l0 = c.newLabel();
-                reg_alloc.ReserveArgs(1);
-                c.bt(JitPtr(vr4300::cop0.status), 31); // cu3
-                c.jc(l0);
-                c.mov(host_gpr_arg[0].r32(), 3);
-                BlockEpilogWithPcFlushAndJmp((void*)CoprocessorUnusableException);
-                c.bind(l0);
-                BlockEpilogWithPcFlushAndJmp((void*)ReservedInstructionException);
-                // compiler_exception_occurred = true; // TODO
+                vr4300::Cop3Jit();
             }
         } else { // MFC3
             reserved_instruction<cpu, cpu_impl, make_string>(instr);
@@ -376,6 +352,26 @@ template<Cpu cpu, CpuImpl cpu_impl, bool make_string> void cop3(u32 instr)
     } else {
         reserved_instruction<cpu, cpu_impl, make_string>(instr);
     }
+}
+
+void decode_and_emit_cpu(u32 instr)
+{
+    disassemble<Cpu::VR4300, CpuImpl::Recompiler, false>(instr);
+}
+
+void decode_and_emit_rsp(u32 instr)
+{
+    disassemble<Cpu::RSP, CpuImpl::Recompiler, false>(instr);
+}
+
+void decode_and_interpret_cpu(u32 instr)
+{
+    disassemble<Cpu::VR4300, CpuImpl::Interpreter, false>(instr);
+}
+
+void decode_and_interpret_rsp(u32 instr)
+{
+    disassemble<Cpu::RSP, CpuImpl::Interpreter, false>(instr);
 }
 
 template<Cpu cpu, CpuImpl cpu_impl, bool make_string> void disassemble(u32 instr)
@@ -429,17 +425,17 @@ template<Cpu cpu, CpuImpl cpu_impl, bool make_string> void disassemble(u32 instr
     case 0x31: COP_VR4300(lwc1, BASE, FT, IMM16); break;
     case 0x32:
         switch (instr >> 11 & 31) {
-        case 0: COP_RSP(lbv, BASE, VT, ELEM_LO, IMM7); break;
-        case 1: COP_RSP(lsv, BASE, VT, ELEM_LO, IMM7); break;
-        case 2: COP_RSP(llv, BASE, VT, ELEM_LO, IMM7); break;
-        case 3: COP_RSP(ldv, BASE, VT, ELEM_LO, IMM7); break;
-        case 4: COP_RSP(lqv, BASE, VT, ELEM_LO, IMM7); break;
-        case 5: COP_RSP(lrv, BASE, VT, ELEM_LO, IMM7); break;
-        case 6: COP_RSP(lpv, BASE, VT, ELEM_LO, IMM7); break;
-        case 7: COP_RSP(luv, BASE, VT, ELEM_LO, IMM7); break;
-        case 8: COP_RSP(lhv, BASE, VT, ELEM_LO, IMM7); break;
-        case 9: COP_RSP(lfv, BASE, VT, ELEM_LO, IMM7); break;
-        case 11: COP_RSP(ltv, BASE, VT, ELEM_LO, IMM7); break;
+        case 0: RSP(lbv, BASE, VT, ELEM_LO, IMM7); break;
+        case 1: RSP(lsv, BASE, VT, ELEM_LO, IMM7); break;
+        case 2: RSP(llv, BASE, VT, ELEM_LO, IMM7); break;
+        case 3: RSP(ldv, BASE, VT, ELEM_LO, IMM7); break;
+        case 4: RSP(lqv, BASE, VT, ELEM_LO, IMM7); break;
+        case 5: RSP(lrv, BASE, VT, ELEM_LO, IMM7); break;
+        case 6: RSP(lpv, BASE, VT, ELEM_LO, IMM7); break;
+        case 7: RSP(luv, BASE, VT, ELEM_LO, IMM7); break;
+        case 8: RSP(lhv, BASE, VT, ELEM_LO, IMM7); break;
+        case 9: RSP(lfv, BASE, VT, ELEM_LO, IMM7); break;
+        case 11: RSP(ltv, BASE, VT, ELEM_LO, IMM7); break;
         default: reserved_instruction<cpu, cpu_impl, make_string>(instr);
         }
         break;
@@ -450,18 +446,18 @@ template<Cpu cpu, CpuImpl cpu_impl, bool make_string> void disassemble(u32 instr
     case 0x39: COP_VR4300(swc1, BASE, FT, IMM16); break;
     case 0x3A:
         switch (instr >> 11 & 31) {
-        case 0: COP_RSP(sbv, BASE, VT, ELEM_LO, IMM7); break;
-        case 1: COP_RSP(ssv, BASE, VT, ELEM_LO, IMM7); break;
-        case 2: COP_RSP(slv, BASE, VT, ELEM_LO, IMM7); break;
-        case 3: COP_RSP(sdv, BASE, VT, ELEM_LO, IMM7); break;
-        case 4: COP_RSP(sqv, BASE, VT, ELEM_LO, IMM7); break;
-        case 5: COP_RSP(srv, BASE, VT, ELEM_LO, IMM7); break;
-        case 6: COP_RSP(spv, BASE, VT, ELEM_LO, IMM7); break;
-        case 7: COP_RSP(suv, BASE, VT, ELEM_LO, IMM7); break;
-        case 8: COP_RSP(shv, BASE, VT, ELEM_LO, IMM7); break;
-        case 9: COP_RSP(sfv, BASE, VT, ELEM_LO, IMM7); break;
-        case 10: COP_RSP(swv, BASE, VT, ELEM_LO, IMM7); break;
-        case 11: COP_RSP(stv, BASE, VT, ELEM_LO, IMM7); break;
+        case 0: RSP(sbv, BASE, VT, ELEM_LO, IMM7); break;
+        case 1: RSP(ssv, BASE, VT, ELEM_LO, IMM7); break;
+        case 2: RSP(slv, BASE, VT, ELEM_LO, IMM7); break;
+        case 3: RSP(sdv, BASE, VT, ELEM_LO, IMM7); break;
+        case 4: RSP(sqv, BASE, VT, ELEM_LO, IMM7); break;
+        case 5: RSP(srv, BASE, VT, ELEM_LO, IMM7); break;
+        case 6: RSP(spv, BASE, VT, ELEM_LO, IMM7); break;
+        case 7: RSP(suv, BASE, VT, ELEM_LO, IMM7); break;
+        case 8: RSP(shv, BASE, VT, ELEM_LO, IMM7); break;
+        case 9: RSP(sfv, BASE, VT, ELEM_LO, IMM7); break;
+        case 10: RSP(swv, BASE, VT, ELEM_LO, IMM7); break;
+        case 11: RSP(stv, BASE, VT, ELEM_LO, IMM7); break;
         default: reserved_instruction<cpu, cpu_impl, make_string>(instr);
         }
         break;
@@ -470,16 +466,6 @@ template<Cpu cpu, CpuImpl cpu_impl, bool make_string> void disassemble(u32 instr
     case 0x3F: CPU_VR4300(sd, RS, RT, IMM16); break;
     default: reserved_instruction<cpu, cpu_impl, make_string>(instr);
     }
-}
-
-template<CpuImpl impl> void exec_cpu(u32 instr)
-{
-    disassemble<Cpu::VR4300, impl, false>(instr);
-}
-
-template<CpuImpl impl> void exec_rsp(u32 instr)
-{
-    disassemble<Cpu::RSP, impl, false>(instr);
 }
 
 template<Cpu cpu, CpuImpl cpu_impl, bool make_string> void regimm(u32 instr)
@@ -503,16 +489,14 @@ template<Cpu cpu, CpuImpl cpu_impl, bool make_string> void regimm(u32 instr)
     }
 }
 
-template<Cpu cpu, CpuImpl cpu_impl, bool make_string> void reserved_instruction(auto instr)
+template<Cpu cpu, CpuImpl cpu_impl, bool make_string> void reserved_instruction(u32 instr)
 {
     if constexpr (make_string) {
     } else if constexpr (cpu == Cpu::VR4300) {
-        using namespace vr4300;
         if constexpr (cpu_impl == CpuImpl::Interpreter) {
-            ReservedInstructionException();
+            vr4300::ReservedInstructionException();
         } else {
-            BlockEpilogWithPcFlushAndJmp((void*)ReservedInstructionException);
-            // compiler_exception_occurred = true; // TODO
+            vr4300::OnReservedInstruction();
         }
     } else {
         rsp::NotifyIllegalInstrCode(instr);
@@ -596,9 +580,4 @@ u32 vt_e_bug(u32 vt_e, u32 vd_e)
     return vt_e;
 }
 
-template void exec_cpu<CpuImpl::Interpreter>(u32);
-template void exec_cpu<CpuImpl::Recompiler>(u32);
-template void exec_rsp<CpuImpl::Interpreter>(u32);
-template void exec_rsp<CpuImpl::Recompiler>(u32);
-
-} // namespace n64::decoder
+} // namespace n64

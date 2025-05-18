@@ -5,10 +5,11 @@
 #include <array>
 #include <cfenv>
 #include <concepts>
+#include <span>
 
 namespace n64::vr4300 {
 
-enum class Fmt {
+enum class FpuFmt {
     Float32 = 16,
     Float64 = 17,
     Int32 = 20,
@@ -19,21 +20,21 @@ enum class Fmt {
 template<typename T>
 concept FpuNum = std::same_as<f32, T> || std::same_as<f64, T> || std::same_as<s32, T> || std::same_as<s64, T>;
 
-template<Fmt> struct FmtToType {};
+template<FpuFmt> struct FpuFmtToType {};
 
-template<> struct FmtToType<Fmt::Float32> {
+template<> struct FpuFmtToType<FpuFmt::Float32> {
     using type = f32;
 };
 
-template<> struct FmtToType<Fmt::Float64> {
+template<> struct FpuFmtToType<FpuFmt::Float64> {
     using type = f64;
 };
 
-template<> struct FmtToType<Fmt::Int32> {
+template<> struct FpuFmtToType<FpuFmt::Int32> {
     using type = s32;
 };
 
-template<> struct FmtToType<Fmt::Int64> {
+template<> struct FpuFmtToType<FpuFmt::Int64> {
     using type = s64;
 };
 
@@ -73,6 +74,8 @@ struct FGR {
     template<FpuNum T> T GetMoveLoadStore(u32 idx) const;
     template<FpuNum T> void Set(u32 idx, T data);
     template<FpuNum T> void SetMoveLoadStore(u32 idx, T data);
+
+    std::span<s64 const, 32> view() const { return std::span<s64 const, 32>{ fpr }; }
 
 private:
     std::array<s64, 32> fpr;
@@ -136,48 +139,6 @@ struct FCR31BitIndex {
 constexpr std::array guest_to_host_rounding_mode{ FE_TONEAREST, FE_TOWARDZERO, FE_UPWARD, FE_DOWNWARD };
 
 constexpr u32 fcr31_write_mask = 0x183'FFFF;
-
-void bc1f(s16 imm);
-void bc1fl(s16 imm);
-void bc1t(s16 imm);
-void bc1tl(s16 imm);
-
-void cfc1(u32 fs, u32 rt);
-void ctc1(u32 fs, u32 rt);
-void dcfc1();
-void dctc1();
-void dmfc1(u32 fs, u32 rt);
-void dmtc1(u32 fs, u32 rt);
-void ldc1(u32 base, u32 ft, s16 imm);
-void lwc1(u32 base, u32 ft, s16 imm);
-void mfc1(u32 fs, u32 rt);
-void mtc1(u32 fs, u32 rt);
-void sdc1(u32 base, u32 ft, s16 imm);
-void swc1(u32 base, u32 ft, s16 imm);
-
-template<Fmt> void compare(u32 fs, u32 ft, u8 cond);
-
-template<Fmt> void ceil_l(u32 fs, u32 fd);
-template<Fmt> void ceil_w(u32 fs, u32 fd);
-template<Fmt> void cvt_d(u32 fs, u32 fd);
-template<Fmt> void cvt_l(u32 fs, u32 fd);
-template<Fmt> void cvt_s(u32 fs, u32 fd);
-template<Fmt> void cvt_w(u32 fs, u32 fd);
-template<Fmt> void floor_l(u32 fs, u32 fd);
-template<Fmt> void floor_w(u32 fs, u32 fd);
-template<Fmt> void round_l(u32 fs, u32 fd);
-template<Fmt> void round_w(u32 fs, u32 fd);
-template<Fmt> void trunc_l(u32 fs, u32 fd);
-template<Fmt> void trunc_w(u32 fs, u32 fd);
-
-template<Fmt> void abs(u32 fs, u32 fd);
-template<Fmt> void add(u32 fs, u32 ft, u32 fd);
-template<Fmt> void div(u32 fs, u32 ft, u32 fd);
-template<Fmt> void mov(u32 fs, u32 fd);
-template<Fmt> void mul(u32 fs, u32 ft, u32 fd);
-template<Fmt> void neg(u32 fs, u32 fd);
-template<Fmt> void sqrt(u32 fs, u32 fd);
-template<Fmt> void sub(u32 fs, u32 ft, u32 fd);
 
 bool GetAndTestExceptions();
 bool GetAndTestExceptionsConvFloatToWord();

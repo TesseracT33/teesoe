@@ -1,9 +1,8 @@
-#pragma once
-
 #include "algorithm.hpp"
 #include "vr4300/cop0.hpp"
 #include "vr4300/cop1.hpp"
 #include "vr4300/exceptions.hpp"
+#include "vr4300/interpreter.hpp"
 #include "vr4300/recompiler.hpp"
 
 namespace n64::vr4300::x64 {
@@ -11,18 +10,18 @@ namespace n64::vr4300::x64 {
 using namespace asmjit;
 using namespace asmjit::x86;
 
-alignas(16) inline constexpr std::array abs_f32_mask{ 0x7FFF'FFFF, 0x7FFF'FFFF, 0x7FFF'FFFF, 0x7FFF'FFFF };
-alignas(16) inline constexpr std::array abs_f64_mask{ 0x7FFF'FFFF'FFFF'FFFF, 0x7FFF'FFFF'FFFF'FFFF };
-alignas(16) inline constexpr std::array neg_f32_mask{ 0x8000'0000, 0x8000'0000, 0x8000'0000, 0x8000'0000 };
-alignas(16) inline constexpr std::array neg_f64_mask{ 0x8000'0000'0000'0000, 0x8000'0000'0000'0000 };
+alignas(16) constexpr std::array abs_f32_mask{ 0x7FFF'FFFF, 0x7FFF'FFFF, 0x7FFF'FFFF, 0x7FFF'FFFF };
+alignas(16) constexpr std::array abs_f64_mask{ 0x7FFF'FFFF'FFFF'FFFF, 0x7FFF'FFFF'FFFF'FFFF };
+alignas(16) constexpr std::array neg_f32_mask{ 0x8000'0000, 0x8000'0000, 0x8000'0000, 0x8000'0000 };
+alignas(16) constexpr std::array neg_f64_mask{ 0x8000'0000'0000'0000, 0x8000'0000'0000'0000 };
 
 bool CheckCop1Usable();
 void OnCop1Unusable();
 
-template<ComputeInstr1Op instr, std::floating_point Float> void Compute(u32 fs, u32 fd);
-template<ComputeInstr2Op instr, std::floating_point Float> void Compute(u32 fs, u32 ft, u32 fd);
+template<ComputeInstr1Op instr, std::floating_point Float> static void Compute(u32 fs, u32 fd);
+template<ComputeInstr2Op instr, std::floating_point Float> static void Compute(u32 fs, u32 ft, u32 fd);
 template<FpuNum From, FpuNum To> static void Convert(u32 fs, u32 fd);
-template<RoundInstr instr, FpuNum From, FpuNum To> void Round(u32 fs, u32 fd);
+template<RoundInstr instr, FpuNum From, FpuNum To> static void Round(u32 fs, u32 fd);
 
 void CallCop1InterpreterImpl(auto impl, u32 fs, u32 fd)
 {
@@ -31,7 +30,7 @@ void CallCop1InterpreterImpl(auto impl, u32 fs, u32 fd)
     reg_alloc.ReserveArgs(2);
     fs ? c.mov(host_gpr_arg[0].r32(), fs) : c.xor_(host_gpr_arg[0].r32(), host_gpr_arg[0].r32());
     fd ? c.mov(host_gpr_arg[1].r32(), fd) : c.xor_(host_gpr_arg[1].r32(), host_gpr_arg[1].r32());
-    reg_alloc.Call(impl);
+    reg_alloc.Call((void*)impl);
     reg_alloc.FreeArgs(2);
     c.cmp(JitPtr(exception_occurred), 0);
     c.je(l_noexception);
@@ -85,17 +84,17 @@ template<bool cond, bool likely> void Cop1Branch(s16 imm)
 
 Gpq GetGpr(u32 idx)
 {
-    return reg_alloc.GetHostGpr(idx).r64();
+    return reg_alloc.GetGpr(idx).r64();
 }
 
 Gpq GetDirtyGpr(u32 idx)
 {
-    return reg_alloc.GetHostGprMarkDirty(idx).r64();
+    return reg_alloc.GetDirtyGpr(idx).r64();
 }
 
 void OnCop1Unusable()
 {
-    reg_alloc.FlushAll();
+    reg_alloc.DestroyVolatile(host_gpr_arg[0]);
     c.mov(host_gpr_arg[0].r32(), 1);
     BlockEpilogWithPcFlushAndJmp((void*)CoprocessorUnusableException);
     branched = true;
@@ -110,27 +109,27 @@ void OnInvalidFormat()
     branched = true;
 }
 
-inline void bc1f(s16 imm)
+void bc1f(s16 imm)
 {
     Cop1Branch<false, false>(imm);
 }
 
-inline void bc1fl(s16 imm)
+void bc1fl(s16 imm)
 {
     Cop1Branch<false, true>(imm);
 }
 
-inline void bc1t(s16 imm)
+void bc1t(s16 imm)
 {
     Cop1Branch<true, false>(imm);
 }
 
-inline void bc1tl(s16 imm)
+void bc1tl(s16 imm)
 {
     Cop1Branch<true, true>(imm);
 }
 
-inline void cfc1(u32 fs, u32 rt)
+void cfc1(u32 fs, u32 rt)
 {
     if (!cop0.status.cu1) return OnCop1Unusable();
     Gpq ht = GetDirtyGpr(rt);
@@ -139,7 +138,7 @@ inline void cfc1(u32 fs, u32 rt)
     else c.xor_(ht.r32(), ht.r32());
 }
 
-inline void ctc1(u32 fs, u32 rt)
+void ctc1(u32 fs, u32 rt)
 {
     if (!cop0.status.cu1) return OnCop1Unusable();
     if (fs != 31) return;
@@ -153,8 +152,8 @@ inline void ctc1(u32 fs, u32 rt)
     c.and_(eax, 3);
     c.shl(eax, 2);
     c.mov(host_gpr_arg[0].r32(), JitPtrOffset(guest_to_host_rounding_mode, rax, 4));
-    reg_alloc.Call(fesetround);
-    reg_alloc.Call(TestExceptions<false>);
+    reg_alloc.Call((void*)fesetround);
+    reg_alloc.Call((void*)TestExceptions<false>);
     c.cmp(JitPtr(exception_occurred), 0);
     c.je(l_no_exception);
     BlockEpilog();
@@ -162,7 +161,7 @@ inline void ctc1(u32 fs, u32 rt)
     reg_alloc.FreeArgs(1);
 }
 
-inline void dcfc1()
+void dcfc1()
 {
     if (!CheckCop1Usable()) return;
     c.bts(JitPtr(fcr31), FCR31BitIndex::CauseUnimplemented);
@@ -171,12 +170,12 @@ inline void dcfc1()
     branched = true;
 }
 
-inline void dctc1()
+void dctc1()
 {
     dcfc1();
 }
 
-inline void dmfc1(u32 fs, u32 rt)
+void dmfc1(u32 fs, u32 rt)
 {
     if (!cop0.status.cu1) return OnCop1Unusable();
     if (!cop0.status.fr) fs &= ~1;
@@ -185,7 +184,7 @@ inline void dmfc1(u32 fs, u32 rt)
     block_cycles++;
 }
 
-inline void dmtc1(u32 fs, u32 rt)
+void dmtc1(u32 fs, u32 rt)
 {
     if (!cop0.status.cu1) return OnCop1Unusable();
     if (!cop0.status.fr) fs &= ~1;
@@ -194,7 +193,7 @@ inline void dmtc1(u32 fs, u32 rt)
     block_cycles++;
 }
 
-inline void ldc1(u32 base, u32 ft, s16 imm)
+void ldc1(u32 base, u32 ft, s16 imm)
 {
     if (!cop0.status.cu1) return OnCop1Unusable();
     if (!cop0.status.fr) ft &= ~1;
@@ -203,7 +202,7 @@ inline void ldc1(u32 base, u32 ft, s16 imm)
     reg_alloc.ReserveArgs(1);
     Gpq hbase = GetGpr(base);
     c.lea(host_gpr_arg[0], ptr(hbase, imm));
-    reg_alloc.Call(ReadVirtual<s64>);
+    reg_alloc.Call((void*)ReadVirtual<s64>);
     c.cmp(JitPtr(exception_occurred), 0);
     c.je(l_no_exception);
 
@@ -216,7 +215,7 @@ inline void ldc1(u32 base, u32 ft, s16 imm)
     reg_alloc.FreeArgs(1);
 }
 
-inline void lwc1(u32 base, u32 ft, s16 imm)
+void lwc1(u32 base, u32 ft, s16 imm)
 {
     if (!cop0.status.cu1) return OnCop1Unusable();
     FlushPc();
@@ -224,7 +223,7 @@ inline void lwc1(u32 base, u32 ft, s16 imm)
     reg_alloc.ReserveArgs(1);
     Gpq hbase = GetGpr(base);
     c.lea(host_gpr_arg[0], ptr(hbase, imm));
-    reg_alloc.Call(ReadVirtual<s32>);
+    reg_alloc.Call((void*)ReadVirtual<s32>);
     c.cmp(JitPtr(exception_occurred), 0);
     c.je(l_no_exception);
 
@@ -241,7 +240,7 @@ inline void lwc1(u32 base, u32 ft, s16 imm)
     reg_alloc.FreeArgs(1);
 }
 
-inline void mfc1(u32 fs, u32 rt)
+void mfc1(u32 fs, u32 rt)
 {
     if (!CheckCop1Usable()) return;
     Gpq hrt = GetDirtyGpr(rt);
@@ -253,7 +252,7 @@ inline void mfc1(u32 fs, u32 rt)
     block_cycles++;
 }
 
-inline void mtc1(u32 fs, u32 rt)
+void mtc1(u32 fs, u32 rt)
 {
     if (!CheckCop1Usable()) return;
     Gpd hrt = GetGpr(rt).r32();
@@ -265,7 +264,7 @@ inline void mtc1(u32 fs, u32 rt)
     block_cycles++;
 }
 
-inline void sdc1(u32 base, u32 ft, s16 imm)
+void sdc1(u32 base, u32 ft, s16 imm)
 {
     if (!cop0.status.cu1) return OnCop1Unusable();
     if (!cop0.status.fr) ft &= ~1;
@@ -275,7 +274,7 @@ inline void sdc1(u32 base, u32 ft, s16 imm)
     Gpq hbase = GetGpr(base);
     c.lea(host_gpr_arg[0], ptr(hbase, imm));
     c.mov(host_gpr_arg[1], JitPtrOffset(fpr, ft * 8, 8));
-    reg_alloc.Call(WriteVirtual<8>);
+    reg_alloc.Call((void*)WriteVirtual<8>);
     c.cmp(JitPtr(exception_occurred), 0);
     c.je(l_end);
 
@@ -286,7 +285,7 @@ inline void sdc1(u32 base, u32 ft, s16 imm)
     reg_alloc.FreeArgs(2);
 }
 
-inline void swc1(u32 base, u32 ft, s16 imm)
+void swc1(u32 base, u32 ft, s16 imm)
 {
     if (!cop0.status.cu1) return OnCop1Unusable();
     FlushPc();
@@ -299,7 +298,7 @@ inline void swc1(u32 base, u32 ft, s16 imm)
     } else {
         c.movsxd(host_gpr_arg[1], JitPtrOffset(fpr, (ft & ~1) * 8 + 4, 4));
     }
-    reg_alloc.Call(WriteVirtual<4>);
+    reg_alloc.Call((void*)WriteVirtual<4>);
     c.cmp(JitPtr(exception_occurred), 0);
     c.je(l_end);
 
@@ -310,23 +309,23 @@ inline void swc1(u32 base, u32 ft, s16 imm)
     reg_alloc.FreeArgs(2);
 }
 
-template<Fmt fmt> inline void compare(u32 fs, u32 ft, u8 cond)
+template<FpuFmt fmt> void compare(u32 fs, u32 ft, u8 cond)
 {
-    if constexpr (!OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
+    if constexpr (!OneOf(fmt, FpuFmt::Float32, FpuFmt::Float64)) {
         return OnInvalidFormat();
     }
     if (!CheckCop1Usable()) return;
     if (!cop0.status.fr) fs &= ~1;
-    reg_alloc.Reserve<2>({ rcx, rdx });
+    reg_alloc.Reserve(rcx, rdx);
     Label l_no_nans = c.newLabel(), l_exception = c.newLabel(), l_end = c.newLabel();
 
     c.movq(xmm0, JitPtrOffset(fpr, 8 * fs, 8));
     if (cond & 8) {
-        fmt == Fmt::Float32 ? c.vcomiss(xmm0, JitPtrOffset(fpr, 8 * ft, 4))
-                            : c.vcomisd(xmm0, JitPtrOffset(fpr, 8 * ft, 8));
+        fmt == FpuFmt::Float32 ? c.vcomiss(xmm0, JitPtrOffset(fpr, 8 * ft, 4))
+                               : c.vcomisd(xmm0, JitPtrOffset(fpr, 8 * ft, 8));
     } else {
-        fmt == Fmt::Float32 ? c.vucomiss(xmm0, JitPtrOffset(fpr, 8 * ft, 4))
-                            : c.vucomisd(xmm0, JitPtrOffset(fpr, 8 * ft, 8));
+        fmt == FpuFmt::Float32 ? c.vucomiss(xmm0, JitPtrOffset(fpr, 8 * ft, 4))
+                               : c.vucomisd(xmm0, JitPtrOffset(fpr, 8 * ft, 8));
     }
     c.setp(al);
 
@@ -347,7 +346,11 @@ template<Fmt fmt> inline void compare(u32 fs, u32 ft, u8 cond)
     c.and_(eax, ecx);
     c.and_(eax, 1);
     c.jnz(l_exception);
-    cond & 1 ? c.bts(JitPtr(fcr31), FCR31BitIndex::Condition) : c.btr(JitPtr(fcr31), FCR31BitIndex::Condition);
+    if (cond & 1) {
+        c.bts(JitPtr(fcr31), FCR31BitIndex::Condition);
+    } else {
+        c.btr(JitPtr(fcr31), FCR31BitIndex::Condition);
+    }
     c.jmp(l_end);
 
     c.bind(l_exception);
@@ -375,137 +378,137 @@ template<Fmt fmt> inline void compare(u32 fs, u32 ft, u8 cond)
     }
 
     c.bind(l_end);
-    reg_alloc.Free<2>({ rcx, rdx });
+    reg_alloc.Free(rcx, rdx);
 }
 
-template<Fmt fmt> void ceil_l(u32 fs, u32 fd)
+template<FpuFmt fmt> void ceil_l(u32 fs, u32 fd)
 {
-    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
-        Round<RoundInstr::CEIL, typename FmtToType<fmt>::type, s64>(fs, fd);
+    if constexpr (OneOf(fmt, FpuFmt::Float32, FpuFmt::Float64)) {
+        Round<RoundInstr::CEIL, typename FpuFmtToType<fmt>::type, s64>(fs, fd);
     } else {
         OnInvalidFormat();
     }
 }
 
-template<Fmt fmt> void ceil_w(u32 fs, u32 fd)
+template<FpuFmt fmt> void ceil_w(u32 fs, u32 fd)
 {
-    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
-        Round<RoundInstr::CEIL, typename FmtToType<fmt>::type, s32>(fs, fd);
+    if constexpr (OneOf(fmt, FpuFmt::Float32, FpuFmt::Float64)) {
+        Round<RoundInstr::CEIL, typename FpuFmtToType<fmt>::type, s32>(fs, fd);
     } else {
         OnInvalidFormat();
     }
 }
 
-template<Fmt fmt> inline void cvt_d(u32 fs, u32 fd)
+template<FpuFmt fmt> void cvt_d(u32 fs, u32 fd)
 {
     CallCop1InterpreterImpl(vr4300::cvt_d<fmt>, fs, fd);
 }
 
-template<Fmt fmt> inline void cvt_l(u32 fs, u32 fd)
+template<FpuFmt fmt> void cvt_l(u32 fs, u32 fd)
 {
     CallCop1InterpreterImpl(vr4300::cvt_l<fmt>, fs, fd);
 }
 
-template<Fmt fmt> inline void cvt_s(u32 fs, u32 fd)
+template<FpuFmt fmt> void cvt_s(u32 fs, u32 fd)
 {
     CallCop1InterpreterImpl(vr4300::cvt_s<fmt>, fs, fd);
 }
 
-template<Fmt fmt> inline void cvt_w(u32 fs, u32 fd)
+template<FpuFmt fmt> void cvt_w(u32 fs, u32 fd)
 {
     CallCop1InterpreterImpl(vr4300::cvt_w<fmt>, fs, fd);
 }
 
-template<Fmt fmt> void floor_l(u32 fs, u32 fd)
+template<FpuFmt fmt> void floor_l(u32 fs, u32 fd)
 {
-    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
-        Round<RoundInstr::FLOOR, typename FmtToType<fmt>::type, s64>(fs, fd);
+    if constexpr (OneOf(fmt, FpuFmt::Float32, FpuFmt::Float64)) {
+        Round<RoundInstr::FLOOR, typename FpuFmtToType<fmt>::type, s64>(fs, fd);
     } else {
         OnInvalidFormat();
     }
 }
 
-template<Fmt fmt> void floor_w(u32 fs, u32 fd)
+template<FpuFmt fmt> void floor_w(u32 fs, u32 fd)
 {
-    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
-        Round<RoundInstr::FLOOR, typename FmtToType<fmt>::type, s32>(fs, fd);
+    if constexpr (OneOf(fmt, FpuFmt::Float32, FpuFmt::Float64)) {
+        Round<RoundInstr::FLOOR, typename FpuFmtToType<fmt>::type, s32>(fs, fd);
     } else {
         OnInvalidFormat();
     }
 }
 
-template<Fmt fmt> void round_l(u32 fs, u32 fd)
+template<FpuFmt fmt> void round_l(u32 fs, u32 fd)
 {
-    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
-        Round<RoundInstr::ROUND, typename FmtToType<fmt>::type, s64>(fs, fd);
+    if constexpr (OneOf(fmt, FpuFmt::Float32, FpuFmt::Float64)) {
+        Round<RoundInstr::ROUND, typename FpuFmtToType<fmt>::type, s64>(fs, fd);
     } else {
         OnInvalidFormat();
     }
 }
 
-template<Fmt fmt> void round_w(u32 fs, u32 fd)
+template<FpuFmt fmt> void round_w(u32 fs, u32 fd)
 {
-    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
-        Round<RoundInstr::ROUND, typename FmtToType<fmt>::type, s32>(fs, fd);
+    if constexpr (OneOf(fmt, FpuFmt::Float32, FpuFmt::Float64)) {
+        Round<RoundInstr::ROUND, typename FpuFmtToType<fmt>::type, s32>(fs, fd);
     } else {
         OnInvalidFormat();
     }
 }
 
-template<Fmt fmt> void trunc_l(u32 fs, u32 fd)
+template<FpuFmt fmt> void trunc_l(u32 fs, u32 fd)
 {
-    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
-        Round<RoundInstr::TRUNC, typename FmtToType<fmt>::type, s64>(fs, fd);
+    if constexpr (OneOf(fmt, FpuFmt::Float32, FpuFmt::Float64)) {
+        Round<RoundInstr::TRUNC, typename FpuFmtToType<fmt>::type, s64>(fs, fd);
     } else {
         OnInvalidFormat();
     }
 }
 
-template<Fmt fmt> void trunc_w(u32 fs, u32 fd)
+template<FpuFmt fmt> void trunc_w(u32 fs, u32 fd)
 {
-    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
-        Round<RoundInstr::TRUNC, typename FmtToType<fmt>::type, s32>(fs, fd);
+    if constexpr (OneOf(fmt, FpuFmt::Float32, FpuFmt::Float64)) {
+        Round<RoundInstr::TRUNC, typename FpuFmtToType<fmt>::type, s32>(fs, fd);
     } else {
         OnInvalidFormat();
     }
 }
 
-template<Fmt fmt> inline void abs(u32 fs, u32 fd)
+template<FpuFmt fmt> void abs(u32 fs, u32 fd)
 {
-    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
-        Compute<ComputeInstr1Op::ABS, typename FmtToType<fmt>::type>(fs, fd);
+    if constexpr (OneOf(fmt, FpuFmt::Float32, FpuFmt::Float64)) {
+        Compute<ComputeInstr1Op::ABS, typename FpuFmtToType<fmt>::type>(fs, fd);
     } else {
         OnInvalidFormat();
     }
 }
 
-template<Fmt fmt> inline void add(u32 fs, u32 ft, u32 fd)
+template<FpuFmt fmt> void add(u32 fs, u32 ft, u32 fd)
 {
-    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
-        Compute<ComputeInstr2Op::ADD, typename FmtToType<fmt>::type>(fs, ft, fd);
+    if constexpr (OneOf(fmt, FpuFmt::Float32, FpuFmt::Float64)) {
+        Compute<ComputeInstr2Op::ADD, typename FpuFmtToType<fmt>::type>(fs, ft, fd);
     } else {
         OnInvalidFormat();
     }
 }
 
-template<Fmt fmt> inline void div(u32 fs, u32 ft, u32 fd)
+template<FpuFmt fmt> void div(u32 fs, u32 ft, u32 fd)
 {
-    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
-        Compute<ComputeInstr2Op::DIV, typename FmtToType<fmt>::type>(fs, ft, fd);
+    if constexpr (OneOf(fmt, FpuFmt::Float32, FpuFmt::Float64)) {
+        Compute<ComputeInstr2Op::DIV, typename FpuFmtToType<fmt>::type>(fs, ft, fd);
     } else {
         OnInvalidFormat();
     }
 }
 
-template<Fmt fmt> inline void mov(u32 fs, u32 fd)
+template<FpuFmt fmt> void mov(u32 fs, u32 fd)
 {
-    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
+    if constexpr (OneOf(fmt, FpuFmt::Float32, FpuFmt::Float64)) {
         if (cop0.status.cu1) {
             if (!cop0.status.fr) fs &= ~1;
             c.mov(rax, JitPtrOffset(fpr, 8 * fs, 8));
             c.mov(JitPtrOffset(fpr, 8 * fd, 8), rax);
         } else {
-            reg_alloc.FlushAll();
+            reg_alloc.DestroyVolatile(host_gpr_arg[0]);
             c.mov(host_gpr_arg[0].r32(), 1);
             BlockEpilogWithPcFlushAndJmp((void*)CoprocessorUnusableException);
             branched = true;
@@ -515,37 +518,37 @@ template<Fmt fmt> inline void mov(u32 fs, u32 fd)
     }
 }
 
-template<Fmt fmt> void mul(u32 fs, u32 ft, u32 fd)
+template<FpuFmt fmt> void mul(u32 fs, u32 ft, u32 fd)
 {
-    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
-        Compute<ComputeInstr2Op::MUL, typename FmtToType<fmt>::type>(fs, ft, fd);
+    if constexpr (OneOf(fmt, FpuFmt::Float32, FpuFmt::Float64)) {
+        Compute<ComputeInstr2Op::MUL, typename FpuFmtToType<fmt>::type>(fs, ft, fd);
     } else {
         OnInvalidFormat();
     }
 }
 
-template<Fmt fmt> void neg(u32 fs, u32 fd)
+template<FpuFmt fmt> void neg(u32 fs, u32 fd)
 {
-    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
-        Compute<ComputeInstr1Op::NEG, typename FmtToType<fmt>::type>(fs, fd);
+    if constexpr (OneOf(fmt, FpuFmt::Float32, FpuFmt::Float64)) {
+        Compute<ComputeInstr1Op::NEG, typename FpuFmtToType<fmt>::type>(fs, fd);
     } else {
         OnInvalidFormat();
     }
 }
 
-template<Fmt fmt> void sqrt(u32 fs, u32 fd)
+template<FpuFmt fmt> void sqrt(u32 fs, u32 fd)
 {
-    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
-        Compute<ComputeInstr1Op::SQRT, typename FmtToType<fmt>::type>(fs, fd);
+    if constexpr (OneOf(fmt, FpuFmt::Float32, FpuFmt::Float64)) {
+        Compute<ComputeInstr1Op::SQRT, typename FpuFmtToType<fmt>::type>(fs, fd);
     } else {
         OnInvalidFormat();
     }
 }
 
-template<Fmt fmt> void sub(u32 fs, u32 ft, u32 fd)
+template<FpuFmt fmt> void sub(u32 fs, u32 ft, u32 fd)
 {
-    if constexpr (OneOf(fmt, Fmt::Float32, Fmt::Float64)) {
-        Compute<ComputeInstr2Op::SUB, typename FmtToType<fmt>::type>(fs, ft, fd);
+    if constexpr (OneOf(fmt, FpuFmt::Float32, FpuFmt::Float64)) {
+        Compute<ComputeInstr2Op::SUB, typename FpuFmtToType<fmt>::type>(fs, ft, fd);
     } else {
         OnInvalidFormat();
     }
@@ -562,7 +565,7 @@ template<ComputeInstr1Op instr, std::floating_point Float> void Compute(u32 fs, 
     c.sub(x86::rsp, 16);
     c.vmovq(xmm0, JitPtrOffset(fpr, 8 * fs, 8));
     c.vmovq(qword_ptr(x86::rsp), xmm0);
-    reg_alloc.Call(IsValidInput<Float>);
+    reg_alloc.Call((void*)IsValidInput<Float>);
     c.test(al, al);
     c.jz(l_epilog);
     if constexpr (sizeof(Float) == 4) {
@@ -594,11 +597,11 @@ template<ComputeInstr1Op instr, std::floating_point Float> void Compute(u32 fs, 
         }
     }
     c.vmovq(qword_ptr(x86::rsp), xmm0);
-    reg_alloc.Call(GetAndTestExceptions);
+    reg_alloc.Call((void*)GetAndTestExceptions);
     c.test(al, al);
     c.jnz(l_epilog);
     c.mov(host_gpr_arg[0], x86::rsp);
-    reg_alloc.Call(IsValidOutput<Float>);
+    reg_alloc.Call((void*)IsValidOutput<Float>);
     c.test(al, al);
     c.jz(l_epilog);
     if constexpr (sizeof(Float) == 4) {
@@ -628,12 +631,12 @@ template<ComputeInstr2Op instr, std::floating_point Float> void Compute(u32 fs, 
     c.sub(x86::rsp, 16);
     c.vmovq(xmm0, JitPtrOffset(fpr, 8 * fs, 8));
     c.vmovq(qword_ptr(x86::rsp), xmm0);
-    reg_alloc.Call(IsValidInput<Float>);
+    reg_alloc.Call((void*)IsValidInput<Float>);
     c.test(al, al);
     c.jz(l_epilog);
     c.vmovq(xmm0, JitPtrOffset(fpr, 8 * ft, 8));
     c.vmovq(qword_ptr(x86::rsp, 8), xmm0);
-    reg_alloc.Call(IsValidInput<Float>);
+    reg_alloc.Call((void*)IsValidInput<Float>);
     c.test(al, al);
     c.jz(l_epilog);
     c.vmovq(xmm0, qword_ptr(x86::rsp));
@@ -677,11 +680,11 @@ template<ComputeInstr2Op instr, std::floating_point Float> void Compute(u32 fs, 
         }
     }
     c.vmovq(qword_ptr(x86::rsp), xmm0);
-    reg_alloc.Call(GetAndTestExceptions);
+    reg_alloc.Call((void*)GetAndTestExceptions);
     c.test(al, al);
     c.jnz(l_epilog);
     c.mov(host_gpr_arg[0], x86::rsp);
-    reg_alloc.Call(IsValidOutput<Float>);
+    reg_alloc.Call((void*)IsValidOutput<Float>);
     c.test(al, al);
     c.jz(l_epilog);
     if constexpr (sizeof(Float) == 4) {
@@ -775,7 +778,7 @@ template<RoundInstr instr, FpuNum From, FpuNum To> void Round(u32 fs, u32 fd)
     c.sub(x86::rsp, 16);
     c.vmovq(xmm0, JitPtrOffset(fpr, 8 * fs, 8));
     c.vmovq(qword_ptr(x86::rsp), xmm0);
-    reg_alloc.Call(IsValidInputCvtRound<To, From>);
+    // reg_alloc.Call(IsValidInputCvtRound<To, From>); // TODO fixme
     c.test(al, al);
     c.jz(l_epilog);
     c.vmovq(xmm0, qword_ptr(x86::rsp));
@@ -793,17 +796,17 @@ template<RoundInstr instr, FpuNum From, FpuNum To> void Round(u32 fs, u32 fd)
     if constexpr (sizeof(To) == 4) {
         c.vcvttss2si(eax, xmm0);
         c.mov(dword_ptr(x86::rsp, 8), eax);
-        reg_alloc.Call(GetAndTestExceptionsConvFloatToWord);
+        reg_alloc.Call((void*)GetAndTestExceptionsConvFloatToWord);
     } else {
         c.vcvttsd2si(rax, xmm0);
         c.mov(qword_ptr(x86::rsp, 8), rax);
-        reg_alloc.Call(GetAndTestExceptions);
+        reg_alloc.Call((void*)GetAndTestExceptions);
     }
     c.test(al, al);
     c.jnz(l_epilog);
     c.mov(host_gpr_arg[0], x86::rsp);
-    // TODO: this doesn't compile, and I have no fucking idea why
-    // reg_alloc.Call(IsValidOutput<To>);
+    // TODO: this doesn't compile
+    // reg_alloc.Call((void*)IsValidOutput<To>);
     c.test(al, al);
     c.jz(l_epilog);
     if constexpr (sizeof(From) == 4) {
@@ -829,5 +832,34 @@ template<RoundInstr instr, FpuNum From, FpuNum To> void Round(u32 fs, u32 fd)
     c.bind(l_end);
     block_cycles += 4;
 }
+
+#define INST_FMT_SPEC(instr, ...)                      \
+    template void instr<FpuFmt::Float32>(__VA_ARGS__); \
+    template void instr<FpuFmt::Float64>(__VA_ARGS__); \
+    template void instr<FpuFmt::Int32>(__VA_ARGS__);   \
+    template void instr<FpuFmt::Int64>(__VA_ARGS__);   \
+    template void instr<FpuFmt::Invalid>(__VA_ARGS__);
+
+INST_FMT_SPEC(compare, u32, u32, u8);
+INST_FMT_SPEC(ceil_l, u32, u32);
+INST_FMT_SPEC(ceil_w, u32, u32);
+INST_FMT_SPEC(cvt_d, u32, u32);
+INST_FMT_SPEC(cvt_l, u32, u32);
+INST_FMT_SPEC(cvt_s, u32, u32);
+INST_FMT_SPEC(cvt_w, u32, u32);
+INST_FMT_SPEC(floor_l, u32, u32);
+INST_FMT_SPEC(floor_w, u32, u32);
+INST_FMT_SPEC(round_l, u32, u32);
+INST_FMT_SPEC(round_w, u32, u32);
+INST_FMT_SPEC(trunc_l, u32, u32);
+INST_FMT_SPEC(trunc_w, u32, u32);
+INST_FMT_SPEC(abs, u32, u32);
+INST_FMT_SPEC(add, u32, u32, u32);
+INST_FMT_SPEC(div, u32, u32, u32);
+INST_FMT_SPEC(mov, u32, u32);
+INST_FMT_SPEC(mul, u32, u32, u32);
+INST_FMT_SPEC(neg, u32, u32);
+INST_FMT_SPEC(sqrt, u32, u32);
+INST_FMT_SPEC(sub, u32, u32, u32);
 
 } // namespace n64::vr4300::x64

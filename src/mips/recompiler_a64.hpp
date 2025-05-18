@@ -327,29 +327,10 @@ struct RecompilerA64 : public Recompiler<GprInt, PcInt, RegisterAllocator> {
         }*/
     }
 
-    void movn(u32 rs, u32 rt, u32 rd) const
-    {
-        if (!rd) return;
-        Gp hd = GetDirtyGpr(rd), hs = GetGpr(rs), ht = GetGpr(rt);
-        c.cmp(ht, 0);
-        // c.csel(hd, hs, );
-    }
+    void mthi(u32 rs) const { /*c.mov(JitPtr(hi), GetGpr(rs));*/ }
 
-    void movz(u32 rs, u32 rt, u32 rd) const
-    {
-        if (!rd) return;
-        Gp hd = GetDirtyGpr(rd), hs = GetGpr(rs), ht = GetGpr(rt);
-        c.cmp(ht, 0);
-        // c.csel(hd, hs, );
-    }
-
-    void mthi(u32 rs) const
-    { /*c.mov(JitPtr(hi), GetGpr(rs));*/
-    }
-
-    void mtlo(u32 rs) const
-    { /*
-        c.mov(JitPtr(lo), GetGpr(rs));*/
+    void mtlo(u32 rs) const { /*
+                                c.mov(JitPtr(lo), GetGpr(rs));*/
     }
 
     void nor(u32 rs, u32 rt, u32 rd) const
@@ -526,13 +507,8 @@ struct RecompilerA64 : public Recompiler<GprInt, PcInt, RegisterAllocator> {
     void xor_(u32 rs, u32 rt, u32 rd) const
     {
         if (!rd) return;
-        Gp hd = GetDirtyGpr(rd);
-        if (rs == rt) {
-            c.mov(hd, 0);
-        } else {
-            Gp hs = GetGpr(rs), ht = GetGpr(rt);
-            c.eor(hd, hs, ht);
-        }
+        Gp hd = GetDirtyGpr(rd), hs = GetGpr(rs), ht = GetGpr(rt);
+        c.eor(hd, hs, ht);
     }
 
     void xori(u32 rs, u32 rt, u16 imm) const

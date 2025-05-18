@@ -87,10 +87,10 @@ Status LoadSram(std::filesystem::path const& sram_path)
     return OkStatus();
 }
 
-u8 ReadDma(u32 addr)
+template<std::signed_integral Int> Int ReadDma(u32 addr)
 {
-    u8 ret;
-    std::memcpy(&ret, GetPointerToRom(addr), 1);
+    Int ret;
+    std::memcpy(&ret, GetPointerToRom(addr), sizeof(ret));
     return ret;
 }
 
@@ -157,6 +157,8 @@ template<size_t access_size> void WriteRom(u32 addr, s64 data)
     pi::Write<access_size>(addr, data);
 }
 
+template s8 ReadDma<s8>(u32);
+template s16 ReadDma<s16>(u32);
 template s8 ReadRom<s8>(u32);
 template s16 ReadRom<s16>(u32);
 template s32 ReadRom<s32>(u32);

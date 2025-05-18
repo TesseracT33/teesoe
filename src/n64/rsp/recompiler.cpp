@@ -16,7 +16,7 @@ namespace n64::rsp {
 constexpr u32 pool_size = 0x100;
 constexpr size_t num_pools = 0x1000 / pool_size;
 
-using Block = void (*)();
+using Block = void (*)(s32 const* gpr_mid_ptr);
 
 struct Pool {
     std::array<Block, 64> blocks;
@@ -84,7 +84,7 @@ void BlockProlog()
         code_holder.setLogger(&jit_logger);
         jit_logger.log("======== RSP BLOCK BEGIN ========\n");
     }
-    FuncNode* func_node = c.addFunc(FuncSignatureT<void>());
+    FuncNode* func_node = c.addFunc(FuncSignature::build<void>());
     func_node->frame().setAvxEnabled();
     func_node->frame().setAvxCleanup();
     if constexpr (platform.avx512) {
@@ -152,17 +152,17 @@ void EmitInstruction()
     block_cycles++;
     last_instr_was_branch = false;
     u32 instr = FetchInstruction(jit_pc);
-    decoder::exec_rsp<CpuImpl::Recompiler>(instr);
+    decode_and_emit_rsp(instr);
     jit_pc = (jit_pc + 4) & 0xFFC;
     block_has_branch_instr |= last_instr_was_branch;
     if constexpr (log_rsp_jit_register_status) {
-        jit_logger.log(reg_alloc.GetStatusString().c_str());
+        jit_logger.log(reg_alloc.GetStatus().c_str());
     }
 }
 
 void EmitLink(u32 reg)
 {
-    Gpq gp = reg_alloc.GetHostGprMarkDirty(reg);
+    Gpd gp = reg_alloc.GetDirtyGpr(reg);
     c.mov(gp, (jit_pc + 8) & 0xFFF);
 }
 
@@ -223,7 +223,7 @@ void InvalidateRange(u32 addr_lo, u32 addr_hi)
         assert(addr_lo <= addr_hi);
         assert(addr_hi <= 0x1000);
         u32 pool_lo = addr_lo >> 8;
-        u32 pool_hi = addr_lo >> 8;
+        u32 pool_hi = addr_hi >> 8;
         for (u32 i = pool_lo; i <= pool_hi; ++i) {
             ResetPool(pools[i]);
         }
@@ -260,7 +260,7 @@ u32 RunRecompiler(u32 rsp_cycles)
             if (!block) {
                 Compile(block);
             }
-            block();
+            block(gpr.ptr(16));
         }
         if (sp.status.halted) {
             if (jump_is_pending) { // note for future refactors: this makes rsp::op_break::BREAKWithinDelay pass

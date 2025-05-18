@@ -11,13 +11,6 @@
 
 namespace mips {
 
-enum class BranchState {
-    DelaySlotNotTaken,
-    DelaySlotTaken,
-    NoBranch,
-    Perform,
-};
-
 enum class Cond {
     Eq,
     Ge,
@@ -27,12 +20,6 @@ enum class Cond {
     Lt,
     Ltu,
     Ne
-};
-
-enum class OperatingMode {
-    User,
-    Supervisor,
-    Kernel
 };
 
 template<std::signed_integral Int> struct Gpr {
@@ -50,8 +37,8 @@ template<std::signed_integral Int> struct Gpr {
 
     std::string Format() const
     {
-        std::string str;
-        str.reserve(32 * 24);
+        static std::string str(32 * 24, '\0');
+        str.clear();
         for (int i = 0; i < 32; ++i) {
             str += std::format("{}\t{:#x}\n", GprIdxToName(i), to_unsigned(gpr[i]));
         }

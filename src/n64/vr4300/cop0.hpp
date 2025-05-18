@@ -82,12 +82,6 @@ void OnWriteToStatus();
 void OnWriteToWired();
 template<bool initial_add = false> void ReloadCountCompareEvent();
 
-void dmfc0(u32 rt, u32 rd);
-void dmtc0(u32 rt, u32 rd);
-void eret();
-void mfc0(u32 rt, u32 rd);
-void mtc0(u32 rt, u32 rd);
-
 /* TODO: for registers that contain only one field, make them simple u32/u64, not structs */
 struct Cop0Registers {
     struct { /* (0) */
@@ -102,9 +96,9 @@ struct Cop0Registers {
     struct EntryLo { /* (2), (3); Used to rewrite the TLB or to check coincidence of a TLB entry when addresses are
                         converted. */
         u32 g   : 1; /* Global. If this bit is set in both EntryLo0 and EntryLo1, then the processor ignores the ASID
-                        during TLB lookup. */
+                  during TLB lookup. */
         u32 v   : 1; /* Valid. If this bit is set, it indicates that the TLB entry is valid; otherwise, a TLBL or TLBS
-                        miss occurs. */
+                  miss occurs. */
         u32 d   : 1; /* Dirty. If this bit is set, the page is marked as dirty, and therefore writable. */
         u32 c   : 3; /* Specifies the TLB page attribute. */
         u32 pfn : 24; /* Page frame number -- the high-order bits of the physical address. */
@@ -156,7 +150,7 @@ struct Cop0Registers {
         u32 sx  : 1; /* Enables 64-bit addressing and operations in Supervisor mode (0: 32-bit; 1: 64-bit) */
         u32 kx  : 1; /* Enables 64-bit addressing in Kernel mode (0: 32-bit; 1: 64-bit) */
         u32 im  : 8; /* Interrupt Mask fields (0: disabled; 1: enabled). Software interrupt (IM0-IM1); External normal
-                        interrupts (IM2-IM6); Timer interrupt (IM7). */
+                     interrupts (IM2-IM6); Timer interrupt (IM7). */
         u32     : 2;
         u32 ch  : 1; /* CP0 condition bit */
         u32     : 1;
@@ -170,7 +164,7 @@ struct Cop0Registers {
           re : 1; /* Reverse-Endian bit, enables reverse of system endianness in User mode (0: disabled; 1: reversed) */
         u32 fr  : 1; /* Enables additional floating-point registers (0: 16 registers; 1: 32 registers) */
         u32 rp  : 1; /* Enables low-power operation by reducing the internal clock frequency and the system interface
-                        clock frequency to one-quarter speed (0: normal; 1: low power mode) */
+                     clock frequency to one-quarter speed (0: normal; 1: low power mode) */
         /* The four flags below control the usability of each of the four coprocessor unit numbers (0: unusable; 1:
          * usable)  */
         u32 cu0 : 1; /* COP0 is enabled. If cleared, COP0 instructions throw exceptions */
@@ -184,12 +178,12 @@ struct Cop0Registers {
         u32 exc_code : 5; /* Exception code field; written to when an exception is signaled. */
         u32          : 1;
         u32 ip       : 8; /* Interrupt is pending (0: no interrupt; 1: interrupt pending). Software interrupt (IM0-IM1);
-                             External normal interrupts (IM2-IM6); Timer interrupt (IM7). */
+           External normal interrupts (IM2-IM6); Timer interrupt (IM7). */
         u32          : 12;
         u32 ce       : 2; /* Coprocessor unit number referenced when a Coprocessor Unusable exception has occurred. */
         u32          : 1;
         u32 bd       : 1; /* Indicates whether the last exception occurred has been executed in a branch delay slot (0:
-                             normal; 1: delay slot). */
+           normal; 1: delay slot). */
     } cause;
 
     u64 epc; /* (14) Contains the address at which processing resumes after an exception has been serviced. */
@@ -203,13 +197,9 @@ struct Cop0Registers {
     struct { /* (16) */
         u32 k0 : 3; /* Sets coherency algorithm of kseg0 (010 => cache is not used; else => cache is used). */
         u32 cu : 1; /* RFU. However, can be read or written by software. */
-    private:
-        u32 padding_0 : 11 = 0b11001000110; /* Returns 11001000110 when read. */
-    public:
+        [[maybe_unused]] u32 padding_0 : 11 = 0b11001000110; /* Returns 11001000110 when read. */
         u32 be : 1; /* Sets endianness (0 => little endian; 1 => big endian (default on cold reset). */
-    private:
-        u32 padding_1 : 8 = 0b00000110; /* Returns 00000110 when read. */
-    public:
+        [[maybe_unused]] u32 padding_1 : 8 = 0b00000110; /* Returns 00000110 when read. */
         u32 ep : 4; /* Sets transfer data pattern (single/block write request) (0 => D (default on cold reset); 6 =>
                        DxxDxx (2 doublewords/six cycles). */
         u32 ec : 3; /* Operating frequency ratio (read-only). */
@@ -242,7 +232,7 @@ struct Cop0Registers {
         u32            : 24;
     } parity_error;
 
-    const u32 cache_error = 0; /* (27); Always returns 0 when read. */
+    u32 const cache_error = 0; /* (27); Always returns 0 when read. */
 
     struct { /* (28) */
         u32        : 6;
@@ -253,7 +243,7 @@ struct Cop0Registers {
     } tag_lo; /* Holds the primary cache tag for cache initialization, cache diagnostics, or cache error processing. The
                  Tag registers are written by the CACHE and MTC0 instructions. */
 
-    const u32 tag_hi = 0; /* (29); Always returns 0 when read. */
+    u32 const tag_hi = 0; /* (29); Always returns 0 when read. */
 
     u64 error_epc; /* (30) */
 
