@@ -54,7 +54,8 @@ struct {
     u32 dummy0, dummy1, dummy2;
 } static pi;
 
-static u32 cart_addr_end, dram_addr_end;
+static u32 cart_addr_end;
+static u32 dram_addr_end;
 
 template<DmaType> static void InitDma(DmaType type);
 static void OnDmaFinish();
@@ -70,46 +71,51 @@ template<DmaType type> void InitDma()
             LogInfo("DMA: from cart ROM ${:X} to RDRAM ${:X}: ${:X} bytes", pi.cart_addr, pi.dram_addr, dma_len);
         }
 
+        static constexpr u32 cycles_per_byte_dma = 9;
+        u32 cycles_until_finish = dma_len * cycles_per_byte_dma;
+        scheduler::AddEvent(scheduler::EventType::PiDmaFinish, cycles_until_finish, OnDmaFinish);
+
         u32 cart_addr = pi.cart_addr;
         u32 dram_addr = pi.dram_addr;
 
         if (!(cart_addr & 7) && !(dram_addr & 7) && !(dma_len & 3)) { // simple case
-            for (u32 i = 0; i < dma_len; i += 4) {
+            for (u32 i = 0; i < dma_len; i += 4, cart_addr += 4, dram_addr += 4) {
                 rdram::Write<4>(dram_addr, cart::ReadRom<s32>(cart_addr));
-                cart_addr += 4;
-                dram_addr += 4;
             }
         } else {
-            cart_addr &= ~1;
-            dram_addr &= ~1;
-            u32 const offset = pi.dram_addr & 7;
             static constexpr u32 block_size = 128;
-            assert(dma_len >= offset); // TODO: what if dma_len < offset?
-            u32 num_bytes_first_block = std::min(dma_len, block_size) - offset;
-            for (u32 i = 0; i < num_bytes_first_block; ++i) {
-                rdram::Write<1>(dram_addr++, cart::ReadDma(cart_addr++));
+            static constexpr u32 page_size = 0x800;
+            u32 const dram_misalignment = dram_addr & 7;
+            // In the first block, byte-granular transfers are possible
+            u32 len_first_block =
+              std::min({ dma_len, block_size - 2 * dram_misalignment, page_size - (dram_addr & (page_size - 1)) });
+            if (len_first_block == block_size - dram_misalignment - 1) {
+                len_first_block++;
             }
-            dma_len -= std::min(dma_len, block_size);
+            for (u32 i = 0; i < len_first_block; ++i) {
+                rdram::Write<1>(dram_addr++, cart::ReadDma<s8>(cart_addr++));
+            }
+            dma_len -= len_first_block;
             if (dma_len) {
-                dram_addr += offset;
-                for (u32 i = 0; i < dma_len; ++i) {
-                    rdram::Write<1>(dram_addr++, cart::ReadDma(cart_addr++));
+                if (dram_misalignment > 0 && len_first_block == block_size - 2 * dram_misalignment) {
+                    dma_len -= dram_misalignment;
+                    cart_addr += dram_misalignment;
+                    dram_addr += dram_misalignment;
+                }
+                // only word transfers are possible; if the dma length is odd, one extra byte will be copied
+                for (u32 i = 0; i < dma_len; i += 2, cart_addr += 2, dram_addr += 2) {
+                    rdram::Write<2>(dram_addr, cart::ReadDma<s16>(cart_addr));
                 }
             }
         }
-        cart_addr_end = cart_addr;
-        dram_addr_end = dram_addr & 0xFF'FFFF;
-        vr4300::InvalidateRange(pi.dram_addr, dram_addr_end);
+        cart_addr_end = cart_addr & 0xfffffffe;
+        dram_addr_end = dram_addr & 0xfffffe;
+        vr4300::InvalidateRange(pi.dram_addr, dram_addr_end); // todo: re-entrancy
     } else { /* RDRAM to cart */
         /* TODO: it seems we can write to SRAM/FLASH. */
         LogWarn("Attempted DMA from RDRAM to Cart, but this is unimplemented.");
         OnDmaFinish();
-        return;
     }
-
-    static constexpr auto cycles_per_byte_dma = 9;
-    auto cycles_until_finish = dma_len * cycles_per_byte_dma;
-    scheduler::AddEvent(scheduler::EventType::PiDmaFinish, cycles_until_finish, OnDmaFinish);
 }
 
 void Initialize()
@@ -193,16 +199,15 @@ template<size_t size> void Write(u32 addr, s64 value, u8* dst)
 
 void WriteReg(u32 addr, u32 data)
 {
-    static_assert(sizeof(pi) >> 2 == 0x10);
     u32 offset = addr >> 2 & 0xF;
     if constexpr (log_io_pi) {
         LogInfo("PI: {} <= ${:08X}", RegOffsetToStr(offset), data);
     }
 
     switch (offset) {
-    case Register::DramAddr: pi.dram_addr = data & 0xFF'FFFE; break;
+    case Register::DramAddr: pi.dram_addr = data & 0xfffffe; break;
 
-    case Register::CartAddr: pi.cart_addr = data; break;
+    case Register::CartAddr: pi.cart_addr = data & 0xfffffffe; break;
 
     case Register::RdLen:
         pi.rd_len = data;

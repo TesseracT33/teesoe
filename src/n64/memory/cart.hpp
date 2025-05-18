@@ -1,7 +1,7 @@
 #pragma once
 
-#include "status.hpp"
 #include "numtypes.hpp"
+#include "status.hpp"
 
 #include <concepts>
 #include <filesystem>
@@ -13,7 +13,7 @@ u8* GetPointerToRom(u32 addr);
 u8* GetPointerToSram(u32 addr);
 Status LoadRom(std::filesystem::path const& rom_path);
 Status LoadSram(std::filesystem::path const& sram_path);
-u8 ReadDma(u32 addr);
+template<std::signed_integral Int> Int ReadDma(u32 addr);
 template<std::signed_integral Int> Int ReadRom(u32 addr);
 template<std::signed_integral Int> Int ReadSram(u32 addr);
 template<size_t access_size> void WriteSram(u32 addr, s64 data);
