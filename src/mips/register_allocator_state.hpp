@@ -10,6 +10,7 @@
 #include <format>
 #include <limits>
 #include <optional>
+#include <span>
 #include <string>
 #include <utility>
 
@@ -163,7 +164,7 @@ struct RegisterAllocatorState {
         bool found_free{};
 
         if (next_free_binding_it != bindings.end()) {
-            binding = next_free_binding_it++;
+            binding = &*(next_free_binding_it++);
             found_free = true;
         } else {
             auto min_access_index = std::numeric_limits<decltype(host_access_index)>::max();

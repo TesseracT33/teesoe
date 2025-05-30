@@ -124,7 +124,7 @@ constexpr std::array reg_alloc_nonvolatile_vprs = [] {
             return std::array<Xmm, 0>{};
         }
         if constexpr (platform.abi.win64) {
-            if (platform.avx512) {
+            if constexpr (platform.avx512) {
                 return std::array{ xmm6, xmm7, xmm8, xmm9, xmm10, xmm11, xmm12, xmm13, xmm14, xmm15 };
             } else {
                 return std::array{ xmm6, xmm7, xmm8, xmm9, xmm10, xmm11, xmm12, xmm13, xmm14 };
