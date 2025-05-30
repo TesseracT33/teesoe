@@ -102,9 +102,15 @@ template<DmaType type> void InitDma()
                     cart_addr += dram_misalignment;
                     dram_addr += dram_misalignment;
                 }
+                // TODO: this code causes Namco to not boot. My guess is that there is something odd with the
+                // interaction with rdram::Write<2>, where the address is XORed with 2.
+
                 // only word transfers are possible; if the dma length is odd, one extra byte will be copied
-                for (u32 i = 0; i < dma_len; i += 2, cart_addr += 2, dram_addr += 2) {
-                    rdram::Write<2>(dram_addr, cart::ReadDma<s16>(cart_addr));
+                // for (u32 i = 0; i < dma_len; i += 2, cart_addr += 2, dram_addr += 2) {
+                //     rdram::Write<2>(dram_addr, cart::ReadDma<s16>(cart_addr));
+                // }
+                for (u32 i = 0; i < dma_len; ++i) {
+                    rdram::Write<1>(dram_addr++, cart::ReadDma<s8>(cart_addr++));
                 }
             }
         }
