@@ -1,5 +1,6 @@
 #include "loader.hpp"
 #include "bit7z/bitfileextractor.hpp"
+#include "frontend/input.hpp"
 #include "frontend/message.hpp"
 #include "gba/gba.hpp"
 #include "gui.hpp"
@@ -69,14 +70,18 @@ Status LoadCore(System system_arg)
     case System::NES: core = {}; break;
     case System::PS2: core = {}; break;
     }
+    Status status = OkStatus();
     if (core) {
-        Status status = core->Init();
+        status = core->Init();
         system = status.Ok() ? system_arg : System::None;
-        return status;
     } else {
+        status = FailureStatus("Core could not be created; factory returned null.");
         system = System::None;
-        return FailureStatus("Core could not be created; factory returned null.");
     }
+    if (status.Ok()) {
+        input::OnCoreLoaded(system);
+    }
+    return status;
 }
 
 Status LoadCoreAndGame(fs::path rom_path)
