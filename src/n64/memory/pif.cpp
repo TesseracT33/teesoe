@@ -25,22 +25,22 @@ struct {
 static_assert(sizeof(mem) == 0x800);
 
 struct JoypadStatus {
-    u32 a      : 1;
-    u32 b      : 1;
-    u32 z      : 1;
-    u32 s      : 1;
-    u32 dU     : 1;
-    u32 dD     : 1;
-    u32 dL     : 1;
     u32 dR     : 1;
-    u32 rst    : 1;
-    u32        : 1;
-    u32 l      : 1;
-    u32 r      : 1;
-    u32 cU     : 1;
-    u32 cD     : 1;
-    u32 cL     : 1;
+    u32 dL     : 1;
+    u32 dD     : 1;
+    u32 dU     : 1;
+    u32 s      : 1;
+    u32 z      : 1;
+    u32 b      : 1;
+    u32 a      : 1;
     u32 cR     : 1;
+    u32 cL     : 1;
+    u32 cD     : 1;
+    u32 cU     : 1;
+    u32 r      : 1;
+    u32 l      : 1;
+    u32        : 1;
+    u32 rst    : 1;
     u32 x_axis : 8;
     u32 y_axis : 8;
 } static joypad_status;
@@ -185,6 +185,34 @@ void RomLockout()
 {
 }
 
+void RunCommands()
+{
+    u8* cmd_byte = &mem.ram[command_byte_index];
+    if (*cmd_byte & 1) {
+        RunJoybusProtocol();
+    }
+    if (*cmd_byte & 2) {
+        ChallengeProtection();
+        *cmd_byte &= ~2;
+    }
+    if (*cmd_byte & 8) {
+        TerminateBootProcess();
+        *cmd_byte &= ~8;
+    }
+    if (*cmd_byte & 16) {
+        RomLockout();
+        *cmd_byte &= ~16;
+    }
+    if (*cmd_byte & 32) {
+        ChecksumVerification();
+        *cmd_byte &= ~32;
+    }
+    if (*cmd_byte & 64) {
+        mem.ram = {};
+        *cmd_byte &= ~64;
+    }
+}
+
 void RunJoybusProtocol()
 {
     int channel{}, offset{};
@@ -247,31 +275,7 @@ template<size_t access_size> void WriteMemory(u32 addr, s64 data)
     std::memcpy(&mem.ram[addr], &to_write, 4);
 
     if (addr == command_byte_index - 3) {
-        u8* cmd_byte = &mem.ram[command_byte_index];
-        if (*cmd_byte & 1) {
-            RunJoybusProtocol();
-            *cmd_byte &= ~1;
-        }
-        if (*cmd_byte & 2) {
-            ChallengeProtection();
-            *cmd_byte &= ~2;
-        }
-        if (*cmd_byte & 8) {
-            TerminateBootProcess();
-            *cmd_byte &= ~8;
-        }
-        if (*cmd_byte & 16) {
-            RomLockout();
-            *cmd_byte &= ~16;
-        }
-        if (*cmd_byte & 32) {
-            ChecksumVerification();
-            *cmd_byte &= ~32;
-        }
-        if (*cmd_byte & 64) {
-            mem.ram = {};
-            *cmd_byte &= ~64;
-        }
+        RunCommands();
     }
 }
 

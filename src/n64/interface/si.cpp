@@ -51,7 +51,8 @@ template<DmaType type> void InitDma()
         if constexpr (log_dma) {
             LogInfo("DMA: from PIF ${:X} to RDRAM ${:X}: ${:X} bytes", si.pif_addr_rd64b, si.dram_addr, 64);
         }
-        auto dram_start = si.dram_addr;
+        pif::RunCommands();
+        u32 dram_start = si.dram_addr;
         for (int i = 0; i < 16; ++i) {
             rdram::Write<4>(si.dram_addr, pif::ReadMemory<s32>(si.pif_addr_rd64b));
             si.dram_addr += 4;
@@ -67,6 +68,8 @@ template<DmaType type> void InitDma()
             si.dram_addr += 4;
             si.pif_addr_wr64b += 4;
         }
+        // todo: seems it should always run, but already does in the above loop, if dma length is 64
+        // pif::RunCommands();
     }
     scheduler::AddEvent(scheduler::EventType::SiDmaFinish, 131070, OnDmaFinish);
 }
