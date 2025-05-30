@@ -209,7 +209,7 @@ template<std::signed_integral Int, MemOp mem_op> Int ReadCacheableArea(u32 paddr
     }
 }
 
-template<size_t access_size, typename... MaskT> void WriteCacheableArea(u32 paddr, s64 data, MaskT... mask)
+template<u32 access_size, typename... MaskT> void WriteCacheableArea(u32 paddr, s64 data, MaskT... mask)
 { /* Precondition: paddr is aligned to access_size if sizeof...(mask) == 0 */
     static_assert(std::has_single_bit(access_size) && access_size <= 8);
     static_assert(sizeof...(mask) <= 1);
@@ -235,7 +235,7 @@ template<size_t access_size, typename... MaskT> void WriteCacheableArea(u32 padd
         if constexpr (access_size == 1) return u8(data);
         if constexpr (access_size == 2) return u16(data);
         if constexpr (access_size == 4) return u32(data);
-        if constexpr (access_size == 8) return data;
+        if constexpr (access_size == 8) return u64(data);
     }();
     if constexpr (apply_mask) {
         u64 existing;

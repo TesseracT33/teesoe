@@ -58,27 +58,34 @@ u64 Cop0Registers::Get(size_t reg_index) const
 
 template<bool raw> void Cop0Registers::Set(size_t reg_index, std::signed_integral auto value)
 {
-    auto Write = [](auto& reg, std::signed_integral auto value, auto... mask) {
+    auto Write = []<typename Reg>(Reg& reg, std::signed_integral auto value) {
         static_assert((sizeof(reg) == 4 || sizeof(reg) == 8) && (sizeof(value) == 4 || sizeof(value) == 8));
-        static_assert(sizeof...(mask) < 2);
         auto to_write = [=] {
             if constexpr (sizeof(reg) == 4 && sizeof(value) == 8) return s32(value);
             else if constexpr (sizeof(reg) == 8 && sizeof(value) == 4) return s64(value);
             else return value;
         }();
-        if constexpr (sizeof...(mask) == 1) {
-            to_write &= (..., mask);
-            auto prev = std::bit_cast<decltype(to_write)>(reg);
-            prev &= ~(..., mask);
-            to_write |= prev;
-        }
-        reg = std::bit_cast<std::remove_reference_t<decltype(reg)>>(to_write);
+        reg = std::bit_cast<Reg>(to_write);
+    };
+
+    auto WriteMasked = []<typename Reg>(Reg& reg, std::signed_integral auto value, std::integral auto mask) {
+        static_assert((sizeof(reg) == 4 || sizeof(reg) == 8) && (sizeof(value) == 4 || sizeof(value) == 8));
+        auto to_write = [=] {
+            if constexpr (sizeof(reg) == 4 && sizeof(value) == 8) return s32(value);
+            else if constexpr (sizeof(reg) == 8 && sizeof(value) == 4) return s64(value);
+            else return value;
+        }();
+        to_write &= mask;
+        auto prev = std::bit_cast<decltype(to_write)>(reg);
+        prev &= ~mask;
+        to_write |= prev;
+        reg = std::bit_cast<Reg>(to_write);
     };
 
     switch (reg_index & 31) {
     case Cop0Reg::index:
         if constexpr (raw) Write(index, value);
-        else Write(index, value, 0x8000'003F);
+        else WriteMasked(index, value, 0x8000'003F);
         break;
 
     case Cop0Reg::random:
@@ -88,17 +95,17 @@ template<bool raw> void Cop0Registers::Set(size_t reg_index, std::signed_integra
 
     case Cop0Reg::entry_lo_0:
         if constexpr (raw) Write(entry_lo[0], value);
-        else Write(entry_lo[0], value, 0x3FFF'FFFF);
+        else WriteMasked(entry_lo[0], value, 0x3FFF'FFFF);
         break;
 
     case Cop0Reg::entry_lo_1:
         if constexpr (raw) Write(entry_lo[1], value);
-        else Write(entry_lo[1], value, 0x3FFF'FFFF);
+        else WriteMasked(entry_lo[1], value, 0x3FFF'FFFF);
         break;
 
     case Cop0Reg::context:
         if constexpr (raw) Write(context, value);
-        else Write(context, value, 0xFFFF'FFFF'FF80'0000);
+        else WriteMasked(context, value, 0xFFFF'FFFF'FF80'0000);
         break;
 
     case Cop0Reg::page_mask:
@@ -123,7 +130,7 @@ template<bool raw> void Cop0Registers::Set(size_t reg_index, std::signed_integra
 
     case Cop0Reg::entry_hi:
         if constexpr (raw) Write(entry_hi, value);
-        else Write(entry_hi, value, 0xC000'00FF'FFFF'E0FF);
+        else WriteMasked(entry_hi, value, 0xC000'00FF'FFFF'E0FF);
         break;
 
     case Cop0Reg::compare:
@@ -133,13 +140,13 @@ template<bool raw> void Cop0Registers::Set(size_t reg_index, std::signed_integra
 
     case Cop0Reg::status:
         if constexpr (raw) Write(status, value);
-        else Write(status, value, 0xFF57'FFFF);
+        else WriteMasked(status, value, 0xFF57'FFFF);
         OnWriteToStatus();
         break;
 
     case Cop0Reg::cause:
         if constexpr (raw) Write(cause, value);
-        else Write(cause, value, 0x300);
+        else WriteMasked(cause, value, 0x300);
         OnWriteToCause();
         break;
 
@@ -147,31 +154,31 @@ template<bool raw> void Cop0Registers::Set(size_t reg_index, std::signed_integra
 
     case Cop0Reg::config:
         if constexpr (raw) Write(config, value);
-        else Write(config, value, 0xF00'800F);
+        else WriteMasked(config, value, 0xF00'800F);
         break;
 
     case Cop0Reg::ll_addr: ll_addr = u32(value); break;
 
     case Cop0Reg::watch_lo:
         if constexpr (raw) Write(watch_lo, value);
-        else Write(watch_lo, value, 0xFFFF'FFFB);
+        else WriteMasked(watch_lo, value, 0xFFFF'FFFB);
         break;
 
     case Cop0Reg::watch_hi: Write(watch_hi, value); break;
 
     case Cop0Reg::x_context:
         if constexpr (raw) Write(x_context, value);
-        else Write(x_context, value, 0xFFFF'FFFE'0000'0000);
+        else WriteMasked(x_context, value, 0xFFFF'FFFE'0000'0000);
         break;
 
     case Cop0Reg::parity_error:
         if constexpr (raw) Write(parity_error, value);
-        else Write(parity_error, value, 0xFF);
+        else WriteMasked(parity_error, value, 0xFF);
         break;
 
     case Cop0Reg::tag_lo:
         if constexpr (raw) Write(tag_lo, value);
-        else Write(tag_lo, value, 0x0FFF'FFC0);
+        else WriteMasked(tag_lo, value, 0x0FFF'FFC0);
         break;
 
     case Cop0Reg::error_epc: error_epc = value; break;
@@ -261,11 +268,11 @@ void eret()
         return CoprocessorUnusableException(0);
     }
     if (cop0.status.erl) {
-        pc = cop0.error_epc;
         cop0.status.erl = 0;
+        pc = cop0.error_epc;
     } else {
-        pc = cop0.epc;
         cop0.status.exl = 0;
+        pc = cop0.epc;
     }
     CheckInterrupts();
     ll_bit = 0;

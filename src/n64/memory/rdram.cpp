@@ -78,7 +78,7 @@ u64 RdpReadCommand(u32 addr)
 }
 
 /* 0 - $7F'FFFF */
-template<size_t access_size, typename... MaskT> void Write(u32 addr, s64 data, MaskT... mask)
+template<u32 access_size, typename... MaskT> void Write(u32 addr, s64 data, MaskT... mask)
 { /* Precondition: phys_addr is aligned to access_size if sizeof...(mask) == 0 */
     static_assert(std::has_single_bit(access_size) && access_size <= 8);
     static_assert(sizeof...(mask) <= 1);

@@ -75,10 +75,9 @@ void LoadExecuteCommands()
         return;
     }
 
-    u64 (*read_cmd_func)(u32) = dp.status.cmd_source ? rsp::RdpReadCommand : rdram::RdpReadCommand;
-
+    u32 const cmd_source = dp.status.cmd_source;
     do {
-        u64 cmd = read_cmd_func(current);
+        u64 cmd = cmd_source ? rsp::RdpReadCommand(current) : rdram::RdpReadCommand(current);
         std::memcpy(&cmd_buffer[num_queued_words], &cmd, 8);
         num_queued_words += 2;
         current += 8;

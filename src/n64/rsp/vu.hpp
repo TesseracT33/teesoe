@@ -23,7 +23,7 @@ struct alignas(32) ControlRegister {
     m128i hi;
 };
 
-inline std::array<m128i, 32> vpr; /* SIMD registers; eight 16-bit lanes */
+alignas(32) inline m128i vpr[32]; /* SIMD registers; eight 16-bit lanes */
 inline Accumulator acc;
 inline std::array<ControlRegister, 3> ctrl_reg; /* vco, vcc, vce. vce is actually only 8-bits */
 inline struct alignas(8) Div {

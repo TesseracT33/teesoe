@@ -1,4 +1,5 @@
 list(APPEND CLANG_FLAGS
+	-Wmove
 	-Wno-bitwise-op-parentheses
 	-Wno-c++14-compat
 	-Wno-c++17-compat
@@ -60,6 +61,12 @@ list(APPEND MSVC_FLAGS
 	/Zc:__cplusplus # Report an updated value for recent C++ language standards support
 )
 
+if (ENABLE_SANITIZERS)
+	list(APPEND GNU_FLAGS -fsanitize=address,undefined)
+	list(APPEND LINK_FLAGS -fsanitize=address,undefined)
+	list(APPEND MSVC_FLAGS /fsanitize=address)
+endif()
+
 list(APPEND CLANG_FLAGS ${GNU_FLAGS})
 list(APPEND GCC_FLAGS ${GNU_FLAGS})
 
@@ -71,3 +78,7 @@ elseif (MSVC)
 	target_compile_definitions(${CMAKE_PROJECT_NAME}PUBLIC _CRT_SECURE_NO_WARNINGS)
 	target_compile_options(${CMAKE_PROJECT_NAME} PUBLIC ${MSVC_FLAGS})
 endif()
+
+target_link_options(${CMAKE_PROJECT_NAME} PUBLIC
+	${LINK_FLAGS}
+)

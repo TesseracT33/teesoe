@@ -34,10 +34,14 @@ static void Sample();
 
 void Initialize()
 {
-    dma_addr[0] = dma_addr[1] = dma_len[0] = dma_len[1] = dacrate = dma_count = cycles = 0;
-    dma_enable = false;
+    cycles = 0;
     dac_freq = 44100;
     dac_period = cpu_cycles_per_second / dac_freq;
+    dma_enable = false;
+    dma_addr = {};
+    dma_len = {};
+    dacrate = 0;
+    dma_count = 0;
 }
 
 u32 ReadReg(u32 addr)
@@ -74,8 +78,8 @@ void Sample()
     } else {
         if (dma_enable && dma_len[0] > 0) {
             s32 data = memory::Read<s32>(dma_addr[0]);
-            s16 left = data >> 16;
-            s16 right = data & 0xFFFF;
+            s16 left = s16(data >> 16);
+            s16 right = s16(data);
             frontend::audio::PushSample(left, right);
             dma_addr[0] += 4;
             dma_len[0] -= 4;

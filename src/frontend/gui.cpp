@@ -919,7 +919,12 @@ void Update()
 void UpdateWindowTitle(float fps)
 {
     if (game_is_running) {
-        std::string title = std::format("teesoe | {} | {} | FPS: {}", SystemToString(system), current_game_title, fps);
+        std::string title;
+        std::format_to(std::back_inserter(title),
+          "teesoe | {} | {} | FPS: {}",
+          SystemToString(system),
+          current_game_title,
+          fps);
         SDL_SetWindowTitle(sdl_window, title.c_str());
     } else {
         SDL_SetWindowTitle(sdl_window, "teesoe");

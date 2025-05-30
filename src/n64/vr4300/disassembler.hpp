@@ -81,6 +81,7 @@ protected:
         case FpuFmt::Int32: return "W";
         case FpuFmt::Int64: return "L";
         case FpuFmt::Invalid: return "INVALID";
+        default: return "UNKNOWN";
         }
     }
 

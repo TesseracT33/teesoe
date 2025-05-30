@@ -164,7 +164,7 @@ s32 Rcp(s32 input)
         return 0x7fff'ffff;
     }
     if (input == -32768) {
-        return 0xffff'0000;
+        return -65536;
     }
     u32 shift = std::countl_zero(u32(data));
     u32 index = (u64(data) << shift & 0x7FC0'0000) >> 22;
@@ -922,7 +922,7 @@ void vrsq(u32 vt, u32 vt_e, u32 vd, u32 vd_e)
     s32 input = _mm_getlane_epi16(&vpr[vt], vt_e & 7);
     s32 result = Rsq(input);
     _mm_setlane_epi16(&vpr[vd], vd_e & 7, s16(result));
-    div.out = result >> 16;
+    div.out = s16(result >> 16);
     div.dp = 0;
 }
 

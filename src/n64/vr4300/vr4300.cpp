@@ -30,7 +30,7 @@ void AdvancePipeline(u32 cycles)
 void CheckInterrupts()
 {
     bool prev_interrupt = interrupt;
-    interrupt = cop0.status.ie & !cop0.status.exl & !cop0.status.erl & bool(cop0.cause.ip & cop0.status.im);
+    interrupt = ((cop0.status.raw & 7) == 1) & bool(cop0.cause.ip & cop0.status.im); // ie & !exl & !erl & (ip & im)
     if (interrupt && !prev_interrupt) {
         if constexpr (log_interrupts) {
             LogInfo("INTERRUPT; cause.ip = ${:02X}; status.im = ${:02X}", u8(cop0.cause.ip), u8(cop0.status.im));
@@ -118,6 +118,7 @@ void PowerOn()
 void Reset()
 {
     exception_occurred = false;
+    interrupt = false;
     branch_state = BranchState::NoBranch;
     SoftResetException();
 }

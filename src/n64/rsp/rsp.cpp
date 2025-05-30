@@ -292,22 +292,18 @@ u32 ReadReg(u32 addr)
             case Register::DmaRdlen:
                 /* SP_DMA_WRLEN and SP_DMA_RDLEN both always returns the same data on read, relative to
                 the current transfer, irrespective on the direction of the transfer. */
-                return ~7 & [&] {
-                    if (sp.status.dma_busy) {
-                        return in_progress_dma_type == DmaType::RdToSp ? sp.dma_rdlen : sp.dma_wrlen;
-                    } else {
-                        return sp.dma_rdlen;
-                    }
-                }();
+                if (sp.status.dma_busy) {
+                    return (in_progress_dma_type == DmaType::RdToSp ? sp.dma_rdlen : sp.dma_wrlen) & ~7;
+                } else {
+                    return sp.dma_rdlen & ~7;
+                }
 
             case Register::DmaWrlen:
-                return ~7 & [&] {
-                    if (sp.status.dma_busy) {
-                        return in_progress_dma_type == DmaType::RdToSp ? sp.dma_rdlen : sp.dma_wrlen;
-                    } else {
-                        return sp.dma_wrlen;
-                    }
-                }();
+                if (sp.status.dma_busy) {
+                    return (in_progress_dma_type == DmaType::RdToSp ? sp.dma_rdlen : sp.dma_wrlen) & ~7;
+                } else {
+                    return sp.dma_wrlen & ~7;
+                }
 
             case Register::Status: return std::bit_cast<u32>(sp.status);
 
@@ -315,11 +311,7 @@ u32 ReadReg(u32 addr)
 
             case Register::DmaBusy: return sp.dma_busy;
 
-            case Register::Semaphore: {
-                auto ret = sp.semaphore;
-                sp.semaphore = 1;
-                return ret;
-            }
+            case Register::Semaphore: return std::exchange(sp.semaphore, 1);
 
             default: std::unreachable();
             }
@@ -333,6 +325,7 @@ u32 ReadReg(u32 addr)
 
 u64 RdpReadCommand(u32 addr)
 { // The address is aligned to 8 bytes
+    assert(!(addr & 7));
     u32 words[2];
     std::memcpy(words, &dmem[addr & 0xFFF], 8);
     words[0] = std::byteswap(words[0]);
@@ -448,10 +441,10 @@ void WriteReg(u32 addr, u32 data)
             break;
 
         case Register::Status: {
-            if ((data & 1) && !(data & 2)) {
+            if ((data & 3) == 1) {
                 /* CLR_HALT: Start running RSP code from the current RSP PC (clear the HALTED flag) */
                 sp.status.halted = 0;
-            } else if (!(data & 1) && (data & 2)) {
+            } else if ((data & 3) == 2) {
                 /* 	SET_HALT: Pause running RSP code (set the HALTED flag) */
                 sp.status.halted = 1;
             }
@@ -461,43 +454,46 @@ void WriteReg(u32 addr, u32 data)
                 that remembers whether a BREAK opcode was ever run. */
                 sp.status.broke = 0;
             }
-            if ((data & 8) && !(data & 0x10)) {
+            if ((data & 0x18) == 0x8) {
                 /* 	CLR_INTR: Acknowledge a pending RSP MI interrupt. This must be done any time a RSP MI interrupt
                 was generated, otherwise the interrupt line on the VR4300 will stay asserted. */
                 mi::ClearInterrupt(mi::InterruptType::SP);
-            } else if (!(data & 8) && (data & 0x10)) {
+            } else if ((data & 0x18) == 0x10) {
                 /* 	SET_INTR: Manually trigger a RSP MI interrupt on the VR4300. It might be useful if the RSP wants to
                 manually trigger a VR4300 interrupt at any point during its execution. */
                 mi::RaiseInterrupt(mi::InterruptType::SP);
             }
-            if ((data & 0x20) && !(data & 0x40)) {
+            if ((data & 0x60) == 0x20) {
                 /* CLR_SSTEP: Disable single-step mode. */
                 sp.status.sstep = 0;
-            } else if (!(data & 0x20) && (data & 0x40)) {
+            } else if ((data & 0x60) == 0x40) {
                 /* 	SET_SSTEP: Enable single-step mode. When this mode is activated, the RSP auto-halts itself after
                 every opcode that is run. The VR4300 can then trigger a new step by unhalting it. */
                 sp.status.sstep = 1;
             }
-            if ((data & 0x80) && !(data & 0x100)) {
+            if ((data & 0x180) == 0x80) {
                 /* CLR_INTBREAK: Disable the INTBREAK flag. When this flag is disabled, running a BREAK opcode will not
                 generate any RSP MI interrupt, but it will still halt the RSP. */
                 sp.status.intbreak = 0;
-            } else if (!(data & 0x80) && (data & 0x100)) {
+            } else if ((data & 0x180) == 0x100) {
                 /* 	SET_INTBREAK: Enable the INTBREAK flag. When this flag is enabled, running a BREAK opcode will
                 generate a RSP MI interrupt, in addition to halting the RSP. */
                 sp.status.intbreak = 1;
             }
             /* 	CLR_SIG<n>/SET_SIG<n>: Set to 0 or 1 the 8 available bitflags that can be used as communication protocol
              * between RSP and CPU. */
-            u32 written_value_mask = 0x200;
+            u32 clear_mask = 0x200;
+            u32 set_mask = 0x400;
             u32 status_mask = 1;
             for (int i = 0; i < 8; ++i) {
-                if ((data & written_value_mask) && !(data & written_value_mask << 1)) {
+                u32 masked = data & (clear_mask | set_mask);
+                if (masked == clear_mask) {
                     sp.status.sig &= ~status_mask;
-                } else if (!(data & written_value_mask) && (data & written_value_mask << 1)) {
+                } else if (masked == set_mask) {
                     sp.status.sig |= status_mask;
                 }
-                written_value_mask <<= 2;
+                clear_mask <<= 2;
+                set_mask <<= 2;
                 status_mask <<= 1;
             }
             break;

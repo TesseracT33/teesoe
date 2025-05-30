@@ -96,9 +96,9 @@ struct Cop0Registers {
     struct EntryLo { /* (2), (3); Used to rewrite the TLB or to check coincidence of a TLB entry when addresses are
                         converted. */
         u32 g   : 1; /* Global. If this bit is set in both EntryLo0 and EntryLo1, then the processor ignores the ASID
-                  during TLB lookup. */
+                during TLB lookup. */
         u32 v   : 1; /* Valid. If this bit is set, it indicates that the TLB entry is valid; otherwise, a TLBL or TLBS
-                  miss occurs. */
+                miss occurs. */
         u32 d   : 1; /* Dirty. If this bit is set, the page is marked as dirty, and therefore writable. */
         u32 c   : 3; /* Specifies the TLB page attribute. */
         u32 pfn : 24; /* Page frame number -- the high-order bits of the physical address. */
@@ -141,36 +141,40 @@ struct Cop0Registers {
                     this register clear said interrupt. */
     /* On real HW, this register is 32 bits. Here, we make it 64 bits. See the description of the 'Count' register. */
 
-    struct { /* (12) */
-        u32 ie  : 1; /* Specifies and indicates global interrupt enable (0: disable interrupts; 1: enable interrupts) */
-        u32 exl : 1; /* Specifies and indiciates exception level (0: normal; 1: exception) */
-        u32 erl : 1; /* Specifies and indiciates error level (0: normal; 1: error) */
-        u32 ksu : 2; /* Specifies and indicates mode bits (00: kernel; 01: supervisor; 10: user) */
-        u32 ux  : 1; /* Enables 64-bit addressing and operations in User mode (0: 32-bit; 1: 64-bit) */
-        u32 sx  : 1; /* Enables 64-bit addressing and operations in Supervisor mode (0: 32-bit; 1: 64-bit) */
-        u32 kx  : 1; /* Enables 64-bit addressing in Kernel mode (0: 32-bit; 1: 64-bit) */
-        u32 im  : 8; /* Interrupt Mask fields (0: disabled; 1: enabled). Software interrupt (IM0-IM1); External normal
-                     interrupts (IM2-IM6); Timer interrupt (IM7). */
-        u32     : 2;
-        u32 ch  : 1; /* CP0 condition bit */
-        u32     : 1;
-        u32 sr  : 1; /* Indicates whether a soft reset or NMI has occurred */
-        u32 ts  : 1; /* Indicates that TLB shutdown has occurred (read-only) */
-        u32 bev : 1; /* Controls the location of TLB miss and general purpose exception vectors (0: normal; 1:
-                        bootstrap) */
-        u32     : 1;
-        u32 its : 1; /* Enables instruction trace support */
-        u32
-          re : 1; /* Reverse-Endian bit, enables reverse of system endianness in User mode (0: disabled; 1: reversed) */
-        u32 fr  : 1; /* Enables additional floating-point registers (0: 16 registers; 1: 32 registers) */
-        u32 rp  : 1; /* Enables low-power operation by reducing the internal clock frequency and the system interface
-                     clock frequency to one-quarter speed (0: normal; 1: low power mode) */
-        /* The four flags below control the usability of each of the four coprocessor unit numbers (0: unusable; 1:
-         * usable)  */
-        u32 cu0 : 1; /* COP0 is enabled. If cleared, COP0 instructions throw exceptions */
-        u32 cu1 : 1; /* COP1 is enabled. If cleared, COP1 instructions throw exceptions */
-        u32 cu2 : 1; /* COP2 is enabled. If cleared, COP2 instructions throw exceptions */
-        u32 cu3 : 1; /* COP3 is enabled. If cleared, COP3 instructions throw exceptions */
+    union { /* (12) */
+        struct {
+            u32 ie : 1; /* Specifies and indicates global interrupt enable (0: disable interrupts; 1: enable interrupts)
+                         */
+            u32 exl : 1; /* Specifies and indiciates exception level (0: normal; 1: exception) */
+            u32 erl : 1; /* Specifies and indiciates error level (0: normal; 1: error) */
+            u32 ksu : 2; /* Specifies and indicates mode bits (00: kernel; 01: supervisor; 10: user) */
+            u32 ux  : 1; /* Enables 64-bit addressing and operations in User mode (0: 32-bit; 1: 64-bit) */
+            u32 sx  : 1; /* Enables 64-bit addressing and operations in Supervisor mode (0: 32-bit; 1: 64-bit) */
+            u32 kx  : 1; /* Enables 64-bit addressing in Kernel mode (0: 32-bit; 1: 64-bit) */
+            u32 im  : 8; /* Interrupt Mask fields (0: disabled; 1: enabled). Software interrupt (IM0-IM1); External
+                        normal interrupts (IM2-IM6); Timer interrupt (IM7). */
+            u32     : 2;
+            u32 ch  : 1; /* CP0 condition bit */
+            u32     : 1;
+            u32 sr  : 1; /* Indicates whether a soft reset or NMI has occurred */
+            u32 ts  : 1; /* Indicates that TLB shutdown has occurred (read-only) */
+            u32 bev : 1; /* Controls the location of TLB miss and general purpose exception vectors (0: normal; 1:
+                            bootstrap) */
+            u32     : 1;
+            u32 its : 1; /* Enables instruction trace support */
+            u32 re  : 1; /* Reverse-Endian bit, enables reverse of system endianness in User mode (0: disabled; 1:
+                           reversed) */
+            u32 fr  : 1; /* Enables additional floating-point registers (0: 16 registers; 1: 32 registers) */
+            u32 rp : 1; /* Enables low-power operation by reducing the internal clock frequency and the system interface
+                        clock frequency to one-quarter speed (0: normal; 1: low power mode) */
+            /* The four flags below control the usability of each of the four coprocessor unit numbers (0: unusable; 1:
+             * usable)  */
+            u32 cu0 : 1; /* COP0 is enabled. If cleared, COP0 instructions throw exceptions */
+            u32 cu1 : 1; /* COP1 is enabled. If cleared, COP1 instructions throw exceptions */
+            u32 cu2 : 1; /* COP2 is enabled. If cleared, COP2 instructions throw exceptions */
+            u32 cu3 : 1; /* COP3 is enabled. If cleared, COP3 instructions throw exceptions */
+        };
+        u32 raw;
     } status;
 
     struct { /* (13) */
@@ -178,12 +182,12 @@ struct Cop0Registers {
         u32 exc_code : 5; /* Exception code field; written to when an exception is signaled. */
         u32          : 1;
         u32 ip       : 8; /* Interrupt is pending (0: no interrupt; 1: interrupt pending). Software interrupt (IM0-IM1);
-           External normal interrupts (IM2-IM6); Timer interrupt (IM7). */
+     External normal interrupts (IM2-IM6); Timer interrupt (IM7). */
         u32          : 12;
         u32 ce       : 2; /* Coprocessor unit number referenced when a Coprocessor Unusable exception has occurred. */
         u32          : 1;
         u32 bd       : 1; /* Indicates whether the last exception occurred has been executed in a branch delay slot (0:
-           normal; 1: delay slot). */
+     normal; 1: delay slot). */
     } cause;
 
     u64 epc; /* (14) Contains the address at which processing resumes after an exception has been serviced. */

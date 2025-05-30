@@ -342,7 +342,7 @@ template<MemOp mem_op> u32 VirtualToPhysicalAddressTlb(u64 vaddr)
             }
         }
         /* TLB hit */
-        return vaddr & entry.offset_addr_mask | entry_lo.pfn << 12 & ~entry.offset_addr_mask;
+        return u32(vaddr & entry.offset_addr_mask | entry_lo.pfn << 12 & ~entry.offset_addr_mask);
     }
     /* TLB miss */
     addressing_mode == AddressingMode::Word ? TlbMissException(vaddr, mem_op) : XtlbMissException(vaddr, mem_op);
@@ -411,7 +411,7 @@ bool tlbp()
         cop0.index.value = 0; /* technically undefined, but n64-systemtest tlb::TLBPMatch seems to prefer this */
     } else {
         cop0.index.p = 0;
-        cop0.index.value = (u32)std::distance(tlb_entries.begin(), index);
+        cop0.index.value = std::distance(tlb_entries.begin(), index) & 0x1f;
     }
     return false;
 }

@@ -13,7 +13,7 @@ void Initialize();
 template<std::signed_integral Int> Int Read(u32 addr);
 u32 ReadReg(u32 addr);
 u64 RdpReadCommand(u32 addr);
-template<size_t access_size, typename... MaskT> void Write(u32 addr, s64 data, MaskT... mask);
+template<u32 access_size, typename... MaskT> void Write(u32 addr, s64 data, MaskT... mask);
 void WriteReg(u32 addr, u32 data);
 
 } // namespace n64::rdram

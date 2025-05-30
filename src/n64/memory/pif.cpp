@@ -126,7 +126,9 @@ void OnButtonAction(Control control, bool pressed)
         if (pressed) {
             if (joypad_status.l && joypad_status.r && joypad_status.s) {
                 joypad_status.rst = 1;
-                joypad_status.s = joypad_status.x_axis = joypad_status.y_axis = 0;
+                joypad_status.s = 0;
+                joypad_status.x_axis = 0;
+                joypad_status.y_axis = 0;
             }
         } else {
             joypad_status.rst = 0;
@@ -199,7 +201,7 @@ void RunJoybusProtocol()
         u8 result_len = mem.ram[offset++];
         if (result_len == 254) break; // end of commands
         result_len &= 63;
-        assert(offset + cmd_len < mem.ram.size());
+        assert(offset + cmd_len < (int)mem.ram.size());
         u8* result = &mem.ram[offset + cmd_len];
 
         switch (u8 cmd = mem.ram[offset++]; cmd) {
