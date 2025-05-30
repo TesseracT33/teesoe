@@ -155,29 +155,40 @@ template<std::signed_integral Int> void StoreUpToDword(u32 base, u32 vt, u32 e, 
 
 s32 Rcp(s32 input)
 {
-    s32 sinput = input;
     s32 mask = input >> 31;
-    input ^= mask;
-    if (sinput > -32768) input -= mask;
-    if (input == 0) return 0x7FFF'FFFF;
-    if (sinput == -32768) return -65536;
-    u32 shift = std::countl_zero(u32(input));
-    u32 index = (u64(input) << shift & 0x7FC0'0000) >> 22;
+    s32 data = input ^ mask;
+    if (input > -32768) {
+        data -= mask;
+    }
+    if (data == 0) {
+        return 0x7fff'ffff;
+    }
+    if (input == -32768) {
+        return 0xffff'0000;
+    }
+    u32 shift = std::countl_zero(u32(data));
+    u32 index = (u64(data) << shift & 0x7FC0'0000) >> 22;
     s32 result = (0x10000 | rcp_rom[index]) << 14;
     return result >> (31 - shift) ^ mask;
 }
 
 s32 Rsq(s32 input)
 {
-    if (input == 0) return 0x7FFF'FFFF;
-    if (input == -32768) return -65536;
-    if (input > -32768) return -input;
     s32 mask = input >> 31;
-    input ^= mask;
-    u32 lshift = std::countl_zero(u32(input)) + 1;
-    u32 rshift = (32 - lshift) >> 1;
-    u32 index = u32(input) << lshift >> 24 | (lshift & 1) << 8;
-    return (0x4000'0000 | rsq_rom[index] << 14) >> rshift ^ mask;
+    s32 data = input ^ mask;
+    if (input > -32768) {
+        data -= mask;
+    }
+    if (data == 0) {
+        return 0x7fff'ffff;
+    }
+    if (input == -32768) {
+        return -65536;
+    }
+    u32 lshift = std::countl_zero(u32(data)) + 1;
+    u32 rshift = (31 - lshift) >> 1;
+    u32 index = u32((u64(data) << lshift & 0x7fc0'0000) >> 22) & 0x1fe | lshift & 1;
+    return ((rsq_rom[index] | 0x10000) << 14) >> rshift ^ mask;
 }
 
 void cfc2(u32 rt, u32 vs)
