@@ -14,7 +14,6 @@
 namespace n64::vi {
 
 static Registers vi;
-static bool interrupt;
 static u32 cpu_cycles_per_halfline;
 constexpr u32 default_vsync_ntsc = 0x20D;
 
@@ -30,16 +29,18 @@ void AddInitialEvents()
 
 void CheckVideoInterrupt()
 {
-    bool prev_interrupt = interrupt;
-    interrupt = vi.v_current == vi.v_intr;
-    if (interrupt && !prev_interrupt) {
-        mi::RaiseInterrupt(mi::InterruptType::VI);
+    bool int_enable = (vi.ctrl & 3) != 0;
+    if (int_enable) {
+        u32 mask = 0x3fe | ~vi.v_sync & 1;
+        if ((vi.v_current & mask) == (vi.v_intr & mask)) {
+            mi::RaiseInterrupt(mi::InterruptType::VI);
+        }
     }
 }
 
 void Initialize()
 {
-    std::memset(&vi, 0, sizeof(vi));
+    vi = {};
     vi.ctrl = 3;
     vi.width = 320;
     vi.v_intr = 0x3FF;
@@ -121,15 +122,9 @@ void WriteReg(u32 addr, u32 data)
 
     case Register::Width: vi.width = data & 0xFFF; break;
 
-    case Register::VIntr:
-        vi.v_intr = data & 0x3FF;
-        CheckVideoInterrupt();
-        break;
+    case Register::VIntr: vi.v_intr = data & 0x3FF; break;
 
-    case Register::VCurrent:
-        mi::ClearInterrupt(mi::InterruptType::VI);
-        interrupt = false;
-        break;
+    case Register::VCurrent: mi::ClearInterrupt(mi::InterruptType::VI); break;
 
     case Register::Burst: vi.burst = data & 0x3FFF'FFFF; break;
 
